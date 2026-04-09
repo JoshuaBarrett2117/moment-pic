@@ -13,3 +13,4 @@ tmp/
 apps/server/data/cache/
 apps/server/tmp/
 !.gitkeep
+.logs/

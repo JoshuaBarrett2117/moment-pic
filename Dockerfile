@@ -13,7 +13,6 @@ COPY apps/server/tsconfig.json ./apps/server/tsconfig.json
 RUN npm install
 
 COPY apps/server/src ./apps/server/src
-COPY apps/server/public ./apps/server/public
 
 WORKDIR /app/apps/server
 RUN npx prisma generate

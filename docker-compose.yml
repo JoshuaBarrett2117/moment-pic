@@ -1,14 +1,25 @@
-﻿services:
+services:
   gallery:
     build: .
+    image: moment-pic:latest
+    container_name: moment-pic
     ports:
-      - "3210:3210"
+      - "${PORT:-3210}:3210"
     environment:
       HOST: "0.0.0.0"
       PORT: "3210"
-      LIBRARY_ROOT_PATH: "/data/library"
-      CACHE_DIR: "/data/cache"
-      INDEX_FILE_PATH: "/data/index.json"
+      LIBRARY_ROOTS: "${LIBRARY_ROOTS:-/data/library}"
+      CACHE_DIR: "${CACHE_DIR:-/data/cache}"
+      SQLITE_PATH: "${SQLITE_PATH:-/data/gallery.sqlite}"
+      INDEX_FILE_PATH: "${INDEX_FILE_PATH:-/data/index.json}"
+      DATABASE_URL: "${DATABASE_URL:-file:/data/gallery.sqlite}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
     volumes:
-      - ./apps/server/samples/library:/data/library:ro
-      - ./apps/server/data:/data
+      - ${LIBRARY_HOST_PATH:-./samples/library}:/data/library:ro
+      - gallery-cache:/data/cache
+      - gallery-data:/data
+    restart: unless-stopped
+
+volumes:
+  gallery-cache:
+  gallery-data:

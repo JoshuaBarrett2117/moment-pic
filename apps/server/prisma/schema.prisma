@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceType {
+  folder
+  zip
+}
+
+enum ScanStatus {
+  ready
+  error
+}
+
+enum ThumbnailStatus {
+  ready
+  stale
+  error
+}
+
+model LibraryRoot {
+  id            String   @id @default(cuid())
+  path          String   @unique
+  name          String
+  enabled       Boolean  @default(true)
+  lastScannedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  albums        Album[]
+
+  @@map("library_roots")
+}
+
+model Album {
+  id            String      @id @default(cuid())
+  libraryRootId String
+  name          String
+  sourceType    SourceType
+  sourcePath    String      @unique
+  sourceMtime   String?
+  coverAssetId  String?
+  assetCount    Int         @default(0)
+  scanStatus    ScanStatus  @default(ready)
+  errorMessage  String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  libraryRoot   LibraryRoot @relation(fields: [libraryRootId], references: [id], onDelete: Cascade)
+  assets        Asset[]
+
+  @@index([libraryRootId], map: "idx_albums_library_root_id")
+  @@index([name], map: "idx_albums_name")
+  @@index([sourceType], map: "idx_albums_source_type")
+  @@map("albums")
+}
+
+model Asset {
+  id            String      @id @default(cuid())
+  albumId       String
+  name          String
+  extension     String
+  sourceType    SourceType
+  sourcePath    String
+  relativePath  String?
+  zipEntryPath  String?
+  sortIndex     Int
+  width         Int?
+  height        Int?
+  sizeBytes     String?
+  sourceMtime   String?
+  thumbnailKey  String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  album         Album       @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  thumbnail     Thumbnail?
+
+  @@unique([albumId, sortIndex], map: "uq_assets_album_sort_index")
+  @@index([albumId], map: "idx_assets_album_id")
+  @@index([albumId, sortIndex], map: "idx_assets_album_id_sort_index")
+  @@index([thumbnailKey], map: "idx_assets_thumbnail_key")
+  @@map("assets")
+}
+
+model Thumbnail {
+  id        String          @id @default(cuid())
+  assetId   String          @unique
+  cacheKey  String          @unique
+  format    String
+  width     Int
+  height    Int
+  filePath  String
+  status    ThumbnailStatus @default(ready)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  asset     Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("thumbnails")
+}

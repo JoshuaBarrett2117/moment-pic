@@ -1,0 +1,15 @@
+{
+  "name": "moment-pic",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --workspace @moment-pic/server",
+    "build:server": "npm run build --workspace @moment-pic/server",
+    "start:server": "npm run start --workspace @moment-pic/server",
+    "prisma:generate": "npm run prisma:generate --workspace @moment-pic/server",
+    "prisma:migrate": "npm run prisma:migrate --workspace @moment-pic/server"
+  }
+}

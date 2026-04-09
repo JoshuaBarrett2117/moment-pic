@@ -1,0 +1,14 @@
+﻿services:
+  gallery:
+    build: .
+    ports:
+      - "3210:3210"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3210"
+      LIBRARY_ROOT_PATH: "/data/library"
+      CACHE_DIR: "/data/cache"
+      INDEX_FILE_PATH: "/data/index.json"
+    volumes:
+      - ./apps/server/samples/library:/data/library:ro
+      - ./apps/server/data:/data

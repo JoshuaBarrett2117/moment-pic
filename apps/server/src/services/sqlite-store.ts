@@ -92,6 +92,24 @@ export const upsertLibraryRootDb = (root: LibraryRootRecord) => {
   });
 };
 
+export const deleteLibraryRootDb = (id: string) => {
+  const db = getDb();
+  const albumIds = db.prepare("SELECT id FROM albums WHERE library_root_id = ?").all(id) as Array<{ id: string }>;
+  const deleteThumbnail = db.prepare("DELETE FROM thumbnails WHERE asset_id IN (SELECT id FROM assets WHERE album_id = ?)");
+  const deleteAsset = db.prepare("DELETE FROM assets WHERE album_id = ?");
+  const deleteAlbum = db.prepare("DELETE FROM albums WHERE id = ?");
+  const deleteLibraryRoot = db.prepare("DELETE FROM library_roots WHERE id = ?");
+  const transaction = db.transaction(() => {
+    for (const album of albumIds) {
+      deleteThumbnail.run(album.id);
+      deleteAsset.run(album.id);
+      deleteAlbum.run(album.id);
+    }
+    deleteLibraryRoot.run(id);
+  });
+  transaction();
+};
+
 export const clearLibraryDataDb = (libraryRootId: string) => {
   const db = getDb();
   const albumIds = db.prepare("SELECT id FROM albums WHERE library_root_id = ?").all(libraryRootId) as Array<{ id: string }>;

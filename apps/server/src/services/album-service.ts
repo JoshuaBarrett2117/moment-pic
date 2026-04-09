@@ -11,11 +11,14 @@ import {
   type SortOrder,
   countAssetsByAlbumIdDb,
   deleteAlbumDb,
+  deleteLibraryRootDb,
   findAlbumByIdDb,
   findAssetByIdDb,
   listAlbumsDb,
   listAssetsByAlbumIdDb,
-  listLibraryRootsDb
+  listLibraryRootsDb,
+  makeId,
+  upsertLibraryRootDb
 } from "./sqlite-store.js";
 
 const toAssetUrls = (assetId: string) => ({
@@ -138,4 +141,34 @@ export const deleteAlbum = async (albumId: string): Promise<boolean> => {
   }
   deleteAlbumDb(albumId);
   return true;
+};
+
+export const deleteLibraryRoot = async (id: string): Promise<boolean> => {
+  const root = listLibraryRootsDb().find((r) => r.id === id);
+  if (!root) {
+    return false;
+  }
+  deleteLibraryRootDb(id);
+  return true;
+};
+
+export const addLibraryRoot = async (path: string, name: string): Promise<LibraryRootDTO> => {
+  const timestamp = new Date().toISOString();
+  const root: LibraryRootRecord = {
+    id: makeId("root"),
+    name,
+    path,
+    enabled: true,
+    lastScannedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+  upsertLibraryRootDb(root);
+  return {
+    id: root.id,
+    name: root.name,
+    path: root.path,
+    enabled: root.enabled,
+    lastScannedAt: root.lastScannedAt
+  };
 };

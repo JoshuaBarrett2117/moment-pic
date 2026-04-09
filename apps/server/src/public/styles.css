@@ -80,6 +80,8 @@ h1,h2,h3,p { margin: 0; }
 .manage-item-actions { display: flex; gap: 10px; margin-top: 14px; }
 .button-sm { padding: 8px 14px; font-size: 13px; }
 .button-danger { background: #dc3545; color: white; }
+.add-root-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 24px; padding: 20px; background: var(--panel); border-radius: 16px; border: 1px solid var(--line); }
+.add-root-form .control { flex: 1; min-width: 200px; }
 .thumb-card { border: 1px solid var(--line); background: rgba(255, 250, 242, 0.95); border-radius: 18px; overflow: hidden; cursor: pointer; box-shadow: 0 10px 26px rgba(93, 63, 33, 0.08); }
 .thumb-card img { width: 100%; height: 170px; object-fit: cover; display: block; }
 .thumb-caption { padding: 10px 12px 12px; }

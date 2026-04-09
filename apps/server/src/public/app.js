@@ -253,67 +253,90 @@ const renderHome = async () => {
 
 const renderManage = async () => {
   await ensureLibraryRoots();
-  renderShell(`<div class="empty-state">正在读取图集列表...</div>`);
+  renderShell(`<div class="empty-state">正在读取目录列表...</div>`);
   bindCommonEvents();
-  const data = await fetchJson("/api/v1/albums?page=1&pageSize=100");
-  state.albums = data.items;
+  const libraryRoots = await fetchJson("/api/v1/library-roots");
 
-  const createManageItem = (album) => `
-    <div class="manage-item" data-album-id="${album.id}">
-      <div class="manage-item-cover">
-        ${album.coverUrl ? `<img src="${album.coverUrl}" alt="${escapeHtml(album.name)}" loading="lazy" />` : `<div class="album-cover-placeholder">暂无封面</div>`}
-      </div>
-      <div class="manage-item-body">
-        <h3>${escapeHtml(album.name)}</h3>
-        <div class="album-meta">${album.assetCount} 张图片 · ${album.sourceType === "folder" ? "目录图集" : "ZIP 图集"}</div>
-        <div class="manage-item-actions">
-          <button class="button button-secondary button-sm" data-action="view" data-album-id="${album.id}">查看</button>
-          <button class="button button-danger button-sm" data-action="delete" data-album-id="${album.id}">删除</button>
+  const createRootItem = (root) => {
+    const lastScanned = root.lastScannedAt ? new Date(root.lastScannedAt).toLocaleString("zh-CN") : "从未扫描";
+    return `
+      <div class="manage-item" data-root-id="${root.id}">
+        <div class="manage-item-body">
+          <h3>${escapeHtml(root.name)}</h3>
+          <div class="album-meta">${escapeHtml(root.path)}</div>
+          <div class="album-meta">最近扫描：${lastScanned}</div>
+          <div class="manage-item-actions">
+            <button class="button button-danger button-sm" data-action="delete" data-root-id="${root.id}">移除</button>
+          </div>
         </div>
       </div>
+    `;
+  };
+
+  const rootsContent = libraryRoots.length
+    ? `<div class="manage-grid">${libraryRoots.map(createRootItem).join("")}</div>`
+    : `<div class="empty-state">暂无配置的图库目录。</div>`;
+
+  const addForm = `
+    <div class="add-root-form">
+      <input class="control" type="text" id="new-root-path" placeholder="输入目录路径，如 D:\\图片" />
+      <input class="control" type="text" id="new-root-name" placeholder="目录名称（可选）" />
+      <button class="button button-primary" id="add-root-btn">添加目录</button>
     </div>
   `;
-
-  const content = data.items.length
-    ? `<div class="manage-grid">${data.items.map(createManageItem).join("")}</div>`
-    : `<div class="empty-state">暂无图集，请先扫描图库。</div>`;
 
   renderShell(`
     <div class="detail-header">
       <div>
         <a href="#/" class="back-link">← 返回首页</a>
-        <h2 style="margin-top: 10px;">图集管理</h2>
-        <p style="margin-top: 8px; color: var(--muted);">共 ${data.pagination.total} 个图集</p>
+        <h2 style="margin-top: 10px;">图库目录管理</h2>
+        <p style="margin-top: 8px; color: var(--muted);">管理图库扫描的根目录，添加或移除目录后需要重新扫描。</p>
       </div>
     </div>
-    ${content}
+    ${addForm}
+    <h3 style="margin: 24px 0 16px;">已配置的目录</h3>
+    ${rootsContent}
   `);
   bindCommonEvents();
 
-  document.querySelectorAll("[data-action='view']").forEach((node) => {
-    node.addEventListener("click", () => {
-      const albumId = node.getAttribute("data-album-id");
-      location.hash = `#/albums/${albumId}`;
-    });
+  document.getElementById("add-root-btn")?.addEventListener("click", async () => {
+    const pathInput = document.getElementById("new-root-path") as HTMLInputElement;
+    const nameInput = document.getElementById("new-root-name") as HTMLInputElement;
+    const path = pathInput?.value.trim();
+    if (!path) {
+      setStatus("请输入目录路径");
+      return;
+    }
+    try {
+      await fetchJson("/api/v1/library-roots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, name: nameInput?.value.trim() || undefined })
+      });
+      setStatus("目录添加成功，请重新扫描");
+      await renderManage();
+    } catch (error) {
+      setStatus(`添加失败：${error.message}`);
+    }
   });
 
   document.querySelectorAll("[data-action='delete']").forEach((node) => {
     node.addEventListener("click", async () => {
-      const albumId = node.getAttribute("data-album-id");
-      const album = data.items.find((a) => a.id === albumId);
-      if (!album) return;
-      if (!confirm(`确定要删除图集「${album.name}」吗？此操作不可恢复。`)) return;
+      const rootId = node.getAttribute("data-root-id");
+      const root = libraryRoots.find((r: any) => r.id === rootId);
+      if (!root) return;
+      if (!confirm(`确定要移除目录「${root.name}」吗？该目录下的所有图集数据将被删除。`)) return;
       try {
-        await fetchJson(`/api/v1/albums/${albumId}`, { method: "DELETE" });
-        setStatus("图集已删除");
+        await fetchJson(`/api/v1/library-roots/${rootId}`, { method: "DELETE" });
+        setStatus("目录已移除");
         await renderManage();
       } catch (error) {
-        setStatus(`删除失败：${error.message}`);
+        setStatus(`移除失败：${error.message}`);
       }
     });
   });
 
-  setStatus("图集管理");
+  setStatus("图库目录管理");
 };
 
 const loadAlbumPage = async (albumId, page) => {

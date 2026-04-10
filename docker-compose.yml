@@ -15,11 +15,8 @@ services:
       DATABASE_URL: "${DATABASE_URL:-file:/data/gallery.sqlite}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
     volumes:
-      - ${LIBRARY_HOST_PATH:-./samples/library}:/data/library:ro
-      - gallery-cache:/data/cache
       - gallery-data:/data
     restart: unless-stopped
 
 volumes:
-  gallery-cache:
   gallery-data:

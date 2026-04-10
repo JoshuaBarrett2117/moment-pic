@@ -13,7 +13,9 @@ const state = {
     panY: 0,
     isDragging: false,
     dragStartX: 0,
-    dragStartY: 0
+    dragStartY: 0,
+    touchStartX: 0,
+    touchStartY: 0
   },
   filters: {
     keyword: "",
@@ -619,6 +621,30 @@ const bindViewerEvents = () => {
 
   const stage = document.querySelector(".viewer-stage");
   if (stage) {
+    stage.addEventListener("touchstart", (e) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+      state.viewer.touchStartX = touch.clientX;
+      state.viewer.touchStartY = touch.clientY;
+    }, { passive: true });
+
+    stage.addEventListener("touchend", async (e) => {
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const deltaX = touch.clientX - state.viewer.touchStartX;
+      const deltaY = touch.clientY - state.viewer.touchStartY;
+      const isHorizontalSwipe = Math.abs(deltaX) > 48 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+      if (!isHorizontalSwipe) {
+        return;
+      }
+
+      if (deltaX < 0) {
+        await moveViewer(1);
+      } else {
+        await moveViewer(-1);
+      }
+    }, { passive: true });
+
     stage.addEventListener("wheel", (e) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 0.9 : 1.1;

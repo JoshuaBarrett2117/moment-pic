@@ -199,10 +199,14 @@ const startScanTask = async (libraryRootId = null) => {
 const waitForScanTask = async (taskId, options = {}) => {
   const timeoutMs = options.timeoutMs ?? 20 * 60 * 1000;
   const intervalMs = options.intervalMs ?? 1500;
+  const onTick = typeof options.onTick === "function" ? options.onTick : null;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
     const task = await fetchJson(`/api/v1/scan/${taskId}`);
+    if (onTick) {
+      onTick(task);
+    }
     if (task.status === "completed") {
       return task;
     }
@@ -220,6 +224,11 @@ const setStatus = (message) => {
   if (node) {
     node.textContent = message;
   }
+};
+
+const isHomeHash = () => {
+  const hash = location.hash || "#/";
+  return hash === "#/" || hash === "#" || hash === "";
 };
 
 const escapeHtml = (value) =>
@@ -560,8 +569,17 @@ const renderManage = async () => {
         setStatus(`正在后台扫描：${root.name}（任务 ${task.taskId}）`);
         void (async () => {
           try {
-            await waitForScanTask(task.taskId);
+            await waitForScanTask(task.taskId, {
+              onTick: (scanTask) => {
+                if (scanTask.status === "running") {
+                  setStatus(`Scanning ${root.name} ... ${task.taskId}`);
+                }
+              }
+            });
             state.libraryRoots = [];
+            if (isHomeHash()) {
+              await renderHome();
+            }
             setStatus(`扫描完成：${root.name}`);
           } catch (error) {
             setStatus(`扫描失败：${error.message}`);
@@ -1312,8 +1330,17 @@ const bindCommonEvents = () => {
       setStatus(`正在后台扫描图库（任务 ${task.taskId}）`);
       void (async () => {
         try {
-          await waitForScanTask(task.taskId);
+          await waitForScanTask(task.taskId, {
+            onTick: (scanTask) => {
+              if (scanTask.status === "running") {
+                setStatus(`Scanning in background ... ${task.taskId}`);
+              }
+            }
+          });
           state.libraryRoots = [];
+          if (isHomeHash()) {
+            await renderHome();
+          }
           setStatus("后台扫描完成，图集已更新");
         } catch (error) {
           setStatus(`扫描失败：${error.message}`);

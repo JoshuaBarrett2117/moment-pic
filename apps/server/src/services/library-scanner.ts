@@ -71,6 +71,16 @@ const ensureLibraryRootRecord = (rootPath: string): LibraryRootRecord => {
   return created;
 };
 
+const getScanRoots = async (): Promise<LibraryRootRecord[]> => {
+  const dbRoots = listLibraryRootsDb().filter((root) => root.enabled);
+  if (dbRoots.length > 0) {
+    return dbRoots;
+  }
+
+  await ensureLibraryRootPaths();
+  return env.libraryRootPaths.map((rootPath) => ensureLibraryRootRecord(rootPath));
+};
+
 const scanFolderAlbum = async (libraryRootPath: string, folderPath: string): Promise<ScannedAlbum | null> => {
   const folderEntries = await fs.promises.readdir(folderPath, { withFileTypes: true });
   const imageFiles = [];
@@ -148,7 +158,12 @@ const scanZipAlbum = async (libraryRootPath: string, zipPath: string): Promise<S
 };
 
 const discoverAlbumsForRoot = async (libraryRootPath: string): Promise<ScannedAlbum[]> => {
-  const rootEntries = await fs.promises.readdir(libraryRootPath, { withFileTypes: true });
+  let rootEntries: fs.Dirent[];
+  try {
+    rootEntries = await fs.promises.readdir(libraryRootPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
   const albums: ScannedAlbum[] = [];
 
   for (const entry of rootEntries) {
@@ -175,8 +190,7 @@ const discoverAlbumsForRoot = async (libraryRootPath: string): Promise<ScannedAl
 };
 
 export const scanLibrary = async () => {
-  await ensureLibraryRootPaths();
-  const libraryRoots = env.libraryRootPaths.map((rootPath) => ensureLibraryRootRecord(rootPath));
+  const libraryRoots = await getScanRoots();
   const timestamp = nowIso();
 
   for (const libraryRoot of libraryRoots) {

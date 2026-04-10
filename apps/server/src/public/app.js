@@ -300,8 +300,8 @@ const renderManage = async () => {
   bindCommonEvents();
 
   document.getElementById("add-root-btn")?.addEventListener("click", async () => {
-    const pathInput = document.getElementById("new-root-path") as HTMLInputElement;
-    const nameInput = document.getElementById("new-root-name") as HTMLInputElement;
+    const pathInput = document.getElementById("new-root-path");
+    const nameInput = document.getElementById("new-root-name");
     const path = pathInput?.value.trim();
     if (!path) {
       setStatus("请输入目录路径");
@@ -323,7 +323,7 @@ const renderManage = async () => {
   document.querySelectorAll("[data-action='delete']").forEach((node) => {
     node.addEventListener("click", async () => {
       const rootId = node.getAttribute("data-root-id");
-      const root = libraryRoots.find((r: any) => r.id === rootId);
+      const root = libraryRoots.find((r) => r.id === rootId);
       if (!root) return;
       if (!confirm(`确定要移除目录「${root.name}」吗？该目录下的所有图集数据将被删除。`)) return;
       try {

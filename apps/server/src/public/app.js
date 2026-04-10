@@ -6,6 +6,7 @@ const state = {
   currentAssetGlobalIndex: 0,
   viewer: {
     fitMode: "fit",
+    uiVisible: false,
     rotation: 0,
     progressTimer: null,
     preloadRadius: 10,
@@ -20,7 +21,8 @@ const state = {
     dragStartX: 0,
     dragStartY: 0,
     touchStartX: 0,
-    touchStartY: 0
+    touchStartY: 0,
+    suppressNextStageClick: false
   },
   filters: {
     keyword: "",
@@ -40,6 +42,9 @@ const state = {
     page: 1,
     pageSize: 48,
     total: 0
+  },
+  ui: {
+    filtersExpanded: false
   }
 };
 
@@ -163,39 +168,42 @@ const createLibraryRoots = () => {
 };
 
 const createToolbarFilters = () => `
-  <div class="toolbar-group">
-    <input class="control control-input" type="search" name="keyword" placeholder="搜索图集名称" value="${escapeHtml(state.filters.keyword)}" data-filter="keyword" />
-    <select class="control" name="libraryRootId" data-filter="libraryRootId">
-      <option value="" ${state.filters.libraryRootId === "" ? "selected" : ""}>全部目录</option>
-      ${state.libraryRoots
-        .map(
-          (root) => `<option value="${root.id}" ${state.filters.libraryRootId === root.id ? "selected" : ""}>${escapeHtml(root.name)}</option>`
-        )
-        .join("")}
-    </select>
-    <select class="control" name="sourceType" data-filter="sourceType">
-      <option value="" ${state.filters.sourceType === "" ? "selected" : ""}>全部来源</option>
-      <option value="folder" ${state.filters.sourceType === "folder" ? "selected" : ""}>目录图集</option>
-      <option value="zip" ${state.filters.sourceType === "zip" ? "selected" : ""}>ZIP 图集</option>
-    </select>
-    <select class="control" name="sortBy" data-filter="sortBy">
-      <option value="name" ${state.filters.sortBy === "name" ? "selected" : ""}>按名称排序</option>
-      <option value="updatedAt" ${state.filters.sortBy === "updatedAt" ? "selected" : ""}>按更新时间排序</option>
-      <option value="assetCount" ${state.filters.sortBy === "assetCount" ? "selected" : ""}>按图片数量排序</option>
-    </select>
-    <select class="control" name="sortOrder" data-filter="sortOrder">
-      <option value="asc" ${state.filters.sortOrder === "asc" ? "selected" : ""}>升序</option>
-      <option value="desc" ${state.filters.sortOrder === "desc" ? "selected" : ""}>降序</option>
-    </select>
-    <select class="control" name="pageSize" data-filter="pageSize">
-      <option value="12" ${state.filters.pageSize === 12 ? "selected" : ""}>12 / 页</option>
-      <option value="24" ${state.filters.pageSize === 24 ? "selected" : ""}>24 / 页</option>
-      <option value="48" ${state.filters.pageSize === 48 ? "selected" : ""}>48 / 页</option>
-    </select>
-    <label class="control preload-setting" title="查看器预加载半径">
-      预加载 ±
-      <input type="number" min="0" max="100" step="1" value="${state.viewer.preloadRadius}" data-action="set-preload-radius" />
-    </label>
+  <div class="filter-panel ${state.ui.filtersExpanded ? "expanded" : "collapsed"}">
+    <button class="button button-secondary" data-action="toggle-filters">${state.ui.filtersExpanded ? "收起筛选" : "展开筛选"}</button>
+    <div class="toolbar-group">
+      <input class="control control-input" type="search" name="keyword" placeholder="搜索图集名称" value="${escapeHtml(state.filters.keyword)}" data-filter="keyword" />
+      <select class="control" name="libraryRootId" data-filter="libraryRootId">
+        <option value="" ${state.filters.libraryRootId === "" ? "selected" : ""}>全部目录</option>
+        ${state.libraryRoots
+          .map(
+            (root) => `<option value="${root.id}" ${state.filters.libraryRootId === root.id ? "selected" : ""}>${escapeHtml(root.name)}</option>`
+          )
+          .join("")}
+      </select>
+      <select class="control" name="sourceType" data-filter="sourceType">
+        <option value="" ${state.filters.sourceType === "" ? "selected" : ""}>全部来源</option>
+        <option value="folder" ${state.filters.sourceType === "folder" ? "selected" : ""}>目录图集</option>
+        <option value="zip" ${state.filters.sourceType === "zip" ? "selected" : ""}>ZIP 图集</option>
+      </select>
+      <select class="control" name="sortBy" data-filter="sortBy">
+        <option value="name" ${state.filters.sortBy === "name" ? "selected" : ""}>按名称排序</option>
+        <option value="updatedAt" ${state.filters.sortBy === "updatedAt" ? "selected" : ""}>按更新时间排序</option>
+        <option value="assetCount" ${state.filters.sortBy === "assetCount" ? "selected" : ""}>按图片数量排序</option>
+      </select>
+      <select class="control" name="sortOrder" data-filter="sortOrder">
+        <option value="asc" ${state.filters.sortOrder === "asc" ? "selected" : ""}>升序</option>
+        <option value="desc" ${state.filters.sortOrder === "desc" ? "selected" : ""}>降序</option>
+      </select>
+      <select class="control" name="pageSize" data-filter="pageSize">
+        <option value="12" ${state.filters.pageSize === 12 ? "selected" : ""}>12 / 页</option>
+        <option value="24" ${state.filters.pageSize === 24 ? "selected" : ""}>24 / 页</option>
+        <option value="48" ${state.filters.pageSize === 48 ? "selected" : ""}>48 / 页</option>
+      </select>
+      <label class="control preload-setting" title="查看器预加载半径">
+        预加载 ±
+        <input type="number" min="0" max="100" step="1" value="${state.viewer.preloadRadius}" data-action="set-preload-radius" />
+      </label>
+    </div>
   </div>
 `;
 
@@ -526,6 +534,23 @@ const showViewerProgress = () => {
   }, 2200);
 };
 
+const applyViewerUiState = () => {
+  const shell = document.querySelector("[data-viewer-shell]");
+  if (!shell) {
+    return;
+  }
+
+  shell.classList.toggle("ui-hidden", !state.viewer.uiVisible);
+};
+
+const setViewerUiVisible = (visible) => {
+  state.viewer.uiVisible = visible;
+  applyViewerUiState();
+  if (visible) {
+    showViewerProgress();
+  }
+};
+
 const renderViewer = () => {
   const asset = getCurrentAsset();
   if (!asset) {
@@ -539,7 +564,7 @@ const renderViewer = () => {
   const sizeLabel = asset.width && asset.height ? `${asset.width} × ${asset.height}` : "尺寸待解析";
 
   viewer.innerHTML = `
-    <div class="viewer-fullscreen" data-viewer-shell>
+    <div class="viewer-fullscreen${state.viewer.uiVisible ? "" : " ui-hidden"}" data-viewer-shell>
       <div class="viewer-topbar">
         <div class="viewer-title">
           <h3>${escapeHtml(asset.name)}</h3>
@@ -651,6 +676,7 @@ const openViewer = async (index) => {
   }
 
   state.currentAssetGlobalIndex = index;
+  state.viewer.uiVisible = false;
   state.viewer.rotation = 0;
   state.viewer.fitMode = "fit";
   state.viewer.scale = 1;
@@ -704,6 +730,7 @@ const closeViewer = async () => {
 
   viewer.classList.remove("open");
   viewer.innerHTML = "";
+  state.viewer.uiVisible = false;
 };
 
 const bindViewerEvents = () => {
@@ -755,15 +782,34 @@ const bindViewerEvents = () => {
       const deltaY = touch.clientY - state.viewer.touchStartY;
       const isHorizontalSwipe = Math.abs(deltaX) > 48 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
       if (!isHorizontalSwipe) {
+        state.viewer.suppressNextStageClick = true;
+        setViewerUiVisible(!state.viewer.uiVisible);
         return;
       }
 
+      state.viewer.suppressNextStageClick = true;
       if (deltaX < 0) {
         await moveViewer(1);
       } else {
         await moveViewer(-1);
       }
     }, { passive: true });
+
+    stage.addEventListener("click", (event) => {
+      if (state.viewer.suppressNextStageClick) {
+        state.viewer.suppressNextStageClick = false;
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      if (target.closest(".viewer-image") || target === stage) {
+        setViewerUiVisible(!state.viewer.uiVisible);
+      }
+    });
 
     stage.addEventListener("wheel", (e) => {
       e.preventDefault();
@@ -878,6 +924,19 @@ const bindCommonEvents = () => {
 
   document.querySelector("[data-action='go-manage']")?.addEventListener("click", () => {
     location.hash = "#/manage";
+  });
+
+  document.querySelector("[data-action='toggle-filters']")?.addEventListener("click", () => {
+    state.ui.filtersExpanded = !state.ui.filtersExpanded;
+    const panel = document.querySelector(".filter-panel");
+    const button = document.querySelector("[data-action='toggle-filters']");
+    if (!(panel instanceof HTMLElement) || !(button instanceof HTMLElement)) {
+      return;
+    }
+
+    panel.classList.toggle("expanded", state.ui.filtersExpanded);
+    panel.classList.toggle("collapsed", !state.ui.filtersExpanded);
+    button.textContent = state.ui.filtersExpanded ? "收起筛选" : "展开筛选";
   });
 
   document.querySelector("[data-action='set-preload-radius']")?.addEventListener("change", async (event) => {

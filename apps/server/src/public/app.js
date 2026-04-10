@@ -60,6 +60,8 @@ const PHOTOSWIPE_CSS_HREF = "https://cdn.jsdelivr.net/npm/photoswipe@5.4.4/dist/
 const PHOTOSWIPE_MODULE_URL = "https://cdn.jsdelivr.net/npm/photoswipe@5.4.4/dist/photoswipe.esm.js";
 let photoSwipeModulePromise = null;
 let activePhotoSwipe = null;
+const imageDimensionCache = new Map();
+const imageDimensionPromiseCache = new Map();
 
 const clampPreloadRadius = (value) => {
   const parsed = Number(value);
@@ -103,6 +105,71 @@ const loadPhotoSwipeModule = async () => {
   }
 
   return photoSwipeModulePromise;
+};
+
+const probeImageDimensions = async (src) => {
+  if (imageDimensionCache.has(src)) {
+    return imageDimensionCache.get(src);
+  }
+
+  if (imageDimensionPromiseCache.has(src)) {
+    return imageDimensionPromiseCache.get(src);
+  }
+
+  const promise = new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      const width = image.naturalWidth || 1;
+      const height = image.naturalHeight || 1;
+      const dimensions = { width, height };
+      imageDimensionCache.set(src, dimensions);
+      imageDimensionPromiseCache.delete(src);
+      resolve(dimensions);
+    };
+    image.onerror = () => {
+      const dimensions = { width: 1, height: 1 };
+      imageDimensionPromiseCache.delete(src);
+      resolve(dimensions);
+    };
+    image.src = src;
+  });
+
+  imageDimensionPromiseCache.set(src, promise);
+  return promise;
+};
+
+const getAssetDimensions = async (asset) => {
+  if (asset.width && asset.height) {
+    return { width: asset.width, height: asset.height };
+  }
+
+  return probeImageDimensions(asset.originalUrl);
+};
+
+const ensureDimensionsWindow = async (assets, centerIndex, radius = 20) => {
+  if (!Array.isArray(assets) || assets.length === 0) {
+    return;
+  }
+
+  const start = Math.max(0, centerIndex - radius);
+  const end = Math.min(assets.length - 1, centerIndex + radius);
+  const targets = [];
+  for (let index = start; index <= end; index += 1) {
+    const item = assets[index];
+    if (!item) {
+      continue;
+    }
+    if (item.width && item.height) {
+      continue;
+    }
+    if (imageDimensionCache.has(item.originalUrl)) {
+      continue;
+    }
+    targets.push(item);
+  }
+
+  await Promise.all(targets.map((asset) => probeImageDimensions(asset.originalUrl)));
 };
 
 state.viewer.preloadRadius = readPreloadRadius();
@@ -804,10 +871,13 @@ const openViewer = async (index) => {
   const module = await loadPhotoSwipeModule();
   const PhotoSwipe = module.default;
   const assets = await loadAllAlbumAssets(state.currentAlbum.id);
+  const safeIndex = Math.max(0, Math.min(index, Math.max(0, assets.length - 1)));
+  await ensureDimensionsWindow(assets, safeIndex, 28);
+
   const dataSource = assets.map((asset) => ({
     src: asset.originalUrl,
-    width: asset.width ?? 1600,
-    height: asset.height ?? 1200,
+    width: asset.width ?? imageDimensionCache.get(asset.originalUrl)?.width ?? 1,
+    height: asset.height ?? imageDimensionCache.get(asset.originalUrl)?.height ?? 1,
     alt: asset.name
   }));
 
@@ -816,13 +886,14 @@ const openViewer = async (index) => {
     activePhotoSwipe = null;
   }
 
-  const safeIndex = Math.max(0, Math.min(index, Math.max(0, dataSource.length - 1)));
   state.currentAssetGlobalIndex = safeIndex;
   const photoSwipe = new PhotoSwipe({
     dataSource,
     index: safeIndex,
     bgOpacity: 0.96,
-    showHideAnimationType: "zoom"
+    showHideAnimationType: "zoom",
+    initialZoomLevel: "fit",
+    secondaryZoomLevel: 1
   });
 
   activePhotoSwipe = photoSwipe;
@@ -832,6 +903,25 @@ const openViewer = async (index) => {
       return;
     }
     history.replaceState(null, "", `#/albums/${state.currentAlbum.id}/view/${photoSwipe.currIndex}`);
+  });
+  photoSwipe.on("change", async () => {
+    const currentIndex = photoSwipe.currIndex;
+    const currentAsset = assets[currentIndex];
+    if (!currentAsset) {
+      return;
+    }
+
+    if (!(currentAsset.width && currentAsset.height) && !imageDimensionCache.has(currentAsset.originalUrl)) {
+      const dimensions = await getAssetDimensions(currentAsset);
+      dataSource[currentIndex].width = dimensions.width;
+      dataSource[currentIndex].height = dimensions.height;
+      if (typeof photoSwipe.refreshSlideContent === "function") {
+        photoSwipe.refreshSlideContent(currentIndex);
+      }
+      photoSwipe.updateSize(true);
+    }
+
+    void ensureDimensionsWindow(assets, currentIndex, 20);
   });
   photoSwipe.on("close", () => {
     activePhotoSwipe = null;

@@ -201,6 +201,9 @@ h1,h2,h3,p { margin: 0; }
   padding: 88px 86px 110px;
   touch-action: none;
 }
+.viewer-fullscreen.ui-hidden .viewer-stage {
+  padding: 12px;
+}
 .viewer-image {
   display: block;
   transform-origin: center center;
@@ -382,6 +385,9 @@ h1,h2,h3,p { margin: 0; }
   }
   .viewer-stage {
     padding: calc(env(safe-area-inset-top, 0px) + 96px) 10px calc(env(safe-area-inset-bottom, 0px) + 96px);
+  }
+  .viewer-fullscreen.ui-hidden .viewer-stage {
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) 8px calc(env(safe-area-inset-bottom, 0px) + 8px);
   }
   .viewer-nav {
     width: 46px;

@@ -56,6 +56,10 @@ const state = {
 
 const app = document.querySelector("#app");
 const VIEWER_PRELOAD_RADIUS_KEY = "moment_pic_viewer_preload_radius";
+const PHOTOSWIPE_CSS_HREF = "https://cdn.jsdelivr.net/npm/photoswipe@5.4.4/dist/photoswipe.css";
+const PHOTOSWIPE_MODULE_URL = "https://cdn.jsdelivr.net/npm/photoswipe@5.4.4/dist/photoswipe.esm.js";
+let photoSwipeModulePromise = null;
+let activePhotoSwipe = null;
 
 const clampPreloadRadius = (value) => {
   const parsed = Number(value);
@@ -79,6 +83,26 @@ const writePreloadRadius = (value) => {
   } catch {
     // 浏览器禁用本地存储时忽略，保留内存值
   }
+};
+
+const ensurePhotoSwipeCss = () => {
+  if (document.querySelector(`link[data-photoswipe='true']`)) {
+    return;
+  }
+
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = PHOTOSWIPE_CSS_HREF;
+  link.setAttribute("data-photoswipe", "true");
+  document.head.append(link);
+};
+
+const loadPhotoSwipeModule = async () => {
+  if (!photoSwipeModulePromise) {
+    photoSwipeModulePromise = import(PHOTOSWIPE_MODULE_URL);
+  }
+
+  return photoSwipeModulePromise;
 };
 
 state.viewer.preloadRadius = readPreloadRadius();
@@ -262,23 +286,29 @@ const renderShell = (content) => {
     .join("");
 
   app.innerHTML = `
-    <div class="shell">
-      <section class="hero">
-        <div class="hero-top">
-          <div>
-            <span class="eyebrow">Moment Pic / Local Gallery</span>
-            <h1>瞬间图库</h1>
-            <p>当前版本支持多目录扫描、图集搜索筛选、分页浏览，以及全屏大图查看。</p>
-          </div>
+    <div class="shell shell-layout">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <span class="eyebrow">Moment Pic / Local Gallery</span>
           <div class="status" data-status>准备就绪</div>
         </div>
-        ${createLibraryRoots()}
-        <div class="toolbar">
-          ${createToolbarFilters()}
-          <div class="quick-actions">${quickActions}</div>
+        <div class="sidebar-actions">
+          ${quickActions}
         </div>
-      </section>
-      <section class="content">${content}</section>
+        ${createToolbarFilters()}
+        ${createLibraryRoots()}
+      </aside>
+      <div class="main-content">
+        <section class="hero hero-compact">
+          <div class="hero-top">
+            <div>
+              <h1>瞬间图库</h1>
+              <p>更快扫描、更快加载、更专注看图。</p>
+            </div>
+          </div>
+        </section>
+        <section class="content">${content}</section>
+      </div>
     </div>
     <div class="viewer" id="viewer"></div>
   `;
@@ -458,6 +488,16 @@ const getAssetByGlobalIndex = async (albumId, index) => {
   const data = await loadAlbumPage(albumId, page);
   const localIndex = index - (page - 1) * state.albumPagination.pageSize;
   return data.items[localIndex] ?? null;
+};
+
+const loadAllAlbumAssets = async (albumId) => {
+  const firstPage = await loadAlbumPage(albumId, 1);
+  const totalPages = Math.max(1, Math.ceil(firstPage.pagination.total / firstPage.pagination.pageSize));
+  const pages = await Promise.all(
+    Array.from({ length: totalPages }, (_, index) => loadAlbumPage(albumId, index + 1))
+  );
+
+  return pages.flatMap((page) => page.items);
 };
 
 const preloadViewerAssets = async () => {
@@ -756,27 +796,53 @@ const requestViewerFullscreen = async () => {
 };
 
 const openViewer = async (index) => {
-  const targetPage = Math.floor(index / state.albumPagination.pageSize) + 1;
-  if (targetPage !== state.albumPagination.page) {
-    const data = await loadAlbumPage(state.currentAlbum.id, targetPage);
-    state.currentAlbum = data.album;
-    state.currentAssets = data.items;
-    state.albumPagination = data.pagination;
+  if (!state.currentAlbum) {
+    return;
   }
 
-  state.currentAssetGlobalIndex = index;
-  state.viewer.uiVisible = false;
-  state.viewer.rotation = 0;
-  state.viewer.fitMode = "fit";
-  state.viewer.scale = 1;
-  state.viewer.panX = 0;
-  state.viewer.panY = 0;
-  state.viewer.touchMode = "none";
-  state.viewer.touchMoved = false;
-  state.viewer.suppressNextStageClick = false;
-  renderViewer();
-  void preloadViewerAssets();
-  await requestViewerFullscreen();
+  ensurePhotoSwipeCss();
+  const module = await loadPhotoSwipeModule();
+  const PhotoSwipe = module.default;
+  const assets = await loadAllAlbumAssets(state.currentAlbum.id);
+  const dataSource = assets.map((asset) => ({
+    src: asset.originalUrl,
+    width: asset.width ?? 1600,
+    height: asset.height ?? 1200,
+    alt: asset.name
+  }));
+
+  if (activePhotoSwipe) {
+    activePhotoSwipe.close();
+    activePhotoSwipe = null;
+  }
+
+  const safeIndex = Math.max(0, Math.min(index, Math.max(0, dataSource.length - 1)));
+  state.currentAssetGlobalIndex = safeIndex;
+  const photoSwipe = new PhotoSwipe({
+    dataSource,
+    index: safeIndex,
+    bgOpacity: 0.96,
+    showHideAnimationType: "zoom"
+  });
+
+  activePhotoSwipe = photoSwipe;
+  photoSwipe.on("change", () => {
+    state.currentAssetGlobalIndex = photoSwipe.currIndex;
+    if (!state.currentAlbum) {
+      return;
+    }
+    history.replaceState(null, "", `#/albums/${state.currentAlbum.id}/view/${photoSwipe.currIndex}`);
+  });
+  photoSwipe.on("close", () => {
+    activePhotoSwipe = null;
+    if (!state.currentAlbum) {
+      return;
+    }
+    if (/^#\/albums\/[^/]+\/view\/\d+$/.test(location.hash || "")) {
+      location.hash = `#/albums/${state.currentAlbum.id}`;
+    }
+  });
+  photoSwipe.init();
 };
 
 const moveViewer = async (offset) => {
@@ -804,6 +870,11 @@ const moveViewer = async (offset) => {
 };
 
 const closeViewer = async () => {
+  if (activePhotoSwipe) {
+    activePhotoSwipe.close();
+    activePhotoSwipe = null;
+  }
+
   if (state.viewer.progressTimer) {
     clearTimeout(state.viewer.progressTimer);
     state.viewer.progressTimer = null;

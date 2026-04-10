@@ -329,11 +329,73 @@ h1,h2,h3,p { margin: 0; }
 .back-link { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--accent-deep); }
 
 @media (max-width: 900px) {
+  .shell {
+    padding: 10px 8px 18px;
+  }
   .shell-layout {
-    grid-template-columns: 1fr;
+    display: block;
   }
   .sidebar {
-    position: static;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 96px;
+    z-index: 50;
+    border-radius: 0 14px 14px 0;
+    padding: 10px 8px;
+    overflow-y: auto;
+  }
+  .sidebar-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .sidebar .eyebrow {
+    display: none;
+  }
+  .sidebar .status {
+    font-size: 10px;
+  }
+  .sidebar-section-title {
+    display: none;
+  }
+  .sidebar-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sidebar-actions .button {
+    width: 100%;
+    padding: 7px 6px;
+    font-size: 11px;
+  }
+  .filter-panel {
+    gap: 8px;
+  }
+  .filter-panel > .button {
+    width: 100%;
+    padding: 7px 6px;
+    font-size: 11px;
+  }
+  .filter-panel .toolbar-group {
+    display: none;
+  }
+  .library-root-icons {
+    grid-template-columns: 1fr;
+  }
+  .root-icon-chip {
+    justify-content: center;
+    min-height: 34px;
+    padding: 6px 4px;
+  }
+  .root-icon-chip span:last-child {
+    display: none;
+  }
+  .library-roots {
+    display: none;
+  }
+  .main-content {
+    margin-left: 104px;
   }
   .hero-top, .detail-header { flex-direction: column; }
   .toolbar-group { width: 100%; }
@@ -350,11 +412,14 @@ h1,h2,h3,p { margin: 0; }
 
 @media (max-width: 768px) {
   body { overscroll-behavior-y: none; }
-  .shell { padding: 12px 10px 24px; }
+  .shell { padding: 10px 8px 20px; }
   .sidebar {
-    border-radius: 14px;
-    padding: 8px;
+    width: 88px;
+    padding: 8px 6px;
     gap: 8px;
+  }
+  .main-content {
+    margin-left: 96px;
   }
   .hero {
     border-radius: 18px;
@@ -367,9 +432,9 @@ h1,h2,h3,p { margin: 0; }
     line-height: 1.55;
   }
   .eyebrow { padding: 6px 10px; font-size: 11px; }
-  .toolbar { margin-top: 16px; gap: 10px; }
-  .filter-panel { gap: 10px; }
-  .toolbar-group { gap: 10px; }
+  .toolbar { margin-top: 12px; gap: 8px; }
+  .filter-panel { gap: 8px; }
+  .toolbar-group { gap: 8px; }
   .control {
     min-height: 42px;
     border-radius: 12px;
@@ -486,6 +551,13 @@ h1,h2,h3,p { margin: 0; }
 }
 
 @media (max-width: 480px) {
+  .sidebar {
+    width: 80px;
+    padding: 8px 5px;
+  }
+  .main-content {
+    margin-left: 86px;
+  }
   .toolbar-group .control,
   .toolbar .button,
   .filter-panel .button,

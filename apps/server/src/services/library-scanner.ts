@@ -37,10 +37,6 @@ type ScannedAlbum = {
   }>;
 };
 
-const ensureLibraryRootPaths = async () => {
-  await Promise.all(env.libraryRootPaths.map((rootPath) => fs.promises.mkdir(rootPath, { recursive: true })));
-};
-
 const sortNames = (left: string, right: string): number =>
   left.localeCompare(right, "zh-Hans-CN-u-kn-true");
 
@@ -72,13 +68,7 @@ const ensureLibraryRootRecord = (rootPath: string): LibraryRootRecord => {
 };
 
 const getScanRoots = async (): Promise<LibraryRootRecord[]> => {
-  const dbRoots = listLibraryRootsDb().filter((root) => root.enabled);
-  if (dbRoots.length > 0) {
-    return dbRoots;
-  }
-
-  await ensureLibraryRootPaths();
-  return env.libraryRootPaths.map((rootPath) => ensureLibraryRootRecord(rootPath));
+  return listLibraryRootsDb().filter((root) => root.enabled);
 };
 
 const scanFolderAlbum = async (libraryRootPath: string, folderPath: string): Promise<ScannedAlbum | null> => {
@@ -258,12 +248,17 @@ export const scanLibrary = async () => {
 };
 
 export const ensureScannedLibrary = async () => {
-  await ensureLibraryRootPaths();
-  env.libraryRootPaths.forEach((rootPath) => ensureLibraryRootRecord(rootPath));
-  const existing = listAlbumsDb(1, 1);
-  if (existing.total === 0) {
-    await scanLibrary();
+  const existingRoots = listLibraryRootsDb();
+  if (existingRoots.length === 0) {
+    return;
   }
+
+  const existing = listAlbumsDb(1, 1);
+  if (existing.total > 0) {
+    return;
+  }
+
+  await scanLibrary();
 };
 
 export const listExistingLibraryRoots = () => listLibraryRootsDb();

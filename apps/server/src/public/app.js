@@ -183,6 +183,38 @@ const fetchJson = async (url, options) => {
   return payload.data;
 };
 
+const sleep = (ms) => new Promise((resolve) => {
+  window.setTimeout(resolve, ms);
+});
+
+const startScanTask = async (libraryRootId = null) => {
+  const payload = libraryRootId ? { libraryRootId } : {};
+  return fetchJson("/api/v1/scan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+};
+
+const waitForScanTask = async (taskId, options = {}) => {
+  const timeoutMs = options.timeoutMs ?? 20 * 60 * 1000;
+  const intervalMs = options.intervalMs ?? 1500;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const task = await fetchJson(`/api/v1/scan/${taskId}`);
+    if (task.status === "completed") {
+      return task;
+    }
+    if (task.status === "failed") {
+      throw new Error(task.error || "扫描失败");
+    }
+    await sleep(intervalMs);
+  }
+
+  throw new Error("扫描超时，请稍后查看结果");
+};
+
 const setStatus = (message) => {
   const node = document.querySelector("[data-status]");
   if (node) {
@@ -523,15 +555,19 @@ const renderManage = async () => {
       if (!confirm(`确认重新扫描图库“${root.name}”吗？仅会同步新增/删除/变化的内容。`)) return;
 
       try {
-        setStatus(`正在扫描图库：${root.name}...`);
-        await fetchJson("/api/v1/scan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ libraryRootId: rootId })
-        });
-        state.libraryRoots = [];
-        await renderManage();
-        setStatus(`扫描完成：${root.name}`);
+        setStatus(`已提交后台扫描任务：${root.name}`);
+        const task = await startScanTask(rootId);
+        setStatus(`正在后台扫描：${root.name}（任务 ${task.taskId}）`);
+        void (async () => {
+          try {
+            await waitForScanTask(task.taskId);
+            state.libraryRoots = [];
+            await renderManage();
+            setStatus(`扫描完成：${root.name}`);
+          } catch (error) {
+            setStatus(`扫描失败：${error.message}`);
+          }
+        })();
       } catch (error) {
         setStatus(`扫描失败：${error.message}`);
       }
@@ -1271,10 +1307,23 @@ const bindCommonEvents = () => {
     if (!confirm("确认重新扫描图库吗？仅会同步新增/删除/变化的内容。")) {
       return;
     }
-    setStatus("正在重新扫描图库...");
-    await fetchJson("/api/v1/scan", { method: "POST" });
-    state.libraryRoots = [];
-    await route();
+    setStatus("已提交后台扫描任务");
+    try {
+      const task = await startScanTask();
+      setStatus(`正在后台扫描图库（任务 ${task.taskId}）`);
+      void (async () => {
+        try {
+          await waitForScanTask(task.taskId);
+          state.libraryRoots = [];
+          await route();
+          setStatus("后台扫描完成，图集已更新");
+        } catch (error) {
+          setStatus(`扫描失败：${error.message}`);
+        }
+      })();
+    } catch (error) {
+      setStatus(`扫描失败：${error.message}`);
+    }
   });
 
   document.querySelector("[data-action='go-home']")?.addEventListener("click", () => {

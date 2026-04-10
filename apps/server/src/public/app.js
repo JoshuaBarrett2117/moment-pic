@@ -22,6 +22,12 @@ const state = {
     dragStartY: 0,
     touchStartX: 0,
     touchStartY: 0,
+    touchLastX: 0,
+    touchLastY: 0,
+    touchMoved: false,
+    touchMode: "none",
+    pinchStartDistance: 0,
+    pinchStartScale: 1,
     suppressNextStageClick: false
   },
   filters: {
@@ -581,6 +587,7 @@ const renderViewer = () => {
       <button class="viewer-nav prev" data-action="viewer-prev">‹</button>
       <div class="viewer-stage" data-viewer-stage>
         <img class="${imageClass}" src="${asset.originalUrl}" alt="${escapeHtml(asset.name)}" style="transform: rotate(${rotation}deg) scale(${state.viewer.scale}) translate(${state.viewer.panX}px, ${state.viewer.panY}px);" />
+        <div class="viewer-center-hint">点击中间显示操作</div>
       </div>
       <button class="viewer-nav next" data-action="viewer-next">›</button>
       <div class="viewer-progress" data-viewer-progress>
@@ -646,6 +653,12 @@ const applyViewerTransform = () => {
   imageEl.style.transform = `rotate(${rotation}deg) scale(${state.viewer.scale}) translate(${state.viewer.panX}px, ${state.viewer.panY}px)`;
 };
 
+const getTouchDistance = (touchA, touchB) => {
+  const deltaX = touchA.clientX - touchB.clientX;
+  const deltaY = touchA.clientY - touchB.clientY;
+  return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+};
+
 const resetViewerTransform = () => {
   state.viewer.scale = 1;
   state.viewer.panX = 0;
@@ -654,6 +667,10 @@ const resetViewerTransform = () => {
 };
 
 const requestViewerFullscreen = async () => {
+  if (window.matchMedia("(max-width: 900px)").matches) {
+    return;
+  }
+
   const shell = document.querySelector("[data-viewer-shell]");
   if (!shell || document.fullscreenElement) {
     return;
@@ -682,6 +699,9 @@ const openViewer = async (index) => {
   state.viewer.scale = 1;
   state.viewer.panX = 0;
   state.viewer.panY = 0;
+  state.viewer.touchMode = "none";
+  state.viewer.touchMoved = false;
+  state.viewer.suppressNextStageClick = false;
   renderViewer();
   void preloadViewerAssets();
   await requestViewerFullscreen();
@@ -705,6 +725,8 @@ const moveViewer = async (offset) => {
   state.viewer.scale = 1;
   state.viewer.panX = 0;
   state.viewer.panY = 0;
+  state.viewer.touchMode = "none";
+  state.viewer.touchMoved = false;
   updateViewerContent();
   void preloadViewerAssets();
 };
@@ -769,21 +791,103 @@ const bindViewerEvents = () => {
   const stage = document.querySelector(".viewer-stage");
   if (stage) {
     stage.addEventListener("touchstart", (e) => {
+      if (e.touches.length >= 2) {
+        const first = e.touches[0];
+        const second = e.touches[1];
+        state.viewer.touchMode = "pinch";
+        state.viewer.touchMoved = true;
+        state.viewer.pinchStartDistance = getTouchDistance(first, second);
+        state.viewer.pinchStartScale = state.viewer.scale;
+        return;
+      }
+
       const touch = e.touches[0];
-      if (!touch) return;
+      if (!touch) {
+        return;
+      }
+
+      state.viewer.touchMode = "swipe";
+      state.viewer.touchMoved = false;
       state.viewer.touchStartX = touch.clientX;
       state.viewer.touchStartY = touch.clientY;
+      state.viewer.touchLastX = touch.clientX;
+      state.viewer.touchLastY = touch.clientY;
     }, { passive: true });
 
+    stage.addEventListener("touchmove", (e) => {
+      if (state.viewer.touchMode === "pinch" && e.touches.length >= 2) {
+        const first = e.touches[0];
+        const second = e.touches[1];
+        const distance = getTouchDistance(first, second);
+        if (state.viewer.pinchStartDistance <= 0) {
+          return;
+        }
+
+        const scaleRatio = distance / state.viewer.pinchStartDistance;
+        const nextScale = Math.max(0.1, Math.min(10, state.viewer.pinchStartScale * scaleRatio));
+        state.viewer.scale = nextScale;
+        applyViewerTransform();
+        e.preventDefault();
+        return;
+      }
+
+      if (e.touches.length !== 1) {
+        return;
+      }
+
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - state.viewer.touchLastX;
+      const deltaY = touch.clientY - state.viewer.touchLastY;
+      const movedDistance = Math.abs(touch.clientX - state.viewer.touchStartX) + Math.abs(touch.clientY - state.viewer.touchStartY);
+
+      if (movedDistance > 8) {
+        state.viewer.touchMoved = true;
+      }
+
+      if (state.viewer.scale > 1.02) {
+        state.viewer.panX += deltaX;
+        state.viewer.panY += deltaY;
+        applyViewerTransform();
+        e.preventDefault();
+      }
+
+      state.viewer.touchLastX = touch.clientX;
+      state.viewer.touchLastY = touch.clientY;
+    }, { passive: false });
+
     stage.addEventListener("touchend", async (e) => {
+      if (state.viewer.touchMode === "pinch") {
+        if (e.touches.length >= 2) {
+          const first = e.touches[0];
+          const second = e.touches[1];
+          state.viewer.pinchStartDistance = getTouchDistance(first, second);
+          state.viewer.pinchStartScale = state.viewer.scale;
+          return;
+        }
+
+        state.viewer.touchMode = "none";
+        return;
+      }
+
       const touch = e.changedTouches[0];
-      if (!touch) return;
+      if (!touch) {
+        return;
+      }
+
       const deltaX = touch.clientX - state.viewer.touchStartX;
       const deltaY = touch.clientY - state.viewer.touchStartY;
       const isHorizontalSwipe = Math.abs(deltaX) > 48 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
-      if (!isHorizontalSwipe) {
+      const canSwipe = state.viewer.scale <= 1.02;
+
+      if (!state.viewer.touchMoved) {
         state.viewer.suppressNextStageClick = true;
         setViewerUiVisible(!state.viewer.uiVisible);
+        state.viewer.touchMode = "none";
+        return;
+      }
+
+      if (!canSwipe || !isHorizontalSwipe) {
+        state.viewer.touchMode = "none";
         return;
       }
 
@@ -793,6 +897,7 @@ const bindViewerEvents = () => {
       } else {
         await moveViewer(-1);
       }
+      state.viewer.touchMode = "none";
     }, { passive: true });
 
     stage.addEventListener("click", (event) => {

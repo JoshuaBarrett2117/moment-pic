@@ -562,7 +562,6 @@ const renderManage = async () => {
           try {
             await waitForScanTask(task.taskId);
             state.libraryRoots = [];
-            await renderManage();
             setStatus(`扫描完成：${root.name}`);
           } catch (error) {
             setStatus(`扫描失败：${error.message}`);
@@ -1315,7 +1314,6 @@ const bindCommonEvents = () => {
         try {
           await waitForScanTask(task.taskId);
           state.libraryRoots = [];
-          await route();
           setStatus("后台扫描完成，图集已更新");
         } catch (error) {
           setStatus(`扫描失败：${error.message}`);

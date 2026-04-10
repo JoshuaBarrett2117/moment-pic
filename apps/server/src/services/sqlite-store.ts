@@ -145,6 +145,51 @@ export const insertAlbumWithAssetsDb = (album: AlbumRecord, assets: AssetRecord[
   transaction();
 };
 
+export const applyLibraryRootScanDiffDb = (input: {
+  removedAlbumIds: string[];
+  replacedAlbums: Array<{
+    existingAlbumId: string | null;
+    album: AlbumRecord;
+    assets: AssetRecord[];
+  }>;
+}) => {
+  const db = getDb();
+  const deleteThumbnailByAlbumId = db.prepare("DELETE FROM thumbnails WHERE asset_id IN (SELECT id FROM assets WHERE album_id = ?)");
+  const deleteAssetsByAlbumId = db.prepare("DELETE FROM assets WHERE album_id = ?");
+  const deleteAlbumById = db.prepare("DELETE FROM albums WHERE id = ?");
+  const insertAlbum = db.prepare(`
+    INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, cover_asset_id, asset_count, scan_status, error_message, created_at, updated_at)
+    VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @createdAt, @updatedAt)
+  `);
+  const insertAsset = db.prepare(`
+    INSERT INTO assets (id, album_id, name, extension, source_type, source_path, relative_path, zip_entry_path, sort_index, width, height, size_bytes, source_mtime, thumbnail_key, created_at, updated_at)
+    VALUES (@id, @albumId, @name, @extension, @sourceType, @sourcePath, @relativePath, @zipEntryPath, @sortIndex, @width, @height, @sizeBytes, @sourceMtime, @thumbnailKey, @createdAt, @updatedAt)
+  `);
+
+  const transaction = db.transaction(() => {
+    for (const albumId of input.removedAlbumIds) {
+      deleteThumbnailByAlbumId.run(albumId);
+      deleteAssetsByAlbumId.run(albumId);
+      deleteAlbumById.run(albumId);
+    }
+
+    for (const item of input.replacedAlbums) {
+      if (item.existingAlbumId) {
+        deleteThumbnailByAlbumId.run(item.existingAlbumId);
+        deleteAssetsByAlbumId.run(item.existingAlbumId);
+        deleteAlbumById.run(item.existingAlbumId);
+      }
+
+      insertAlbum.run(item.album);
+      for (const asset of item.assets) {
+        insertAsset.run(asset);
+      }
+    }
+  });
+
+  transaction();
+};
+
 export const listAlbumsDb = (
   page: number,
   pageSize: number,

@@ -6,8 +6,7 @@ import { normalizeExtension, toPosixPath } from "../lib/paths.js";
 import { nowIso } from "../lib/time.js";
 import type { AlbumRecord, AssetRecord, LibraryRootRecord, SourceType } from "../types/store.js";
 import {
-  deleteAlbumDb,
-  insertAlbumWithAssetsDb,
+  applyLibraryRootScanDiffDb,
   listAlbumsByLibraryRootIdDb,
   listAlbumsDb,
   listAssetsByAlbumIdDb,
@@ -250,13 +249,19 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
     const existingAlbums = listAlbumsByLibraryRootIdDb(libraryRoot.id);
     const existingBySourcePath = new Map(existingAlbums.map((album) => [album.sourcePath, album]));
     const discoveredBySourcePath = new Map(discoveredAlbums.map((album) => [album.sourcePath, album]));
+    const removedAlbumIds: string[] = [];
+    const replacedAlbums: Array<{
+      existingAlbumId: string | null;
+      album: AlbumRecord;
+      assets: AssetRecord[];
+    }> = [];
 
     albumsDiscovered += discoveredAlbums.length;
     assetsDiscovered += discoveredAlbums.reduce((total, album) => total + album.assets.length, 0);
 
     for (const existingAlbum of existingAlbums) {
       if (!discoveredBySourcePath.has(existingAlbum.sourcePath)) {
-        deleteAlbumDb(existingAlbum.id);
+        removedAlbumIds.push(existingAlbum.id);
       }
     }
 
@@ -267,10 +272,6 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
 
       if (existingAlbum && !shouldReplaceAlbum(existingAlbum, discoveredAlbum, assets)) {
         continue;
-      }
-
-      if (existingAlbum) {
-        deleteAlbumDb(existingAlbum.id);
       }
 
       const album: AlbumRecord = {
@@ -288,8 +289,17 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
         updatedAt: timestamp
       };
 
-      insertAlbumWithAssetsDb(album, assets);
+      replacedAlbums.push({
+        existingAlbumId: existingAlbum?.id ?? null,
+        album,
+        assets
+      });
     }
+
+    applyLibraryRootScanDiffDb({
+      removedAlbumIds,
+      replacedAlbums
+    });
 
     upsertLibraryRootDb({
       ...libraryRoot,

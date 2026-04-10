@@ -246,22 +246,37 @@ const createAssetCard = (asset, index) => `
 `;
 
 const createLibraryRoots = () => {
-  if (state.libraryRoots.length === 0) {
-    return "";
-  }
-
   return `
-    <div class="library-roots">
-      ${state.libraryRoots
-        .map(
-          (root) => `
-            <div class="root-chip">
-              <strong>${escapeHtml(root.name)}</strong>
-              <span>${escapeHtml(root.path)}</span>
-            </div>
-          `
-        )
-        .join("")}
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">图库筛选</div>
+      <div class="library-root-icons">
+        <button class="root-icon-chip ${state.filters.libraryRootId === "" ? "active" : ""}" data-action="select-library-root" data-root-id="">
+          <span class="root-icon">🖼️</span>
+          <span>全部图库</span>
+        </button>
+        ${state.libraryRoots
+          .map(
+            (root) => `
+              <button class="root-icon-chip ${state.filters.libraryRootId === root.id ? "active" : ""}" data-action="select-library-root" data-root-id="${root.id}" title="${escapeHtml(root.path)}">
+                <span class="root-icon">📁</span>
+                <span>${escapeHtml(root.name)}</span>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+      <div class="library-roots">
+        ${state.libraryRoots
+          .map(
+            (root) => `
+              <div class="root-chip">
+                <strong>${escapeHtml(root.name)}</strong>
+                <span>${escapeHtml(root.path)}</span>
+              </div>
+            `
+          )
+          .join("")}
+      </div>
     </div>
   `;
 };
@@ -359,8 +374,11 @@ const renderShell = (content) => {
           <span class="eyebrow">Moment Pic / Local Gallery</span>
           <div class="status" data-status>准备就绪</div>
         </div>
-        <div class="sidebar-actions">
-          ${quickActions}
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">管理</div>
+          <div class="sidebar-actions">
+            ${quickActions}
+          </div>
         </div>
         ${createToolbarFilters()}
         ${createLibraryRoots()}
@@ -1265,6 +1283,21 @@ const bindCommonEvents = () => {
 
   document.querySelector("[data-action='go-manage']")?.addEventListener("click", () => {
     location.hash = "#/manage";
+  });
+
+  document.querySelectorAll("[data-action='select-library-root']").forEach((node) => {
+    node.addEventListener("click", async () => {
+      const rootId = node.getAttribute("data-root-id") ?? "";
+      state.filters.libraryRootId = rootId;
+      state.filters.page = 1;
+
+      if (!location.hash || location.hash === "#/" || location.hash === "#") {
+        await renderHome();
+        return;
+      }
+
+      location.hash = "#/";
+    });
   });
 
   document.querySelector("[data-action='toggle-filters']")?.addEventListener("click", () => {

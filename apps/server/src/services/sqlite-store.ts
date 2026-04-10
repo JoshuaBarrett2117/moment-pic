@@ -193,6 +193,14 @@ export const listAlbumsDb = (
   return { items, total: totalRow.total };
 };
 
+export const listAlbumsByLibraryRootIdDb = (libraryRootId: string): AlbumRecord[] => {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM albums WHERE library_root_id = ? ORDER BY name ASC")
+    .all(libraryRootId)
+    .map((row: unknown) => rowToAlbum(row as Record<string, unknown>));
+};
+
 export const findAlbumByIdDb = (albumId: string): AlbumRecord | null => {
   const db = getDb();
   const row = db.prepare("SELECT * FROM albums WHERE id = ? LIMIT 1").get(albumId) as Record<string, unknown> | undefined;

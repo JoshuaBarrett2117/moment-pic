@@ -1,17 +1,16 @@
-﻿import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { env } from "../config/env.js";
 import { isSupportedImageExtension } from "../lib/image-formats.js";
 import { normalizeExtension, toPosixPath } from "../lib/paths.js";
 import { nowIso } from "../lib/time.js";
 import type { AlbumRecord, AssetRecord, LibraryRootRecord, SourceType } from "../types/store.js";
 import {
-  clearLibraryDataDb,
-  findLibraryRootByPathDb,
+  deleteAlbumDb,
   insertAlbumWithAssetsDb,
+  listAlbumsByLibraryRootIdDb,
   listAlbumsDb,
+  listAssetsByAlbumIdDb,
   listLibraryRootsDb,
   makeId,
   upsertLibraryRootDb
@@ -37,38 +36,27 @@ type ScannedAlbum = {
   }>;
 };
 
+export class ScanLibraryRootNotFoundError extends Error {
+  constructor(rootId: string) {
+    super(`library root not found: ${rootId}`);
+    this.name = "ScanLibraryRootNotFoundError";
+  }
+}
+
+type ScanLibraryInput = {
+  libraryRootId?: string;
+};
+
 const sortNames = (left: string, right: string): number =>
   left.localeCompare(right, "zh-Hans-CN-u-kn-true");
 
-const ensureLibraryRootRecord = (rootPath: string): LibraryRootRecord => {
-  const existing = findLibraryRootByPathDb(rootPath);
-  const timestamp = nowIso();
-
-  if (existing) {
-    const updated = {
-      ...existing,
-      enabled: true,
-      updatedAt: timestamp
-    };
-    upsertLibraryRootDb(updated);
-    return updated;
+const getScanRoots = async (input?: ScanLibraryInput): Promise<LibraryRootRecord[]> => {
+  const enabledRoots = listLibraryRootsDb().filter((root) => root.enabled);
+  if (!input?.libraryRootId) {
+    return enabledRoots;
   }
 
-  const created: LibraryRootRecord = {
-    id: makeId("root"),
-    name: path.basename(rootPath) || rootPath,
-    path: rootPath,
-    enabled: true,
-    lastScannedAt: null,
-    createdAt: timestamp,
-    updatedAt: timestamp
-  };
-  upsertLibraryRootDb(created);
-  return created;
-};
-
-const getScanRoots = async (): Promise<LibraryRootRecord[]> => {
-  return listLibraryRootsDb().filter((root) => root.enabled);
+  return enabledRoots.filter((root) => root.id === input.libraryRootId);
 };
 
 const scanFolderAlbum = async (libraryRootPath: string, folderPath: string): Promise<ScannedAlbum | null> => {
@@ -154,6 +142,7 @@ const discoverAlbumsForRoot = async (libraryRootPath: string): Promise<ScannedAl
   } catch {
     return [];
   }
+
   const albums: ScannedAlbum[] = [];
 
   for (const entry of rootEntries) {
@@ -179,41 +168,96 @@ const discoverAlbumsForRoot = async (libraryRootPath: string): Promise<ScannedAl
   return albums;
 };
 
-export const scanLibrary = async () => {
-  const libraryRoots = await getScanRoots();
-  const timestamp = nowIso();
+const toAssetRecord = (albumId: string, timestamp: string, asset: ScannedAlbum["assets"][number]): AssetRecord => ({
+  id: makeId("ast"),
+  albumId,
+  name: asset.name,
+  extension: asset.extension,
+  sourceType: asset.sourceType,
+  sourcePath: asset.sourcePath,
+  relativePath: asset.relativePath,
+  zipEntryPath: asset.zipEntryPath,
+  sortIndex: asset.sortIndex,
+  width: null,
+  height: null,
+  sizeBytes: asset.sizeBytes,
+  sourceMtime: asset.sourceMtime,
+  thumbnailKey: null,
+  createdAt: timestamp,
+  updatedAt: timestamp
+});
 
-  for (const libraryRoot of libraryRoots) {
-    clearLibraryDataDb(libraryRoot.id);
+const shouldReplaceAlbum = (existingAlbum: AlbumRecord, discoveredAlbum: ScannedAlbum, nextAssets: AssetRecord[]): boolean => {
+  if (
+    existingAlbum.name !== discoveredAlbum.name ||
+    existingAlbum.sourceType !== discoveredAlbum.sourceType ||
+    existingAlbum.sourceMtime !== discoveredAlbum.sourceMtime ||
+    existingAlbum.assetCount !== nextAssets.length
+  ) {
+    return true;
   }
 
+  const existingAssets = listAssetsByAlbumIdDb(existingAlbum.id);
+  if (existingAssets.length !== nextAssets.length) {
+    return true;
+  }
+
+  for (let index = 0; index < existingAssets.length; index += 1) {
+    const current = existingAssets[index];
+    const next = nextAssets[index];
+    if (
+      current.name !== next.name ||
+      current.extension !== next.extension ||
+      current.relativePath !== next.relativePath ||
+      current.zipEntryPath !== next.zipEntryPath ||
+      current.sortIndex !== next.sortIndex ||
+      current.sizeBytes !== next.sizeBytes ||
+      current.sourceMtime !== next.sourceMtime
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+export const scanLibrary = async (input?: ScanLibraryInput) => {
+  const libraryRoots = await getScanRoots(input);
+  if (input?.libraryRootId && libraryRoots.length === 0) {
+    throw new ScanLibraryRootNotFoundError(input.libraryRootId);
+  }
+
+  const timestamp = nowIso();
   let albumsDiscovered = 0;
   let assetsDiscovered = 0;
 
   for (const libraryRoot of libraryRoots) {
     const discoveredAlbums = await discoverAlbumsForRoot(libraryRoot.path);
+    const existingAlbums = listAlbumsByLibraryRootIdDb(libraryRoot.id);
+    const existingBySourcePath = new Map(existingAlbums.map((album) => [album.sourcePath, album]));
+    const discoveredBySourcePath = new Map(discoveredAlbums.map((album) => [album.sourcePath, album]));
+
     albumsDiscovered += discoveredAlbums.length;
+    assetsDiscovered += discoveredAlbums.reduce((total, album) => total + album.assets.length, 0);
+
+    for (const existingAlbum of existingAlbums) {
+      if (!discoveredBySourcePath.has(existingAlbum.sourcePath)) {
+        deleteAlbumDb(existingAlbum.id);
+      }
+    }
 
     for (const discoveredAlbum of discoveredAlbums) {
-      const albumId = makeId("alb");
-      const assets: AssetRecord[] = discoveredAlbum.assets.map((asset) => ({
-        id: makeId("ast"),
-        albumId,
-        name: asset.name,
-        extension: asset.extension,
-        sourceType: asset.sourceType,
-        sourcePath: asset.sourcePath,
-        relativePath: asset.relativePath,
-        zipEntryPath: asset.zipEntryPath,
-        sortIndex: asset.sortIndex,
-        width: null,
-        height: null,
-        sizeBytes: asset.sizeBytes,
-        sourceMtime: asset.sourceMtime,
-        thumbnailKey: null,
-        createdAt: timestamp,
-        updatedAt: timestamp
-      }));
+      const existingAlbum = existingBySourcePath.get(discoveredAlbum.sourcePath);
+      const albumId = existingAlbum?.id ?? makeId("alb");
+      const assets = discoveredAlbum.assets.map((asset) => toAssetRecord(albumId, timestamp, asset));
+
+      if (existingAlbum && !shouldReplaceAlbum(existingAlbum, discoveredAlbum, assets)) {
+        continue;
+      }
+
+      if (existingAlbum) {
+        deleteAlbumDb(existingAlbum.id);
+      }
 
       const album: AlbumRecord = {
         id: albumId,
@@ -226,12 +270,11 @@ export const scanLibrary = async () => {
         assetCount: assets.length,
         scanStatus: "ready",
         errorMessage: null,
-        createdAt: timestamp,
+        createdAt: existingAlbum?.createdAt ?? timestamp,
         updatedAt: timestamp
       };
 
       insertAlbumWithAssetsDb(album, assets);
-      assetsDiscovered += assets.length;
     }
 
     upsertLibraryRootDb({

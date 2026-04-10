@@ -329,6 +329,7 @@ const renderManage = async () => {
           <div class="album-meta">${escapeHtml(root.path)}</div>
           <div class="album-meta">最近扫描：${lastScanned}</div>
           <div class="manage-item-actions">
+            <button class="button button-secondary button-sm" data-action="scan-root" data-root-id="${root.id}">扫描此库</button>
             <button class="button button-danger button-sm" data-action="delete" data-root-id="${root.id}">移除</button>
           </div>
         </div>
@@ -395,6 +396,29 @@ const renderManage = async () => {
         await renderManage();
       } catch (error) {
         setStatus(`移除失败：${error.message}`);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-action='scan-root']").forEach((node) => {
+    node.addEventListener("click", async () => {
+      const rootId = node.getAttribute("data-root-id");
+      const root = libraryRoots.find((item) => item.id === rootId);
+      if (!root || !rootId) return;
+      if (!confirm(`确认重新扫描图库“${root.name}”吗？仅会同步新增/删除/变化的内容。`)) return;
+
+      try {
+        setStatus(`正在扫描图库：${root.name}...`);
+        await fetchJson("/api/v1/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ libraryRootId: rootId })
+        });
+        state.libraryRoots = [];
+        await renderManage();
+        setStatus(`扫描完成：${root.name}`);
+      } catch (error) {
+        setStatus(`扫描失败：${error.message}`);
       }
     });
   });
@@ -1065,6 +1089,9 @@ const bindCommonEvents = () => {
   });
 
   document.querySelector("[data-action='rescan']")?.addEventListener("click", async () => {
+    if (!confirm("确认重新扫描图库吗？仅会同步新增/删除/变化的内容。")) {
+      return;
+    }
     setStatus("正在重新扫描图库...");
     await fetchJson("/api/v1/scan", { method: "POST" });
     state.libraryRoots = [];

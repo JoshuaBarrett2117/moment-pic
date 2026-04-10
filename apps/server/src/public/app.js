@@ -133,10 +133,12 @@ const createAlbumCard = (album) => `
   <article class="album-card" data-album-id="${album.id}">
     <div class="album-cover">
       ${album.coverUrl ? `<img src="${album.coverUrl}" alt="${escapeHtml(album.name)}" loading="lazy" />` : `<div class="album-cover-placeholder">暂无封面</div>`}
+      <div class="album-cover-info">
+        <h3>${escapeHtml(album.name)}</h3>
+        <div class="album-cover-meta">${album.assetCount} 张图片</div>
+      </div>
     </div>
     <div class="album-body">
-      <h3>${escapeHtml(album.name)}</h3>
-      <div class="album-meta">${album.assetCount} 张图片</div>
       <div class="album-badge">${album.sourceType === "folder" ? "目录图集" : "ZIP 图集"}</div>
     </div>
   </article>
@@ -248,6 +250,17 @@ const createAlbumPagination = () => {
 };
 
 const renderShell = (content) => {
+  const hash = location.hash || "#/";
+  const isManage = /^#\/manage$/.test(hash);
+  const isHome = !hash || hash === "#/" || hash === "#";
+  const quickActions = [
+    `<button class="button button-primary button-compact" data-action="rescan">扫描</button>`,
+    !isHome ? `<button class="button button-secondary button-compact" data-action="go-home">首页</button>` : "",
+    !isManage ? `<button class="button button-secondary button-compact" data-action="go-manage">管理</button>` : ""
+  ]
+    .filter(Boolean)
+    .join("");
+
   app.innerHTML = `
     <div class="shell">
       <section class="hero">
@@ -262,9 +275,7 @@ const renderShell = (content) => {
         ${createLibraryRoots()}
         <div class="toolbar">
           ${createToolbarFilters()}
-          <button class="button button-primary" data-action="rescan">重新扫描图库</button>
-          <button class="button button-secondary" data-action="go-home">返回首页</button>
-          <button class="button button-secondary" data-action="go-manage">管理图集</button>
+          <div class="quick-actions">${quickActions}</div>
         </div>
       </section>
       <section class="content">${content}</section>
@@ -555,6 +566,44 @@ const setViewerUiVisible = (visible) => {
   if (visible) {
     showViewerProgress();
   }
+};
+
+const handleViewerTap = async (clientX, clientY) => {
+  const stage = document.querySelector(".viewer-stage");
+  if (!(stage instanceof HTMLElement)) {
+    return;
+  }
+
+  const rect = stage.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return;
+  }
+
+  const relativeX = (clientX - rect.left) / rect.width;
+  const relativeY = (clientY - rect.top) / rect.height;
+  const isCenterArea = relativeX >= 0.34 && relativeX <= 0.66 && relativeY >= 0.34 && relativeY <= 0.66;
+
+  if (isCenterArea) {
+    setViewerUiVisible(!state.viewer.uiVisible);
+    return;
+  }
+
+  if (relativeY <= 0.25) {
+    await moveViewer(-1);
+    return;
+  }
+
+  if (relativeY >= 0.75) {
+    await moveViewer(1);
+    return;
+  }
+
+  if (relativeX <= 0.5) {
+    await moveViewer(-1);
+    return;
+  }
+
+  await moveViewer(1);
 };
 
 const renderViewer = () => {
@@ -881,7 +930,7 @@ const bindViewerEvents = () => {
 
       if (!state.viewer.touchMoved) {
         state.viewer.suppressNextStageClick = true;
-        setViewerUiVisible(!state.viewer.uiVisible);
+        await handleViewerTap(touch.clientX, touch.clientY);
         state.viewer.touchMode = "none";
         return;
       }
@@ -900,7 +949,7 @@ const bindViewerEvents = () => {
       state.viewer.touchMode = "none";
     }, { passive: true });
 
-    stage.addEventListener("click", (event) => {
+    stage.addEventListener("click", async (event) => {
       if (state.viewer.suppressNextStageClick) {
         state.viewer.suppressNextStageClick = false;
         return;
@@ -912,7 +961,7 @@ const bindViewerEvents = () => {
       }
 
       if (target.closest(".viewer-image") || target === stage) {
-        setViewerUiVisible(!state.viewer.uiVisible);
+        await handleViewerTap(event.clientX, event.clientY);
       }
     });
 

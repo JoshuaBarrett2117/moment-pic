@@ -8,6 +8,11 @@ const state = {
     fitMode: "fit",
     rotation: 0,
     progressTimer: null,
+    preloadRadius: 10,
+    preloadTaskId: 0,
+    pageCacheAlbumId: null,
+    pageCache: new Map(),
+    preloadedAssetIds: new Set(),
     scale: 1,
     panX: 0,
     panY: 0,
@@ -39,6 +44,33 @@ const state = {
 };
 
 const app = document.querySelector("#app");
+const VIEWER_PRELOAD_RADIUS_KEY = "moment_pic_viewer_preload_radius";
+
+const clampPreloadRadius = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 10;
+  }
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+};
+
+const readPreloadRadius = () => {
+  try {
+    return clampPreloadRadius(localStorage.getItem(VIEWER_PRELOAD_RADIUS_KEY) ?? "10");
+  } catch {
+    return 10;
+  }
+};
+
+const writePreloadRadius = (value) => {
+  try {
+    localStorage.setItem(VIEWER_PRELOAD_RADIUS_KEY, String(value));
+  } catch {
+    // 浏览器禁用本地存储时忽略，保留内存值
+  }
+};
+
+state.viewer.preloadRadius = readPreloadRadius();
 
 const fetchJson = async (url, options) => {
   const response = await fetch(url, options);
@@ -160,6 +192,10 @@ const createToolbarFilters = () => `
       <option value="24" ${state.filters.pageSize === 24 ? "selected" : ""}>24 / 页</option>
       <option value="48" ${state.filters.pageSize === 48 ? "selected" : ""}>48 / 页</option>
     </select>
+    <label class="control preload-setting" title="查看器预加载半径">
+      预加载 ±
+      <input type="number" min="0" max="100" step="1" value="${state.viewer.preloadRadius}" data-action="set-preload-radius" />
+    </label>
   </div>
 `;
 
@@ -341,8 +377,87 @@ const renderManage = async () => {
   setStatus("图库目录管理");
 };
 
+const resetViewerPageCache = (albumId = null) => {
+  state.viewer.pageCacheAlbumId = albumId;
+  state.viewer.pageCache = new Map();
+  state.viewer.preloadedAssetIds = new Set();
+};
+
+const getCachedAlbumPage = (albumId, page) => {
+  if (state.viewer.pageCacheAlbumId !== albumId) {
+    return null;
+  }
+  return state.viewer.pageCache.get(page) ?? null;
+};
+
 const loadAlbumPage = async (albumId, page) => {
-  return fetchJson(`/api/v1/albums/${albumId}/assets?page=${page}&pageSize=${state.albumPagination.pageSize}`);
+  const cached = getCachedAlbumPage(albumId, page);
+  if (cached) {
+    return cached;
+  }
+
+  const data = await fetchJson(`/api/v1/albums/${albumId}/assets?page=${page}&pageSize=${state.albumPagination.pageSize}`);
+  if (state.viewer.pageCacheAlbumId !== albumId) {
+    resetViewerPageCache(albumId);
+  }
+  state.viewer.pageCache.set(page, data);
+  return data;
+};
+
+const getAssetByGlobalIndex = async (albumId, index) => {
+  const page = Math.floor(index / state.albumPagination.pageSize) + 1;
+  const data = await loadAlbumPage(albumId, page);
+  const localIndex = index - (page - 1) * state.albumPagination.pageSize;
+  return data.items[localIndex] ?? null;
+};
+
+const preloadViewerAssets = async () => {
+  if (!state.currentAlbum || state.albumPagination.total <= 0) {
+    return;
+  }
+
+  const radius = state.viewer.preloadRadius;
+  if (radius <= 0) {
+    return;
+  }
+
+  const albumId = state.currentAlbum.id;
+  const total = state.albumPagination.total;
+  const center = state.currentAssetGlobalIndex;
+  const start = Math.max(0, center - radius);
+  const end = Math.min(total - 1, center + radius);
+  const taskId = ++state.viewer.preloadTaskId;
+  const pageNumbers = new Set();
+
+  for (let index = start; index <= end; index += 1) {
+    if (index === center) {
+      continue;
+    }
+    const page = Math.floor(index / state.albumPagination.pageSize) + 1;
+    pageNumbers.add(page);
+  }
+
+  await Promise.all([...pageNumbers].map((page) => loadAlbumPage(albumId, page)));
+
+  if (taskId !== state.viewer.preloadTaskId) {
+    return;
+  }
+
+  for (let index = start; index <= end; index += 1) {
+    if (index === center) {
+      continue;
+    }
+
+    const asset = await getAssetByGlobalIndex(albumId, index);
+    if (!asset || state.viewer.preloadedAssetIds.has(asset.id)) {
+      continue;
+    }
+
+    state.viewer.preloadedAssetIds.add(asset.id);
+    const image = new Image();
+    image.decoding = "async";
+    image.src = asset.originalUrl;
+  }
 };
 
 const getCurrentAsset = () => {
@@ -352,6 +467,9 @@ const getCurrentAsset = () => {
 
 const renderAlbum = async (albumId, viewerIndex = null, requestedPage = null) => {
   await ensureLibraryRoots();
+  if (state.viewer.pageCacheAlbumId !== albumId) {
+    resetViewerPageCache(albumId);
+  }
   renderShell(`<div class="empty-state">正在读取图集详情...</div>`);
   bindCommonEvents();
   const targetPage =
@@ -539,6 +657,7 @@ const openViewer = async (index) => {
   state.viewer.panX = 0;
   state.viewer.panY = 0;
   renderViewer();
+  void preloadViewerAssets();
   await requestViewerFullscreen();
 };
 
@@ -561,6 +680,7 @@ const moveViewer = async (offset) => {
   state.viewer.panX = 0;
   state.viewer.panY = 0;
   updateViewerContent();
+  void preloadViewerAssets();
 };
 
 const closeViewer = async () => {
@@ -758,6 +878,20 @@ const bindCommonEvents = () => {
 
   document.querySelector("[data-action='go-manage']")?.addEventListener("click", () => {
     location.hash = "#/manage";
+  });
+
+  document.querySelector("[data-action='set-preload-radius']")?.addEventListener("change", async (event) => {
+    const target = event.currentTarget;
+    const nextValue = clampPreloadRadius(target.value);
+    target.value = String(nextValue);
+    state.viewer.preloadRadius = nextValue;
+    writePreloadRadius(nextValue);
+    setStatus(`预加载范围已更新：前后 ${nextValue} 张`);
+
+    const viewer = document.querySelector("#viewer");
+    if (viewer?.classList.contains("open")) {
+      void preloadViewerAssets();
+    }
   });
 };
 

@@ -636,7 +636,6 @@ const renderViewer = () => {
       <button class="viewer-nav prev" data-action="viewer-prev">‹</button>
       <div class="viewer-stage" data-viewer-stage>
         <img class="${imageClass}" src="${asset.originalUrl}" alt="${escapeHtml(asset.name)}" style="transform: rotate(${rotation}deg) scale(${state.viewer.scale}) translate(${state.viewer.panX}px, ${state.viewer.panY}px);" />
-        <div class="viewer-center-hint">点击中间显示操作</div>
       </div>
       <button class="viewer-nav next" data-action="viewer-next">›</button>
       <div class="viewer-progress" data-viewer-progress>

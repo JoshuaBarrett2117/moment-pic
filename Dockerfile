@@ -30,7 +30,7 @@ COPY apps/server/package.json ./apps/server/package.json
 RUN npm install --omit=dev
 
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
-COPY --from=builder /app/apps/server/src/public ./apps/server/src/public
+COPY --from=builder /app/apps/server/src/public ./apps/server/dist/public
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 

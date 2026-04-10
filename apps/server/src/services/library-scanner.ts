@@ -135,6 +135,32 @@ const scanZipAlbum = async (libraryRootPath: string, zipPath: string): Promise<S
   };
 };
 
+const discoverFolderAlbumsRecursively = async (libraryRootPath: string, folderPath: string): Promise<ScannedAlbum[]> => {
+  let folderEntries: fs.Dirent[];
+  try {
+    folderEntries = await fs.promises.readdir(folderPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const albums: ScannedAlbum[] = [];
+  const folderAlbum = await scanFolderAlbum(libraryRootPath, folderPath);
+  if (folderAlbum) {
+    albums.push(folderAlbum);
+  }
+
+  const childDirectories = folderEntries.filter((entry) => entry.isDirectory()).sort((left, right) => sortNames(left.name, right.name));
+  for (const directory of childDirectories) {
+    const childPath = path.join(folderPath, directory.name);
+    const childAlbums = await discoverFolderAlbumsRecursively(libraryRootPath, childPath);
+    if (childAlbums.length > 0) {
+      albums.push(...childAlbums);
+    }
+  }
+
+  return albums;
+};
+
 const discoverAlbumsForRoot = async (libraryRootPath: string): Promise<ScannedAlbum[]> => {
   let rootEntries: fs.Dirent[];
   try {
@@ -143,24 +169,12 @@ const discoverAlbumsForRoot = async (libraryRootPath: string): Promise<ScannedAl
     return [];
   }
 
-  const albums: ScannedAlbum[] = [];
-
-  for (const entry of rootEntries) {
+  const albums: ScannedAlbum[] = await discoverFolderAlbumsRecursively(libraryRootPath, libraryRootPath);
+  for (const entry of rootEntries.filter((item) => item.isFile() && normalizeExtension(item.name) === "zip")) {
     const fullPath = path.join(libraryRootPath, entry.name);
-
-    if (entry.isDirectory()) {
-      const folderAlbum = await scanFolderAlbum(libraryRootPath, fullPath);
-      if (folderAlbum) {
-        albums.push(folderAlbum);
-      }
-      continue;
-    }
-
-    if (entry.isFile() && normalizeExtension(entry.name) === "zip") {
-      const zipAlbum = await scanZipAlbum(libraryRootPath, fullPath);
-      if (zipAlbum) {
-        albums.push(zipAlbum);
-      }
+    const zipAlbum = await scanZipAlbum(libraryRootPath, fullPath);
+    if (zipAlbum) {
+      albums.push(zipAlbum);
     }
   }
 

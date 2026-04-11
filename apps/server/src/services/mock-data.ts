@@ -60,7 +60,8 @@ export const mockAlbumAssets: Record<string, AlbumAssetsDTO> = {
     album: {
       id: "alb_001",
       name: "风景1",
-      assetCount: 2
+      assetCount: 2,
+      updatedAt: "2026-04-09T10:00:00.000Z"
     },
     items: [
       {
@@ -94,7 +95,8 @@ export const mockAlbumAssets: Record<string, AlbumAssetsDTO> = {
     album: {
       id: "alb_002",
       name: "风景2",
-      assetCount: 2
+      assetCount: 2,
+      updatedAt: "2026-04-09T10:00:00.000Z"
     },
     items: [
       {

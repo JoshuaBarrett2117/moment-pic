@@ -13,6 +13,8 @@
 
 1. 运行：`docker compose up --build`
 2. 打开浏览器：`http://127.0.0.1:3210`
+3. 默认账号：`admin`
+4. 默认密码：`admin`（可通过环境变量 `ADMIN_PASSWORD` 覆盖）
 
 ## 当前支持
 

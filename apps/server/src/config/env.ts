@@ -26,6 +26,7 @@ const libraryRootPaths = (() => {
 export const env = {
   host: process.env.HOST ?? "0.0.0.0",
   port: toNumber(process.env.PORT, 3001),
+  adminPassword: process.env.ADMIN_PASSWORD ?? "admin",
   libraryRootPath: libraryRootPaths[0],
   libraryRootPaths,
   cacheDir: process.env.CACHE_DIR ?? "./data/cache",

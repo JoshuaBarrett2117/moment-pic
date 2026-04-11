@@ -8,6 +8,7 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "3210"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
       LIBRARY_ROOTS: "${LIBRARY_ROOTS:-/data/library}"
       CACHE_DIR: "${CACHE_DIR:-/data/cache}"
       SQLITE_PATH: "${SQLITE_PATH:-/data/gallery.sqlite}"

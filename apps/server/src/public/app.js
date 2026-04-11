@@ -177,6 +177,10 @@ state.viewer.preloadRadius = readPreloadRadius();
 const fetchJson = async (url, options) => {
   const response = await fetch(url, options);
   const payload = await response.json();
+  if (response.status === 401) {
+    window.location.href = "/login.html";
+    throw new Error("登录已过期，请重新登录");
+  }
   if (!response.ok) {
     throw new Error(payload.message || "请求失败");
   }
@@ -733,7 +737,7 @@ const renderAlbum = async (albumId, viewerIndex = null, requestedPage = null) =>
   setStatus(`正在浏览图集：${data.album.name}`);
 
   if (viewerIndex !== null && Number.isInteger(viewerIndex) && viewerIndex >= 0 && viewerIndex < data.pagination.total) {
-    await openViewer(viewerIndex);
+    void openViewer(viewerIndex);
   }
 };
 
@@ -933,77 +937,109 @@ const requestViewerFullscreen = async () => {
   }
 };
 
+const showViewerLoading = () => {
+  const viewer = document.querySelector("#viewer");
+  if (!viewer) {
+    return;
+  }
+
+  viewer.classList.add("open");
+  viewer.innerHTML = `<div class="viewer-loading">大图加载中...</div>`;
+};
+
+const hideViewerLoading = () => {
+  const viewer = document.querySelector("#viewer");
+  if (!viewer) {
+    return;
+  }
+
+  viewer.classList.remove("open");
+  viewer.innerHTML = "";
+};
+
 const openViewer = async (index) => {
   if (!state.currentAlbum) {
     return;
   }
 
-  ensurePhotoSwipeCss();
-  const module = await loadPhotoSwipeModule();
-  const PhotoSwipe = module.default;
-  const assets = await loadAllAlbumAssets(state.currentAlbum.id);
-  const safeIndex = Math.max(0, Math.min(index, Math.max(0, assets.length - 1)));
-  await ensureDimensionsWindow(assets, safeIndex, 28);
+  showViewerLoading();
 
-  const dataSource = assets.map((asset) => ({
-    src: asset.originalUrl,
-    width: asset.width ?? imageDimensionCache.get(asset.originalUrl)?.width ?? 1,
-    height: asset.height ?? imageDimensionCache.get(asset.originalUrl)?.height ?? 1,
-    alt: asset.name
-  }));
+  try {
+    ensurePhotoSwipeCss();
+    const module = await loadPhotoSwipeModule();
+    const PhotoSwipe = module.default;
+    const assets = await loadAllAlbumAssets(state.currentAlbum.id);
+    const safeIndex = Math.max(0, Math.min(index, Math.max(0, assets.length - 1)));
 
-  if (activePhotoSwipe) {
-    activePhotoSwipe.close();
-    activePhotoSwipe = null;
-  }
+    const dataSource = assets.map((asset) => ({
+      src: asset.originalUrl,
+      width: asset.width ?? imageDimensionCache.get(asset.originalUrl)?.width ?? 1,
+      height: asset.height ?? imageDimensionCache.get(asset.originalUrl)?.height ?? 1,
+      alt: asset.name
+    }));
 
-  state.currentAssetGlobalIndex = safeIndex;
-  const photoSwipe = new PhotoSwipe({
-    dataSource,
-    index: safeIndex,
-    bgOpacity: 0.96,
-    showHideAnimationType: "zoom",
-    initialZoomLevel: "fit",
-    secondaryZoomLevel: 1
-  });
-
-  activePhotoSwipe = photoSwipe;
-  photoSwipe.on("change", () => {
-    state.currentAssetGlobalIndex = photoSwipe.currIndex;
-    if (!state.currentAlbum) {
-      return;
-    }
-    history.replaceState(null, "", `#/albums/${state.currentAlbum.id}/view/${photoSwipe.currIndex}`);
-  });
-  photoSwipe.on("change", async () => {
-    const currentIndex = photoSwipe.currIndex;
-    const currentAsset = assets[currentIndex];
-    if (!currentAsset) {
-      return;
+    if (activePhotoSwipe) {
+      activePhotoSwipe.close();
+      activePhotoSwipe = null;
     }
 
-    if (!(currentAsset.width && currentAsset.height) && !imageDimensionCache.has(currentAsset.originalUrl)) {
-      const dimensions = await getAssetDimensions(currentAsset);
-      dataSource[currentIndex].width = dimensions.width;
-      dataSource[currentIndex].height = dimensions.height;
-      if (typeof photoSwipe.refreshSlideContent === "function") {
-        photoSwipe.refreshSlideContent(currentIndex);
+    state.currentAssetGlobalIndex = safeIndex;
+    const photoSwipe = new PhotoSwipe({
+      dataSource,
+      index: safeIndex,
+      bgOpacity: 0.96,
+      showHideAnimationType: "zoom",
+      initialZoomLevel: "fit",
+      secondaryZoomLevel: 1
+    });
+
+    const updateSlideDimensions = async (targetIndex) => {
+      const currentAsset = assets[targetIndex];
+      if (!currentAsset) {
+        return;
       }
-      photoSwipe.updateSize(true);
-    }
 
-    void ensureDimensionsWindow(assets, currentIndex, 20);
-  });
-  photoSwipe.on("close", () => {
-    activePhotoSwipe = null;
-    if (!state.currentAlbum) {
-      return;
-    }
-    if (/^#\/albums\/[^/]+\/view\/\d+$/.test(location.hash || "")) {
-      location.hash = `#/albums/${state.currentAlbum.id}`;
-    }
-  });
-  photoSwipe.init();
+      if (!(currentAsset.width && currentAsset.height) && !imageDimensionCache.has(currentAsset.originalUrl)) {
+        const dimensions = await getAssetDimensions(currentAsset);
+        dataSource[targetIndex].width = dimensions.width;
+        dataSource[targetIndex].height = dimensions.height;
+        if (typeof photoSwipe.refreshSlideContent === "function") {
+          photoSwipe.refreshSlideContent(targetIndex);
+        }
+        photoSwipe.updateSize(true);
+      }
+    };
+
+    activePhotoSwipe = photoSwipe;
+    photoSwipe.on("change", () => {
+      state.currentAssetGlobalIndex = photoSwipe.currIndex;
+      if (!state.currentAlbum) {
+        return;
+      }
+      history.replaceState(null, "", `#/albums/${state.currentAlbum.id}/view/${photoSwipe.currIndex}`);
+      void updateSlideDimensions(photoSwipe.currIndex);
+      void ensureDimensionsWindow(assets, photoSwipe.currIndex, 20);
+    });
+    photoSwipe.on("afterInit", () => {
+      hideViewerLoading();
+      void updateSlideDimensions(photoSwipe.currIndex);
+      void ensureDimensionsWindow(assets, photoSwipe.currIndex, 28);
+    });
+    photoSwipe.on("close", () => {
+      hideViewerLoading();
+      activePhotoSwipe = null;
+      if (!state.currentAlbum) {
+        return;
+      }
+      if (/^#\/albums\/[^/]+\/view\/\d+$/.test(location.hash || "")) {
+        location.hash = `#/albums/${state.currentAlbum.id}`;
+      }
+    });
+    photoSwipe.init();
+  } catch (error) {
+    hideViewerLoading();
+    throw error;
+  }
 };
 
 const moveViewer = async (offset) => {

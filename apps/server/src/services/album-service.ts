@@ -97,7 +97,8 @@ export const getAlbumAssets = async (albumId: string, page = 1, pageSize = 120):
     album: {
       id: album.id,
       name: album.name,
-      assetCount: album.assetCount
+      assetCount: album.assetCount,
+      updatedAt: album.updatedAt
     },
     items: assets.map((asset) => ({
       id: asset.id,

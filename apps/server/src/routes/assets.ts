@@ -28,10 +28,17 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
       reply.type(thumbnail.mimeType);
       return reply.send(await app.readFile(thumbnail.filePath));
     } catch {
-      return reply.status(404).send({
-        code: 4002,
-        message: "asset not found"
-      });
+      try {
+        const { asset, buffer } = await readOriginalImage(assetId);
+        const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
+        reply.type(mimeType);
+        return reply.send(buffer);
+      } catch {
+        return reply.status(404).send({
+          code: 4002,
+          message: "asset not found"
+        });
+      }
     }
   });
 

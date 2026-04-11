@@ -1,4 +1,4 @@
-﻿export type SourceTypeDTO = "folder" | "zip";
+export type SourceTypeDTO = "folder" | "zip";
 
 export type PaginationDTO = {
   page: number;
@@ -66,11 +66,26 @@ export type AlbumAssetsDTO = {
   pagination: PaginationDTO;
 };
 
+export type AlbumsListDTO = {
+  items: AlbumListItemDTO[];
+  pagination: PaginationDTO;
+};
+
+export type LoginResponseDTO = {
+  username: string;
+  expiresAt: string;
+};
+
+export type ScanTaskStatus = "pending" | "running" | "completed" | "failed";
+
 export type ScanResultDTO = {
   taskId: string;
-  status: "started" | "completed";
-  albumsDiscovered?: number;
-  assetsDiscovered?: number;
-  startedAt?: string;
-  finishedAt?: string;
+  status: ScanTaskStatus;
+  libraryRootId: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+  albumsDiscovered: number;
+  assetsDiscovered: number;
 };

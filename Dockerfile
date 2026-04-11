@@ -1,15 +1,14 @@
 # 阶段 1: 构建前端
 FROM node:24-slim AS web-builder
 
-WORKDIR /app
+WORKDIR /app/apps/web
 
-COPY apps/web/package.json ./
-
+COPY package.json ./
 RUN npm install
 
-COPY apps/web/vite.config.ts apps/web/index.html ./
-COPY apps/web/src ./src
-COPY apps/web/public ./public
+COPY vite.config.ts index.html ./
+COPY src ./src
+COPY public ./public
 
 RUN npm run build
 
@@ -37,7 +36,7 @@ RUN npx prisma generate
 RUN npx tsc -p tsconfig.json
 
 # 从 web-builder 复制前端构建产物
-COPY --from=web-builder /app/dist ./apps/server/dist/public
+COPY --from=web-builder /app/apps/web/dist ./dist/public
 
 # 阶段 3: 运行镜像
 FROM node:24-slim

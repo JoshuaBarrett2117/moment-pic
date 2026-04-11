@@ -3,15 +3,15 @@ FROM node:24-slim AS web-builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-COPY apps/web/package.json ./apps/web/
-COPY apps/server/package.json ./apps/server/
-COPY apps/web/vite.config.ts apps/web/index.html ./
-COPY apps/web/src ./apps/web/src
-COPY apps/web/public ./apps/web/public
+COPY apps/web/package.json ./
+
 RUN npm install
 
-RUN npm run build --workspace=@moment-pic/web
+COPY apps/web/vite.config.ts apps/web/index.html ./
+COPY apps/web/src ./src
+COPY apps/web/public ./public
+
+RUN npm run build
 
 # 阶段 2: 构建后端依赖和应用
 FROM node:24-slim AS builder
@@ -37,7 +37,7 @@ RUN npx prisma generate
 RUN npx tsc -p tsconfig.json
 
 # 从 web-builder 复制前端构建产物
-COPY --from=web-builder /app/apps/web/dist ./dist/public
+COPY --from=web-builder /app/dist ./dist/public
 
 # 阶段 3: 运行镜像
 FROM node:24-slim

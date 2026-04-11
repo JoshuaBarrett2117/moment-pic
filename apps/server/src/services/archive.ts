@@ -30,6 +30,18 @@ const detectArchiveType = (filePath: string): ArchiveType | null => {
 type UnrarExtractor = Awaited<ReturnType<typeof createExtractorFromFile>>;
 type UnrarDataExtractor = Awaited<ReturnType<typeof createExtractorFromData>>;
 
+const decode7zText = (buffer: Buffer): string => {
+  if (process.platform === "win32") {
+    try {
+      return new TextDecoder("gbk").decode(buffer);
+    } catch {
+      return buffer.toString("utf8");
+    }
+  }
+
+  return buffer.toString("utf8");
+};
+
 const run7za = async (
   args: string[]
 ): Promise<{ stdout: Buffer; stderr: string }> =>
@@ -55,7 +67,7 @@ const run7za = async (
 
     child.once("close", (code) => {
       const stdout = Buffer.concat(stdoutChunks);
-      const stderr = Buffer.concat(stderrChunks).toString("utf8");
+      const stderr = decode7zText(Buffer.concat(stderrChunks));
       if (code === 0) {
         resolve({ stdout, stderr });
         return;
@@ -171,7 +183,7 @@ const collectCbrImageEntries = async (archivePath: string): Promise<ArchiveImage
 
 const collect7zImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
   const { stdout } = await run7za(["l", "-slt", "-ba", archivePath]);
-  const output = stdout.toString("utf8");
+  const output = decode7zText(stdout);
   const blocks = output
     .split(/\r?\n\r?\n+/)
     .map((block) => block.trim())

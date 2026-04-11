@@ -15,7 +15,7 @@ import { scanRoutes } from "./routes/scan.js";
 import { wsService } from "./services/websocket-service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC_DIR = path.join(__dirname, "../../public");
+const PUBLIC_DIR = path.join(__dirname, "../public");
 
 const publicRoutes = new Set([
   "/",

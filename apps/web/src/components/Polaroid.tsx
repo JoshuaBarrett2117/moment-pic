@@ -42,6 +42,8 @@ export const Polaroid: React.FC<PolaroidProps> = ({
             alt={alt} 
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
             onError={() => setHasError(true)}
           />
         )}

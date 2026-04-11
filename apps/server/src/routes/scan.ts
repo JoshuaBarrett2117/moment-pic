@@ -3,8 +3,11 @@ import type { FastifyPluginAsync } from "fastify";
 import { ok } from "../lib/api.js";
 import { nowIso } from "../lib/time.js";
 import { scanLibrary } from "../services/library-scanner.js";
+import { warmupCoverThumbnails } from "../services/thumbnail-service.js";
+import { clearAlbumListCache } from "../services/album-service.js";
 
 type ScanTaskStatus = "pending" | "running" | "completed" | "failed";
+type WarmupTaskStatus = "pending" | "running" | "completed" | "failed" | "skipped";
 
 type ScanTaskRecord = {
   id: string;
@@ -18,37 +21,89 @@ type ScanTaskRecord = {
     albumsDiscovered: number;
     assetsDiscovered: number;
   } | null;
+  warmup: {
+    status: WarmupTaskStatus;
+    startedAt: string | null;
+    finishedAt: string | null;
+    error: string | null;
+    result: {
+      total: number;
+      completed: number;
+      failed: number;
+    } | null;
+  };
 };
 
 const scanTasks = new Map<string, ScanTaskRecord>();
 
-const runScanTask = async (taskId: string) => {
-  const task = scanTasks.get(taskId);
-  if (!task) {
-    return;
-  }
-
-  task.status = "running";
-  task.startedAt = nowIso();
-
-  try {
-    const result = await scanLibrary({
-      libraryRootId: task.libraryRootId ?? undefined
-    });
-    task.status = "completed";
-    task.result = {
-      albumsDiscovered: result.albumsDiscovered,
-      assetsDiscovered: result.assetsDiscovered
-    };
-    task.finishedAt = nowIso();
-  } catch (error) {
-    task.status = "failed";
-    task.finishedAt = nowIso();
-    task.error = error instanceof Error ? error.message : "scan failed";
-  }
-};
-
 export const scanRoutes: FastifyPluginAsync = async (app) => {
+  const runScanTask = async (taskId: string) => {
+    const task = scanTasks.get(taskId);
+    if (!task) {
+      return;
+    }
+
+    task.status = "running";
+    task.startedAt = nowIso();
+
+    try {
+      const result = await scanLibrary({
+        libraryRootId: task.libraryRootId ?? undefined
+      });
+      task.status = "completed";
+      task.result = {
+        albumsDiscovered: result.albumsDiscovered,
+        assetsDiscovered: result.assetsDiscovered
+      };
+      clearAlbumListCache();
+      task.finishedAt = nowIso();
+      task.warmup.status = "running";
+      task.warmup.startedAt = nowIso();
+      task.warmup.finishedAt = null;
+      task.warmup.error = null;
+
+      void warmupCoverThumbnails({
+        libraryRootId: task.libraryRootId ?? undefined,
+        concurrency: 3
+      })
+        .then((warmupResult) => {
+          task.warmup.status = "completed";
+          task.warmup.finishedAt = nowIso();
+          task.warmup.result = warmupResult;
+          app.log.info(
+            {
+              taskId,
+              libraryRootId: task.libraryRootId,
+              ...warmupResult
+            },
+            "cover thumbnail warmup completed"
+          );
+        })
+        .catch((error) => {
+          task.warmup.status = "failed";
+          task.warmup.finishedAt = nowIso();
+          task.warmup.error = error instanceof Error ? error.message : String(error);
+          app.log.warn(
+            {
+              taskId,
+              libraryRootId: task.libraryRootId,
+              error: error instanceof Error ? error.message : String(error)
+            },
+            "cover thumbnail warmup failed"
+          );
+        });
+    } catch (error) {
+      task.status = "failed";
+      task.finishedAt = nowIso();
+      task.error = error instanceof Error ? error.message : "scan failed";
+      task.warmup.status = "skipped";
+      task.warmup.startedAt = null;
+      task.warmup.finishedAt = nowIso();
+      task.warmup.error = "scan failed, warmup skipped";
+      task.warmup.result = null;
+    }
+  };
+
   app.post("/api/v1/scan", async (request, reply) => {
     const body = (request.body ?? {}) as { libraryRootId?: string };
     if (body.libraryRootId && typeof body.libraryRootId !== "string") {
@@ -67,7 +122,14 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       startedAt: null,
       finishedAt: null,
       error: null,
-      result: null
+      result: null,
+      warmup: {
+        status: "pending",
+        startedAt: null,
+        finishedAt: null,
+        error: null,
+        result: null
+      }
     };
 
     scanTasks.set(taskId, task);
@@ -77,7 +139,8 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     return ok({
       taskId,
       status: task.status,
-      createdAt: task.createdAt
+      createdAt: task.createdAt,
+      warmupStatus: task.warmup.status
     });
   });
 
@@ -100,7 +163,12 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       finishedAt: task.finishedAt,
       error: task.error,
       albumsDiscovered: task.result?.albumsDiscovered ?? 0,
-      assetsDiscovered: task.result?.assetsDiscovered ?? 0
+      assetsDiscovered: task.result?.assetsDiscovered ?? 0,
+      warmupStatus: task.warmup.status,
+      warmupStartedAt: task.warmup.startedAt,
+      warmupFinishedAt: task.warmup.finishedAt,
+      warmupError: task.warmup.error,
+      warmupResult: task.warmup.result
     });
   });
 
@@ -118,7 +186,12 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       finishedAt: task.finishedAt,
       error: task.error,
       albumsDiscovered: task.result?.albumsDiscovered ?? 0,
-      assetsDiscovered: task.result?.assetsDiscovered ?? 0
+      assetsDiscovered: task.result?.assetsDiscovered ?? 0,
+      warmupStatus: task.warmup.status,
+      warmupStartedAt: task.warmup.startedAt,
+      warmupFinishedAt: task.warmup.finishedAt,
+      warmupError: task.warmup.error,
+      warmupResult: task.warmup.result
     })));
   });
 };

@@ -28,6 +28,42 @@ const toAssetUrls = (assetId: string) => ({
   originalUrl: `/api/v1/assets/${assetId}/original`
 });
 
+const ALBUM_LIST_CACHE_TTL_MS = 2000;
+type AlbumListResult = {
+  items: AlbumListItemDTO[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+  };
+};
+const albumListCache = new Map<string, { expiresAt: number; value: AlbumListResult }>();
+
+const buildAlbumListCacheKey = (
+  page: number,
+  pageSize: number,
+  input?: {
+    libraryRootId?: string;
+    sourceType?: "folder" | "zip";
+    keyword?: string;
+    sortBy?: AlbumSortBy;
+    sortOrder?: SortOrder;
+  }
+) =>
+  JSON.stringify({
+    page,
+    pageSize,
+    libraryRootId: input?.libraryRootId ?? "",
+    sourceType: input?.sourceType ?? "",
+    keyword: input?.keyword?.trim() ?? "",
+    sortBy: input?.sortBy ?? "name",
+    sortOrder: input?.sortOrder ?? "asc"
+  });
+
+export const clearAlbumListCache = () => {
+  albumListCache.clear();
+};
+
 export const listLibraryRoots = async (): Promise<LibraryRootDTO[]> => {
   return listLibraryRootsDb().map((row: LibraryRootRecord) => ({
     id: row.id,
@@ -49,6 +85,13 @@ export const listAlbums = async (
     sortOrder?: SortOrder;
   }
 ) => {
+  const cacheKey = buildAlbumListCacheKey(page, pageSize, input);
+  const now = Date.now();
+  const cached = albumListCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
   const result = listAlbumsDb(page, pageSize, input);
 
   const items: AlbumListItemDTO[] = result.items.map((row: AlbumRecord) => ({
@@ -60,7 +103,7 @@ export const listAlbums = async (
     updatedAt: row.updatedAt
   }));
 
-  return {
+  const payload: AlbumListResult = {
     items,
     pagination: {
       page,
@@ -68,6 +111,11 @@ export const listAlbums = async (
       total: result.total
     }
   };
+  albumListCache.set(cacheKey, {
+    expiresAt: now + ALBUM_LIST_CACHE_TTL_MS,
+    value: payload
+  });
+  return payload;
 };
 
 export const getAlbumDetail = async (albumId: string): Promise<AlbumDetailDTO | null> => {
@@ -143,6 +191,7 @@ export const deleteAlbum = async (albumId: string): Promise<boolean> => {
     return false;
   }
   deleteAlbumDb(albumId);
+  clearAlbumListCache();
   return true;
 };
 
@@ -152,6 +201,7 @@ export const deleteAsset = async (assetId: string): Promise<boolean> => {
     return false;
   }
   deleteAssetDb(assetId);
+  clearAlbumListCache();
   return true;
 };
 
@@ -161,6 +211,7 @@ export const deleteLibraryRoot = async (id: string): Promise<boolean> => {
     return false;
   }
   deleteLibraryRootDb(id);
+  clearAlbumListCache();
   return true;
 };
 
@@ -176,6 +227,7 @@ export const addLibraryRoot = async (path: string, name: string): Promise<Librar
     updatedAt: timestamp
   };
   upsertLibraryRootDb(root);
+  clearAlbumListCache();
   return {
     id: root.id,
     name: root.name,
@@ -190,6 +242,7 @@ export const updateLibraryRoot = async (id: string, updates: { name?: string; pa
   if (!updated) {
     return null;
   }
+  clearAlbumListCache();
   return {
     id: updated.id,
     name: updated.name,

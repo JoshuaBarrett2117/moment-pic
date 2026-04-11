@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+﻿import { useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { AlbumsListDTO, AlbumAssetsDTO } from '../types/api';
 
@@ -59,7 +59,7 @@ interface UseAlbumAssetsReturn {
   assets: AlbumAssetsDTO | null;
   isLoading: boolean;
   error: string | null;
-  fetchAssets: (albumId: string, options?: UseAlbumAssetsOptions) => Promise<void>;
+  fetchAssets: (albumId: string, options?: UseAlbumAssetsOptions) => Promise<AlbumAssetsDTO | null>;
 }
 
 export function useAlbumAssets(): UseAlbumAssetsReturn {
@@ -67,7 +67,7 @@ export function useAlbumAssets(): UseAlbumAssetsReturn {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAssets = useCallback(async (albumId: string, options: UseAlbumAssetsOptions = {}): Promise<void> => {
+  const fetchAssets = useCallback(async (albumId: string, options: UseAlbumAssetsOptions = {}): Promise<AlbumAssetsDTO | null> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -78,8 +78,10 @@ export function useAlbumAssets(): UseAlbumAssetsReturn {
       const query = params.toString() ? `?${params.toString()}` : '';
       const result = await api.get<AlbumAssetsDTO>(`/albums/${albumId}/assets${query}`);
       setAssets(result);
+      return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取图片失败');
+      return null;
     } finally {
       setIsLoading(false);
     }

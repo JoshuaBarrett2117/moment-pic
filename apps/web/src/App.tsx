@@ -61,15 +61,14 @@ export default function App() {
   useEffect(() => {
     if (currentScreen === Screen.GALLERY && isAuthenticated) {
       fetchLibraryRoots();
-      loadAlbums();
     }
   }, [currentScreen, isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && currentScreen === Screen.GALLERY) {
       loadAlbums();
     }
-  }, [filters.page, filters.pageSize, filters.keyword, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId]);
+  }, [isAuthenticated, currentScreen, filters.page, filters.pageSize, filters.keyword, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId]);
 
   useEffect(() => {
     if (!isAuthenticated || !isAnyScanning) {
@@ -91,8 +90,19 @@ export default function App() {
   };
 
   const handleLogin = () => {
+    const nextFilters = { ...filters, libraryRootId: '', page: 1 };
     setIsAuthenticated(true);
     localStorage.setItem('auth_token', 'authenticated');
+    setFilters(nextFilters);
+    fetchAlbums({
+      page: nextFilters.page,
+      pageSize: nextFilters.pageSize,
+      keyword: nextFilters.keyword || undefined,
+      sortBy: nextFilters.sortBy,
+      sortOrder: nextFilters.sortOrder,
+      sourceType: nextFilters.sourceType || undefined,
+      libraryRootId: undefined,
+    });
     navigate(Screen.GALLERY, 1);
   };
 
@@ -108,13 +118,35 @@ export default function App() {
   };
 
   const handleBackToGallery = () => {
+    const nextFilters = { ...filters, libraryRootId: '', page: 1 };
     setActiveTab('gallery');
+    setFilters(nextFilters);
+    fetchAlbums({
+      page: nextFilters.page,
+      pageSize: nextFilters.pageSize,
+      keyword: nextFilters.keyword || undefined,
+      sortBy: nextFilters.sortBy,
+      sortOrder: nextFilters.sortOrder,
+      sourceType: nextFilters.sourceType || undefined,
+      libraryRootId: undefined,
+    });
     navigate(Screen.GALLERY, -1);
   };
 
   const handleSidebarNavigate = (tab: 'gallery' | 'settings') => {
     setActiveTab(tab);
     if (tab === 'gallery') {
+      const nextFilters = { ...filters, libraryRootId: '', page: 1 };
+      setFilters(nextFilters);
+      fetchAlbums({
+        page: nextFilters.page,
+        pageSize: nextFilters.pageSize,
+        keyword: nextFilters.keyword || undefined,
+        sortBy: nextFilters.sortBy,
+        sortOrder: nextFilters.sortOrder,
+        sourceType: nextFilters.sourceType || undefined,
+        libraryRootId: undefined,
+      });
       navigate(Screen.GALLERY, 1);
     } else if (tab === 'settings') {
       navigate(Screen.SETTINGS, 1);

@@ -298,6 +298,25 @@ export const countAssetsByAlbumIdDb = (albumId: string): number => {
   return row.total;
 };
 
+export const listAlbumCoverAssetIdsDb = (libraryRootId?: string, limit = 2000): string[] => {
+  const db = getDb();
+  const safeLimit = Math.max(1, Math.min(limit, 10000));
+
+  if (libraryRootId) {
+    const rows = db
+      .prepare(
+        "SELECT cover_asset_id FROM albums WHERE library_root_id = ? AND cover_asset_id IS NOT NULL ORDER BY updated_at DESC, name ASC LIMIT ?"
+      )
+      .all(libraryRootId, safeLimit) as Array<Record<string, unknown>>;
+    return rows.map((row) => String(row.cover_asset_id));
+  }
+
+  const rows = db
+    .prepare("SELECT cover_asset_id FROM albums WHERE cover_asset_id IS NOT NULL ORDER BY updated_at DESC, name ASC LIMIT ?")
+    .all(safeLimit) as Array<Record<string, unknown>>;
+  return rows.map((row) => String(row.cover_asset_id));
+};
+
 export const findAssetByIdDb = (assetId: string): AssetRecord | null => {
   const db = getDb();
   const row = db.prepare("SELECT * FROM assets WHERE id = ? LIMIT 1").get(assetId) as Record<string, unknown> | undefined;

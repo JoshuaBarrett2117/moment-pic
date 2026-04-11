@@ -221,6 +221,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                             className="col-span-3 w-full h-full object-cover" 
                             src={album.coverUrl} 
                             alt={album.name} 
+                            loading="lazy"
+                            decoding="async"
                           />
                         ) : (
                           Array.from({ length: 9 }).map((_, i) => (

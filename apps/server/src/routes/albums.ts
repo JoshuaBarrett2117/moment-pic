@@ -1,10 +1,13 @@
+import crypto from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
 import { deleteAlbum, getAlbumAssets, getAlbumDetail, listAlbums } from "../services/album-service.js";
 
 export const albumRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/api/v1/albums", async (request) => {
+  const normalizeHeader = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+
+  app.get("/api/v1/albums", async (request, reply) => {
     const query = request.query as {
       page?: string;
       pageSize?: string;
@@ -16,16 +19,30 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     };
     const page = Math.max(1, Number(query.page ?? 1));
     const pageSize = Math.max(1, Math.min(100, Number(query.pageSize ?? 24)));
+    const payload = await listAlbums(page, pageSize, {
+      libraryRootId: query.libraryRootId,
+      sourceType: query.sourceType,
+      keyword: query.keyword,
+      sortBy: query.sortBy,
+      sortOrder: query.sortOrder
+    });
+    const etag = `"albums-${crypto.createHash("sha1").update(JSON.stringify(payload)).digest("hex")}"`;
+    const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);
+    if (ifNoneMatch === etag) {
+      return reply.status(304).send();
+    }
 
-    return ok(
-      await listAlbums(page, pageSize, {
-        libraryRootId: query.libraryRootId,
-        sourceType: query.sourceType,
-        keyword: query.keyword,
-        sortBy: query.sortBy,
-        sortOrder: query.sortOrder
-      })
-    );
+    const latestUpdatedAt = payload.items.length > 0 ? payload.items[0].updatedAt : null;
+    reply.header("ETag", etag);
+    reply.header("Cache-Control", "private, max-age=2, must-revalidate");
+    if (latestUpdatedAt) {
+      const lastModified = new Date(latestUpdatedAt);
+      if (!Number.isNaN(lastModified.getTime())) {
+        reply.header("Last-Modified", lastModified.toUTCString());
+      }
+    }
+
+    return ok(payload);
   });
 
   app.get("/api/v1/albums/:albumId", async (request, reply) => {

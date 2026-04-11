@@ -23,6 +23,11 @@ export default defineConfig(({mode}) => {
           target: 'http://localhost:3211',
           changeOrigin: true,
         },
+        '/ws': {
+          target: 'ws://localhost:3211',
+          ws: true,
+          changeOrigin: true,
+        },
       },
     },
   };

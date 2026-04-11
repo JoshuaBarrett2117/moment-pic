@@ -6,7 +6,7 @@ import { GalleryScreen } from './components/GalleryScreen';
 import { AlbumDetailScreen } from './components/AlbumDetailScreen';
 import { SettingsScreen } from './components/SettingsScreen';
 import { PaperGrain } from './components/PaperGrain';
-import { useAlbums, useLibraryRoots, useScan } from './hooks';
+import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan } from './hooks';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
@@ -27,7 +27,16 @@ export default function App() {
 
   const { albums, isLoading, error, fetchAlbums } = useAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
-  const { scan, currentScanTask, isScanning } = useScan();
+  const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan();
+  const scanningLibraryRootId = scanningLibraryRootIds.size > 0 ? Array.from(scanningLibraryRootIds)[0] : null;
+
+  const { isConnected: wsConnected, lastScanComplete } = useWebSocket(
+    undefined,
+    (event) => {
+      console.log('[App] Scan complete from WS:', event);
+      loadAlbums();
+    }
+  );
 
   const loadAlbums = useCallback(() => {
     fetchAlbums({
@@ -126,8 +135,12 @@ export default function App() {
     setFilters(prev => ({ ...prev, libraryRootId, page: 1 }));
   };
 
-  const handleRefresh = async () => {
+  const handleRefreshAll = async () => {
     await scan();
+  };
+
+  const handleRefreshOne = async (libraryRootId: string) => {
+    await scan(libraryRootId);
   };
 
   const variants = {
@@ -190,14 +203,18 @@ export default function App() {
               currentLibraryRootId={filters.libraryRootId}
               onLibraryRootChange={handleLibraryRootChange}
               onKeywordChange={handleKeywordChange}
-              onScan={handleRefresh}
+              onScanAll={handleRefreshAll}
+              onScanOne={handleRefreshOne}
               isScanning={isScanning}
+              scanningLibraryRootId={scanningLibraryRootId}
+              onAlbumDeleted={loadAlbums}
             />
           )}
           {currentScreen === Screen.ALBUM_DETAIL && (
             <AlbumDetailScreen 
               albumId={selectedAlbum || ''} 
-              onBack={handleBackToGallery} 
+              onBack={handleBackToGallery}
+              onAssetDeleted={loadAlbums}
             />
           )}
           {currentScreen === Screen.SETTINGS && (

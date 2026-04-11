@@ -14,7 +14,7 @@ import {
   makeId,
   upsertLibraryRootDb
 } from "./sqlite-store.js";
-import { listRootImageEntries } from "./zip.js";
+import { isArchiveFile, listRootImageEntries } from "./archive.js";
 
 type ScannedAlbum = {
   name: string;
@@ -169,8 +169,12 @@ const discoverAlbumsForRoot = async (libraryRootPath: string): Promise<ScannedAl
   }
 
   const albums: ScannedAlbum[] = await discoverFolderAlbumsRecursively(libraryRootPath, libraryRootPath);
-  for (const entry of rootEntries.filter((item) => item.isFile() && normalizeExtension(item.name) === "zip")) {
+  for (const entry of rootEntries.filter((item) => item.isFile())) {
     const fullPath = path.join(libraryRootPath, entry.name);
+    if (!(await isArchiveFile(fullPath))) {
+      continue;
+    }
+
     const zipAlbum = await scanZipAlbum(libraryRootPath, fullPath);
     if (zipAlbum) {
       albums.push(zipAlbum);

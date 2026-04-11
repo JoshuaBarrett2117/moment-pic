@@ -8,6 +8,7 @@ interface UseLibraryRootsReturn {
   error: string | null;
   fetchLibraryRoots: () => Promise<void>;
   addLibraryRoot: (path: string, name?: string) => Promise<LibraryRootDTO | null>;
+  updateLibraryRoot: (id: string, updates: { name?: string; path?: string; enabled?: boolean }) => Promise<LibraryRootDTO | null>;
   deleteLibraryRoot: (id: string) => Promise<boolean>;
 }
 
@@ -51,5 +52,16 @@ export function useLibraryRoots(): UseLibraryRootsReturn {
     }
   }, []);
 
-  return { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, deleteLibraryRoot };
+  const updateLibraryRoot = useCallback(async (id: string, updates: { name?: string; path?: string; enabled?: boolean }): Promise<LibraryRootDTO | null> => {
+    try {
+      const result = await api.patch<LibraryRootDTO>(`/library-roots/${id}`, updates);
+      setLibraryRoots(prev => prev.map(r => r.id === id ? result : r));
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '更新库目录失败');
+      return null;
+    }
+  }, []);
+
+  return { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot };
 }

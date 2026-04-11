@@ -1,4 +1,4 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
@@ -6,7 +6,7 @@ import sharp from "sharp";
 
 import { env } from "../config/env.js";
 import { findAssetByIdDb, findThumbnailByAssetIdDb, makeId, updateAssetMetadataDb, upsertThumbnailDb } from "./sqlite-store.js";
-import { readZipEntryBuffer } from "./zip.js";
+import { readArchiveEntryBuffer } from "./archive.js";
 
 const THUMBNAIL_WIDTH = 360;
 const THUMBNAIL_HEIGHT = 360;
@@ -37,7 +37,7 @@ const readOriginalBuffer = async (assetId: string) => {
 
   return {
     asset,
-    buffer: await readZipEntryBuffer(asset.sourcePath, asset.zipEntryPath ?? "")
+    buffer: await readArchiveEntryBuffer(asset.sourcePath, asset.zipEntryPath ?? "")
   };
 };
 

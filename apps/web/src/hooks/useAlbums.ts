@@ -87,3 +87,21 @@ export function useAlbumAssets(): UseAlbumAssetsReturn {
 
   return { assets, isLoading, error, fetchAssets };
 }
+
+export const deleteAlbum = async (albumId: string): Promise<boolean> => {
+  try {
+    await api.delete<{ success: boolean }>(`/albums/${albumId}`);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const deleteAsset = async (assetId: string): Promise<boolean> => {
+  try {
+    await api.delete<{ success: boolean }>(`/assets/${assetId}`);
+    return true;
+  } catch {
+    return false;
+  }
+};

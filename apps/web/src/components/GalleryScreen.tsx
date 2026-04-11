@@ -1,7 +1,8 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Filter, Plus, ArrowRight, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Filter, Plus, ArrowRight, Loader2, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
+import { deleteAlbum } from '../hooks';
 import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO } from '../types/api';
 
 interface GalleryScreenProps {
@@ -27,8 +28,10 @@ interface GalleryScreenProps {
   currentLibraryRootId: string;
   onLibraryRootChange: (id: string) => void;
   onKeywordChange: (keyword: string) => void;
-  onScan: () => void;
-  isScanning: boolean;
+  onScanAll: () => void;
+  onScanOne: (libraryRootId: string) => void;
+  isScanning: (libraryRootId: string) => boolean;
+  onAlbumDeleted?: () => void;
 }
 
 const tagColors: Record<string, { bg: string; text: string }> = {
@@ -59,8 +62,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   currentLibraryRootId,
   onLibraryRootChange,
   onKeywordChange,
-  onScan,
+  onScanAll,
+  onScanOne,
   isScanning,
+  onAlbumDeleted,
 }) => {
   const totalPages = pagination ? Math.ceil(pagination.total / pagination.pageSize) : 1;
   const currentPage = pagination?.page || 1;
@@ -82,7 +87,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         libraryRoots={libraryRoots}
         currentLibraryRootId={currentLibraryRootId}
         onLibraryRootChange={onLibraryRootChange}
-        onScan={onScan}
+        onScanAll={onScanAll}
+        onScanOne={onScanOne}
         isScanning={isScanning}
         albumCount={pagination?.total || 0}
         currentKeyword={currentKeyword}
@@ -180,34 +186,53 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 <motion.div 
                   key={album.id}
                   whileHover={{ scale: 1.03, rotate: idx % 2 === 0 ? 1 : -1 }}
-                  onClick={() => onNavigateToAlbum(album.id)}
                   className="group cursor-pointer"
                 >
                   <div className="relative bg-surface-container-highest rounded-xl p-3 shadow-lg transition-all duration-500">
-                    <div className={`absolute -top-3 ${idx % 2 === 0 ? '-right-2 rotate-12' : '-left-3 -rotate-12'} z-10 px-4 py-1 text-xs font-bold rounded-full shadow-sm border border-black/5 ${colorScheme.bg} ${colorScheme.text}`}>
-                      {album.sourceType === 'folder' ? '文件夹' : '压缩包'}
-                    </div>
-                    <div className="grid grid-cols-3 gap-1 rounded-lg overflow-hidden aspect-square">
-                      {album.coverUrl ? (
-                        <img 
-                          key="cover" 
-                          className="col-span-3 w-full h-full object-cover" 
-                          src={album.coverUrl} 
-                          alt={album.name} 
-                        />
-                      ) : (
-                        Array.from({ length: 9 }).map((_, i) => (
-                          <div key={`empty-${i}`} className="bg-surface-container-high flex items-center justify-center">
-                            <Plus className="w-6 h-6 text-outline/20" />
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    <div className="mt-4 px-2 pb-2">
-                      <h3 className="text-base font-bold text-on-surface font-headline truncate">{album.name}</h3>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs font-medium text-outline">{album.assetCount} images</span>
-                        <ArrowRight className="text-outline/30 group-hover:text-primary w-4 h-4 transition-colors" />
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (confirm(`确定要删除图集 "${album.name}" 吗？`)) {
+                          const success = await deleteAlbum(album.id);
+                          if (success) {
+                            onAlbumDeleted?.();
+                          }
+                        }
+                      }}
+                      className="absolute top-2 right-2 z-20 p-2 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
+                      title="删除图集"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <div 
+                      onClick={() => onNavigateToAlbum(album.id)}
+                      className="pointer-events-auto"
+                    >
+                      <div className={`absolute -top-3 ${idx % 2 === 0 ? '-right-2 rotate-12' : '-left-3 -rotate-12'} z-10 px-4 py-1 text-xs font-bold rounded-full shadow-sm border border-black/5 ${colorScheme.bg} ${colorScheme.text}`}>
+                        {album.sourceType === 'folder' ? '文件夹' : '压缩包'}
+                      </div>
+                      <div className="grid grid-cols-3 gap-1 rounded-lg overflow-hidden aspect-square">
+                        {album.coverUrl ? (
+                          <img 
+                            key="cover" 
+                            className="col-span-3 w-full h-full object-cover" 
+                            src={album.coverUrl} 
+                            alt={album.name} 
+                          />
+                        ) : (
+                          Array.from({ length: 9 }).map((_, i) => (
+                            <div key={`empty-${i}`} className="bg-surface-container-high flex items-center justify-center">
+                              <Plus className="w-6 h-6 text-outline/20" />
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div className="mt-4 px-2 pb-2">
+                        <h3 className="text-base font-bold text-on-surface font-headline truncate">{album.name}</h3>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-xs font-medium text-outline">{album.assetCount} images</span>
+                          <ArrowRight className="text-outline/30 group-hover:text-primary w-4 h-4 transition-colors" />
+                        </div>
                       </div>
                     </div>
                   </div>

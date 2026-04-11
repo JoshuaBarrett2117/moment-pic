@@ -110,6 +110,37 @@ export const deleteLibraryRootDb = (id: string) => {
   transaction();
 };
 
+export const updateLibraryRootDb = (id: string, updates: { name?: string; path?: string; enabled?: boolean }) => {
+  const db = getDb();
+  const existing = db.prepare("SELECT * FROM library_roots WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+  if (!existing) {
+    return null;
+  }
+  
+  const current = rowToLibraryRoot(existing);
+  const updated = {
+    ...current,
+    name: updates.name ?? current.name,
+    path: updates.path ?? current.path,
+    enabled: updates.enabled ?? current.enabled,
+    updatedAt: new Date().toISOString()
+  };
+  
+  db.prepare(`
+    UPDATE library_roots 
+    SET name = @name, path = @path, enabled = @enabled, updated_at = @updatedAt
+    WHERE id = @id
+  `).run({
+    id: updated.id,
+    name: updated.name,
+    path: updated.path,
+    enabled: updated.enabled ? 1 : 0,
+    updatedAt: updated.updatedAt
+  });
+  
+  return updated;
+};
+
 export const clearLibraryDataDb = (libraryRootId: string) => {
   const db = getDb();
   const albumIds = db.prepare("SELECT id FROM albums WHERE library_root_id = ?").all(libraryRootId) as Array<{ id: string }>;
@@ -309,6 +340,32 @@ export const deleteAlbumDb = (albumId: string) => {
     deleteThumbnail.run(albumId);
     deleteAsset.run(albumId);
     deleteAlbum.run(albumId);
+  });
+  transaction();
+};
+
+export const deleteAssetDb = (assetId: string) => {
+  const db = getDb();
+  const asset = db.prepare("SELECT album_id FROM assets WHERE id = ?").get(assetId) as { album_id: string } | undefined;
+  if (!asset) {
+    return;
+  }
+  
+  const deleteThumbnail = db.prepare("DELETE FROM thumbnails WHERE asset_id = ?");
+  const deleteAsset = db.prepare("DELETE FROM assets WHERE id = ?");
+  
+  const transaction = db.transaction(() => {
+    deleteThumbnail.run(assetId);
+    deleteAsset.run(assetId);
+    
+    const album = db.prepare("SELECT id, cover_asset_id, asset_count FROM albums WHERE id = ?").get(asset.album_id) as { id: string; cover_asset_id: string | null; asset_count: number } | undefined;
+    if (album) {
+      const remainingAssets = db.prepare("SELECT id FROM assets WHERE album_id = ? ORDER BY sort_index LIMIT 1").get(asset.album_id) as { id: string } | undefined;
+      const newCoverAssetId = remainingAssets?.id ?? null;
+      const newAssetCount = album.asset_count - 1;
+      db.prepare("UPDATE albums SET cover_asset_id = ?, asset_count = ?, updated_at = ? WHERE id = ?")
+        .run(newCoverAssetId, newAssetCount, Date.now(), album.id);
+    }
   });
   transaction();
 };

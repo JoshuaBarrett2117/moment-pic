@@ -10,8 +10,9 @@ interface SidebarProps {
   libraryRoots: LibraryRootDTO[];
   currentLibraryRootId: string;
   onLibraryRootChange: (id: string) => void;
-  onScan: () => void;
-  isScanning: boolean;
+  onScanAll: () => void;
+  onScanOne: (libraryRootId: string) => void;
+  isScanning: (libraryRootId: string) => boolean;
   albumCount: number;
   currentKeyword: string;
   onKeywordChange: (keyword: string) => void;
@@ -24,12 +25,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   libraryRoots,
   currentLibraryRootId,
   onLibraryRootChange,
-  onScan,
+  onScanAll,
+  onScanOne,
   isScanning,
   albumCount,
   currentKeyword,
   onKeywordChange,
 }) => {
+  const isAnyScanning = libraryRoots.some(root => isScanning(root.id));
+
   return (
     <aside className="fixed left-0 top-0 h-full w-80 bg-surface-container-low p-8 flex flex-col z-40 rounded-r-[3rem] shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)] border-r border-outline/5">
       <div className="mb-10 flex flex-col items-start gap-2">
@@ -48,12 +52,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <button
-        onClick={onScan}
-        disabled={isScanning}
+        onClick={onScanAll}
+        disabled={isAnyScanning}
         className="mb-4 flex items-center justify-center gap-2 px-4 py-3 bg-primary-container text-on-primary-container rounded-full font-bold hover:brightness-95 transition-all disabled:opacity-50"
       >
-        {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />}
-        {isScanning ? '扫描中...' : '刷新图库'}
+        {isAnyScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className={`w-4 h-4 ${isAnyScanning ? 'animate-spin' : ''}`} />}
+        {isAnyScanning ? '扫描中...' : '刷新全部'}
       </button>
 
       <nav className="flex flex-col gap-3 w-full mb-10">
@@ -108,18 +112,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
         
         {libraryRoots.map((root) => (
-          <button
+          <div
             key={root.id}
-            onClick={() => onLibraryRootChange(root.id)}
-            className={`flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer transition-all ${
               currentLibraryRootId === root.id 
                 ? 'bg-primary-container text-on-primary-container font-bold' 
                 : 'hover:bg-primary-container/10'
             }`}
           >
-            <Images className="w-5 h-5" />
-            <span className="text-sm font-semibold truncate">{root.name}</span>
-          </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onLibraryRootChange(root.id);
+              }}
+              className="flex items-center gap-3 flex-1"
+            >
+              <Images className="w-5 h-5" />
+              <span className="text-sm font-semibold truncate">{root.name}</span>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onScanOne(root.id);
+              }}
+              disabled={isScanning(root.id)}
+              className="p-1.5 rounded-lg hover:bg-white/20 disabled:opacity-50"
+              title="刷新此图库"
+            >
+              {isScanning(root.id) ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+            </button>
+          </div>
         ))}
         
         <div className="mt-4 p-3 bg-white/40 border border-outline/5 rounded-lg flex items-center justify-center text-[12px] font-medium text-outline/80">

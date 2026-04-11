@@ -1,8 +1,8 @@
-﻿import { lookup as lookupMimeType } from "mime-types";
+import { lookup as lookupMimeType } from "mime-types";
 import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
-import { getAssetDetail } from "../services/album-service.js";
+import { deleteAsset, getAssetDetail } from "../services/album-service.js";
 import { ensureThumbnail, readOriginalImage } from "../services/thumbnail-service.js";
 
 export const assetRoutes: FastifyPluginAsync = async (app) => {
@@ -57,5 +57,19 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         message: "asset not found"
       });
     }
+  });
+
+  app.delete("/api/v1/assets/:assetId", async (request, reply) => {
+    const { assetId } = request.params as { assetId: string };
+    const success = await deleteAsset(assetId);
+
+    if (!success) {
+      return reply.status(404).send({
+        code: 4002,
+        message: "asset not found"
+      });
+    }
+
+    return ok({ success: true });
   });
 };

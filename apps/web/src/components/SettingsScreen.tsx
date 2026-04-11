@@ -1,35 +1,63 @@
 import type { FC } from 'react';
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { 
-  FolderPlus, Trash2, RefreshCw, Plus, Loader2, 
-  Folder, Database, CheckCircle, XCircle, AlertCircle 
+import {
+  AlertCircle,
+  Check,
+  Database,
+  Edit2,
+  Folder,
+  Images,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { WobblyButton } from './WobblyButton';
-import { useLibraryRoots, useScan } from '../hooks';
+import { useLibraryRoots, useLibraryScan } from '../hooks';
+
 interface SettingsScreenProps {
   onBack: () => void;
 }
 
+const VIEWER_PRELOAD_RADIUS_KEY = 'moment_pic_viewer_preload_radius';
+const DEFAULT_VIEWER_PRELOAD_RADIUS = 10;
+
+const clampPreloadRadius = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_VIEWER_PRELOAD_RADIUS;
+  }
+
+  return Math.max(0, Math.min(100, Math.round(value)));
+};
+
 export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
-  const { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, deleteLibraryRoot } = useLibraryRoots();
-  const { scan, currentScanTask, isScanning } = useScan();
+  const { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot } = useLibraryRoots();
+  const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan();
   const [newPath, setNewPath] = useState('');
   const [newName, setNewName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [viewerPreloadRadius, setViewerPreloadRadius] = useState(DEFAULT_VIEWER_PRELOAD_RADIUS);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [editingPath, setEditingPath] = useState('');
 
   useEffect(() => {
-    fetchLibraryRoots();
+    void fetchLibraryRoots();
   }, [fetchLibraryRoots]);
 
+  const isAnyScanning = scanningLibraryRootIds.size > 0;
+
   useEffect(() => {
-    if (currentScanTask?.status === 'completed') {
-      void fetchLibraryRoots();
-    }
-  }, [currentScanTask?.status, fetchLibraryRoots]);
+    const savedValue = window.localStorage.getItem(VIEWER_PRELOAD_RADIUS_KEY);
+    setViewerPreloadRadius(clampPreloadRadius(Number(savedValue ?? DEFAULT_VIEWER_PRELOAD_RADIUS)));
+  }, []);
 
   const handleAddRoot = async () => {
-    if (!newPath.trim()) return;
+    if (!newPath.trim()) {
+      return;
+    }
+
     setIsAdding(true);
     const result = await addLibraryRoot(newPath.trim(), newName.trim() || undefined);
     if (result) {
@@ -49,8 +77,37 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
     }
   };
 
+  const handleEditStart = (root: { id: string; name: string; path: string }) => {
+    setEditingId(root.id);
+    setEditingName(root.name);
+    setEditingPath(root.path);
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditingName('');
+    setEditingPath('');
+  };
+
+  const handleEditSave = async () => {
+    if (!editingId) return;
+    await updateLibraryRoot(editingId, { name: editingName, path: editingPath });
+    setEditingId(null);
+    setEditingName('');
+    setEditingPath('');
+  };
+
+  const handleViewerPreloadRadiusChange = (value: string) => {
+    const nextValue = clampPreloadRadius(Number(value));
+    setViewerPreloadRadius(nextValue);
+    window.localStorage.setItem(VIEWER_PRELOAD_RADIUS_KEY, String(nextValue));
+  };
+
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '从未扫描';
+    if (!dateStr) {
+      return '从未扫描';
+    }
+
     return new Date(dateStr).toLocaleString('zh-CN');
   };
 
@@ -63,7 +120,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
         </div>
 
         <nav className="flex flex-col gap-4">
-          <button 
+          <button
             onClick={onBack}
             className="flex items-center gap-3 text-outline hover:text-on-primary-container font-headline font-semibold px-4 py-2 rounded-lg hover:bg-primary-container/10 transition-all"
           >
@@ -76,7 +133,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
       <main className="flex-1 p-12 overflow-y-auto custom-scrollbar">
         <header className="mb-12">
           <h2 className="text-4xl font-headline font-black text-on-surface">库目录管理</h2>
-          <p className="text-outline mt-2">配置图片库目录并执行扫描</p>
+          <p className="text-outline mt-2">配置图片库目录，并管理查看器相关设置</p>
         </header>
 
         {error && (
@@ -86,32 +143,34 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
           </div>
         )}
 
-        {currentScanTask && (
-          <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-            currentScanTask.status === 'completed' ? 'bg-green-100 text-green-800' :
-            currentScanTask.status === 'failed' ? 'bg-red-100 text-red-800' :
-            'bg-blue-100 text-blue-800'
-          }`}>
-            {isScanning ? <Loader2 className="w-5 h-5 animate-spin" /> :
-              currentScanTask.status === 'completed' ? <CheckCircle className="w-5 h-5" /> :
-              currentScanTask.status === 'failed' ? <XCircle className="w-5 h-5" /> :
-              <AlertCircle className="w-5 h-5" />
-            }
-            <div>
-              <p className="font-medium">
-                {isScanning ? '扫描中...' : 
-                  currentScanTask.status === 'completed' ? '扫描完成' :
-                  currentScanTask.status === 'failed' ? '扫描失败' : '等待中'}
-              </p>
-              {currentScanTask.status === 'completed' && (
-                <p className="text-sm">发现 {currentScanTask.albumsDiscovered} 个相册，{currentScanTask.assetsDiscovered} 张图片</p>
-              )}
-              {currentScanTask.error && (
-                <p className="text-sm">{currentScanTask.error}</p>
-              )}
+        <div className="bg-surface-container-highest rounded-2xl p-6 mb-8">
+          <h3 className="text-lg font-bold text-on-surface mb-4">图片预览</h3>
+          <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
+              <Images className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-bold text-on-surface">图片预加载张数</p>
+                  <p className="mt-1 text-sm text-outline">查看大图时，预先准备当前图片前后相邻的图片数量</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={viewerPreloadRadius}
+                    onChange={(event) => handleViewerPreloadRadiusChange(event.target.value)}
+                    className="w-24 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary"
+                  />
+                  <span className="text-sm text-outline">张</span>
+                </div>
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
         <div className="bg-surface-container-highest rounded-2xl p-6 mb-8">
           <h3 className="text-lg font-bold text-on-surface mb-4">添加库目录</h3>
@@ -121,7 +180,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
               <input
                 type="text"
                 value={newPath}
-                onChange={(e) => setNewPath(e.target.value)}
+                onChange={(event) => setNewPath(event.target.value)}
                 placeholder="例如: /volume1/pb1/photos"
                 className="w-full px-4 py-3 bg-surface-container-high border-2 border-outline/20 rounded-xl focus:border-primary focus:outline-none"
               />
@@ -131,16 +190,12 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
               <input
                 type="text"
                 value={newName}
-                onChange={(e) => setNewName(e.target.value)}
+                onChange={(event) => setNewName(event.target.value)}
                 placeholder="例如: 我的照片"
                 className="w-full px-4 py-3 bg-surface-container-high border-2 border-outline/20 rounded-xl focus:border-primary focus:outline-none"
               />
             </div>
-            <WobblyButton 
-              onClick={handleAddRoot} 
-              disabled={!newPath.trim() || isAdding}
-              className="self-start"
-            >
+            <WobblyButton onClick={handleAddRoot} disabled={!newPath.trim() || isAdding} className="self-start">
               {isAdding ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
               添加目录
             </WobblyButton>
@@ -152,10 +207,10 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
             <h3 className="text-lg font-bold text-on-surface">库目录列表</h3>
             <button
               onClick={() => handleScan()}
-              disabled={isScanning}
+              disabled={isAnyScanning}
               className="flex items-center gap-2 px-4 py-2 bg-primary-container text-on-primary-container rounded-lg hover:brightness-95 transition-all disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isAnyScanning ? 'animate-spin' : ''}`} />
               扫描全部
             </button>
           </div>
@@ -169,36 +224,80 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
           ) : (
             <div className="space-y-4">
               {libraryRoots.map((root) => (
-                <div 
-                  key={root.id}
-                  className="flex items-center justify-between p-4 bg-surface-container-high rounded-xl"
-                >
+                <div key={root.id} className="flex items-center justify-between p-4 bg-surface-container-high rounded-xl">
                   <div className="flex items-center gap-4">
                     <Folder className="w-10 h-10 text-primary" />
-                    <div>
-                      <p className="font-bold text-on-surface">{root.name}</p>
-                      <p className="text-sm text-outline">{root.path}</p>
-                      <p className="text-xs text-outline/70 mt-1">
-                        最后扫描: {formatDate(root.lastScannedAt)}
-                      </p>
+                    <div className="flex-1">
+                      {editingId === root.id ? (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            placeholder="名称"
+                            className="w-full px-3 py-1 bg-surface-container-highest border border-outline/20 rounded-lg text-on-surface"
+                          />
+                          <input
+                            type="text"
+                            value={editingPath}
+                            onChange={(e) => setEditingPath(e.target.value)}
+                            placeholder="路径"
+                            className="w-full px-3 py-1 bg-surface-container-highest border border-outline/20 rounded-lg text-on-surface text-sm"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <p className="font-bold text-on-surface">{root.name}</p>
+                          <p className="text-sm text-outline">{root.path}</p>
+                          <p className="text-xs text-outline/70 mt-1">最后扫描: {formatDate(root.lastScannedAt)}</p>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleScan(root.id)}
-                      disabled={isScanning}
-                      className="p-2 text-outline hover:text-primary transition-colors disabled:opacity-50"
-                      title="扫描此目录"
-                    >
-                      <RefreshCw className={`w-5 h-5 ${isScanning ? 'animate-spin' : ''}`} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(root.id)}
-                      className="p-2 text-outline hover:text-error transition-colors"
-                      title="删除"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+                    {editingId === root.id ? (
+                      <>
+                        <button
+                          onClick={handleEditSave}
+                          className="p-2 text-green-500 hover:text-green-400 transition-colors"
+                          title="保存"
+                        >
+                          <Check className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={handleEditCancel}
+                          className="p-2 text-red-500 hover:text-red-400 transition-colors"
+                          title="取消"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleEditStart(root)}
+                          className="p-2 text-outline hover:text-primary transition-colors"
+                          title="编辑"
+                        >
+                          <Edit2 className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleScan(root.id)}
+                          disabled={isScanning(root.id)}
+                          className="p-2 text-outline hover:text-primary transition-colors disabled:opacity-50"
+                          title="扫描此目录"
+                        >
+                          <RefreshCw className={`w-5 h-5 ${isScanning(root.id) ? 'animate-spin' : ''}`} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(root.id)}
+                          className="p-2 text-outline hover:text-error transition-colors"
+                          title="删除"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

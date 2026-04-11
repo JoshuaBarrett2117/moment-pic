@@ -1,4 +1,4 @@
-﻿import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
 import { nowIso } from "../lib/time.js";
@@ -21,38 +21,31 @@ type ScanTaskRecord = {
 };
 
 const scanTasks = new Map<string, ScanTaskRecord>();
-let scanQueue: Promise<void> = Promise.resolve();
 
-const enqueueScanTask = (taskId: string) => {
-  scanQueue = scanQueue
-    .then(async () => {
-      const task = scanTasks.get(taskId);
-      if (!task) {
-        return;
-      }
+const runScanTask = async (taskId: string) => {
+  const task = scanTasks.get(taskId);
+  if (!task) {
+    return;
+  }
 
-      task.status = "running";
-      task.startedAt = nowIso();
+  task.status = "running";
+  task.startedAt = nowIso();
 
-      try {
-        const result = await scanLibrary({
-          libraryRootId: task.libraryRootId ?? undefined
-        });
-        task.status = "completed";
-        task.result = {
-          albumsDiscovered: result.albumsDiscovered,
-          assetsDiscovered: result.assetsDiscovered
-        };
-        task.finishedAt = nowIso();
-      } catch (error) {
-        task.status = "failed";
-        task.finishedAt = nowIso();
-        task.error = error instanceof Error ? error.message : "scan failed";
-      }
-    })
-    .catch(() => {
-      // 队列异常兜底，避免阻断后续任务
+  try {
+    const result = await scanLibrary({
+      libraryRootId: task.libraryRootId ?? undefined
     });
+    task.status = "completed";
+    task.result = {
+      albumsDiscovered: result.albumsDiscovered,
+      assetsDiscovered: result.assetsDiscovered
+    };
+    task.finishedAt = nowIso();
+  } catch (error) {
+    task.status = "failed";
+    task.finishedAt = nowIso();
+    task.error = error instanceof Error ? error.message : "scan failed";
+  }
 };
 
 export const scanRoutes: FastifyPluginAsync = async (app) => {
@@ -78,7 +71,8 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     };
 
     scanTasks.set(taskId, task);
-    enqueueScanTask(taskId);
+
+    runScanTask(taskId);
 
     return ok({
       taskId,
@@ -108,5 +102,23 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       albumsDiscovered: task.result?.albumsDiscovered ?? 0,
       assetsDiscovered: task.result?.assetsDiscovered ?? 0
     });
+  });
+
+  app.get("/api/v1/scan", async (_request, _reply) => {
+    const tasks = Array.from(scanTasks.values())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 50);
+
+    return ok(tasks.map(task => ({
+      taskId: task.id,
+      status: task.status,
+      libraryRootId: task.libraryRootId,
+      createdAt: task.createdAt,
+      startedAt: task.startedAt,
+      finishedAt: task.finishedAt,
+      error: task.error,
+      albumsDiscovered: task.result?.albumsDiscovered ?? 0,
+      assetsDiscovered: task.result?.assetsDiscovered ?? 0
+    })));
   });
 };

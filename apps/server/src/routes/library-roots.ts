@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
-import { addLibraryRoot, deleteLibraryRoot, listLibraryRoots } from "../services/album-service.js";
+import { addLibraryRoot, deleteLibraryRoot, listLibraryRoots, updateLibraryRoot } from "../services/album-service.js";
 
 export const libraryRootRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/v1/library-roots", async () => ok(await listLibraryRoots()));
@@ -16,6 +16,19 @@ export const libraryRootRoutes: FastifyPluginAsync = async (app) => {
     }
     const name = body.name || body.path.split(/[/\\]/).pop() || "未命名";
     const result = await addLibraryRoot(body.path, name);
+    return ok(result);
+  });
+
+  app.patch("/api/v1/library-roots/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { name?: string; path?: string; enabled?: boolean };
+    const result = await updateLibraryRoot(id, body);
+    if (!result) {
+      return reply.status(404).send({
+        code: 4004,
+        message: "library root not found"
+      });
+    }
     return ok(result);
   });
 

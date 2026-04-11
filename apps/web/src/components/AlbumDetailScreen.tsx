@@ -1,18 +1,19 @@
 import type { FC } from 'react';
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Camera, Home, Pin, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2 } from 'lucide-react';
+import { ArrowLeft, Camera, Home, Pin, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2 } from 'lucide-react';
 import { Polaroid } from './Polaroid';
 import { PhotoSwipeGallery } from './PhotoSwipeGallery';
-import { useAlbumAssets } from '../hooks';
+import { useAlbumAssets, deleteAsset } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
 interface AlbumDetailScreenProps {
   albumId: string;
   onBack: () => void;
+  onAssetDeleted?: () => void;
 }
 
-export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack }) => {
+export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onAssetDeleted }) => {
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
@@ -106,15 +107,32 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack 
               {assets?.items.map((asset, i) => (
                 <div 
                   key={asset.id}
-                  onClick={() => handleImageClick(i)}
-                  className="cursor-pointer hover:opacity-90 transition-opacity"
+                  className="group relative cursor-pointer hover:opacity-90 transition-opacity"
                 >
-                  <Polaroid 
-                    src={asset.thumbnailUrl}
-                    caption=""
-                    rotation={(i % 5 - 2) * 1}
-                    className="w-full"
-                  />
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (confirm(`确定要删除图片 "${asset.name}" 吗？`)) {
+                        const success = await deleteAsset(asset.id);
+                        if (success) {
+                          onAssetDeleted?.();
+                          fetchAssets(albumId, { pageSize: 500 });
+                        }
+                      }
+                    }}
+                    className="absolute top-2 right-2 z-20 p-2 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
+                    title="删除图片"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <div onClick={() => handleImageClick(i)}>
+                    <Polaroid 
+                      src={asset.thumbnailUrl}
+                      caption=""
+                      rotation={(i % 5 - 2) * 1}
+                      className="w-full"
+                    />
+                  </div>
                 </div>
               ))}
             </div>

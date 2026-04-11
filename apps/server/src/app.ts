@@ -40,8 +40,7 @@ export const buildApp = () => {
     root: PUBLIC_DIR,
     prefix: "/",
     redirect: false,
-    trailingSlash: false,
-    lastExtensions: true
+    trailingSlash: false
   });
 
   app.setNotFoundHandler(async (request, reply) => {

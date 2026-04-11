@@ -35,9 +35,6 @@ WORKDIR /app/apps/server
 RUN npx prisma generate
 RUN npx tsc -p tsconfig.json
 
-# 从 web-builder 复制前端构建产物
-COPY --from=web-builder /app/dist ./apps/server/dist/public
-
 # 阶段 3: 运行镜像
 FROM node:24-slim
 
@@ -51,6 +48,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/server/package.json ./apps/server/package.json
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
+
+COPY --from=web-builder /app/dist ./apps/server/dist/public
 
 ENV HOST="0.0.0.0"
 ENV PORT="3210"

@@ -4,12 +4,12 @@ FROM node:24-slim AS web-builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-COPY apps/web/package.json ./
-RUN npm install
-
+COPY apps/web/package.json ./apps/web/
 COPY apps/web/vite.config.ts apps/web/index.html ./
 COPY apps/web/src ./apps/web/src
 COPY apps/web/public ./apps/web/public
+RUN npm install
+RUN npm install --workspace=@moment-pic/web
 
 RUN npm run build --workspace=@moment-pic/web
 

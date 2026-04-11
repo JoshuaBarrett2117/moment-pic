@@ -42,43 +42,103 @@ const decode7zText = (buffer: Buffer): string => {
   return buffer.toString("utf8");
 };
 
+let cached7zExecutables: string[] | null = null;
+
+const ensureExecutablePermission = async (binaryPath: string): Promise<void> => {
+  if (process.platform === "win32") {
+    return;
+  }
+
+  try {
+    await fs.promises.access(binaryPath, fs.constants.X_OK);
+  } catch {
+    await fs.promises.chmod(binaryPath, 0o755);
+  }
+};
+
+const resolve7zExecutables = async (): Promise<string[]> => {
+  if (cached7zExecutables) {
+    return cached7zExecutables;
+  }
+
+  const executables: string[] = [];
+  if (path7za) {
+    try {
+      await ensureExecutablePermission(path7za);
+      executables.push(path7za);
+    } catch {
+      // Fall back to system 7z binary.
+    }
+  }
+
+  executables.push("7za", "7z");
+  cached7zExecutables = executables;
+  return executables;
+};
+
 const run7za = async (
   args: string[]
 ): Promise<{ stdout: Buffer; stderr: string }> =>
-  new Promise((resolve, reject) => {
-    const child = spawn(path7za, args, {
-      windowsHide: true
-    });
+  new Promise(async (resolve, reject) => {
+    const commands = await resolve7zExecutables();
+    const unavailableErrors: Error[] = [];
 
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
+    const runWithCommand = (command: string, index: number) => {
+      const child = spawn(command, args, {
+        windowsHide: true
+      });
 
-    child.stdout.on("data", (chunk) => {
-      stdoutChunks.push(Buffer.from(chunk));
-    });
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
 
-    child.stderr.on("data", (chunk) => {
-      stderrChunks.push(Buffer.from(chunk));
-    });
+      child.stdout.on("data", (chunk) => {
+        stdoutChunks.push(Buffer.from(chunk));
+      });
 
-    child.once("error", (error) => {
-      reject(error);
-    });
+      child.stderr.on("data", (chunk) => {
+        stderrChunks.push(Buffer.from(chunk));
+      });
 
-    child.once("close", (code) => {
-      const stdout = Buffer.concat(stdoutChunks);
-      const stderr = decode7zText(Buffer.concat(stderrChunks));
-      if (code === 0) {
-        resolve({ stdout, stderr });
-        return;
-      }
+      child.once("error", (error) => {
+        const errorCode = (error as NodeJS.ErrnoException).code;
+        if ((errorCode === "EACCES" || errorCode === "ENOENT") && index < commands.length - 1) {
+          unavailableErrors.push(new Error(`${command}: ${error.message}`));
+          runWithCommand(commands[index + 1], index + 1);
+          return;
+        }
 
-      reject(
-        new Error(
-          `7z command failed (code ${code}): ${stderr || args.join(" ")}`
-        )
-      );
-    });
+        if ((errorCode === "EACCES" || errorCode === "ENOENT") && unavailableErrors.length > 0) {
+          reject(
+            new Error(
+              `no usable 7z executable. tried: ${[
+                ...unavailableErrors.map((item) => item.message),
+                `${command}: ${error.message}`
+              ].join(" | ")}`
+            )
+          );
+          return;
+        }
+
+        reject(error);
+      });
+
+      child.once("close", (code) => {
+        const stdout = Buffer.concat(stdoutChunks);
+        const stderr = decode7zText(Buffer.concat(stderrChunks));
+        if (code === 0) {
+          resolve({ stdout, stderr });
+          return;
+        }
+
+        reject(
+          new Error(
+            `7z command failed via "${command}" (code ${code}): ${stderr || args.join(" ")}`
+          )
+        );
+      });
+    };
+
+    runWithCommand(commands[0], 0);
   });
 
 const normalizeArchiveEntryPath = (entryPath: string): string =>

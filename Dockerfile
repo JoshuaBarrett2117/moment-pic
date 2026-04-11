@@ -53,6 +53,7 @@ COPY --from=web-builder /app/dist ./apps/server/dist/public
 
 ENV HOST="0.0.0.0"
 ENV PORT="3210"
+ENV PUBLIC_DIR="/app/apps/server/dist/public"
 ENV LIBRARY_ROOTS="/data/library"
 ENV CACHE_DIR="/data/cache"
 ENV SQLITE_PATH="/data/gallery.sqlite"

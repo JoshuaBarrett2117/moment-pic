@@ -1,4 +1,4 @@
-﻿const toNumber = (value: string | undefined, fallback: number): number => {
+const toNumber = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
@@ -31,5 +31,6 @@ export const env = {
   libraryRootPaths,
   cacheDir: process.env.CACHE_DIR ?? "./data/cache",
   indexFilePath: process.env.INDEX_FILE_PATH ?? "./data/index.json",
-  sqlitePath: process.env.SQLITE_PATH ?? "./data/gallery.sqlite"
+  sqlitePath: process.env.SQLITE_PATH ?? "./data/gallery.sqlite",
+  publicDir: process.env.PUBLIC_DIR ?? "./dist/public"
 };

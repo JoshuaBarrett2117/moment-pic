@@ -1,12 +1,14 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import yauzl from "yauzl";
 import { createExtractorFromFile, createExtractorFromData } from "node-unrar-js";
+import { path7za } from "7zip-bin";
 
 import { isSupportedImageExtension } from "../lib/image-formats.js";
 import { normalizeExtension, toPosixPath } from "../lib/paths.js";
 
-const SUPPORTED_ARCHIVE_EXTENSIONS = new Set(["zip", "cbz", "cbr"]);
+const SUPPORTED_ARCHIVE_EXTENSIONS = new Set(["zip", "cbz", "cbr", "7z"]);
 
 export type ArchiveImageEntry = {
   entryPath: string;
@@ -15,23 +17,66 @@ export type ArchiveImageEntry = {
   sizeBytes: number;
 };
 
-type ArchiveType = "zip" | "cbr";
+type ArchiveType = "zip" | "cbr" | "7z";
 
 const detectArchiveType = (filePath: string): ArchiveType | null => {
   const ext = normalizeExtension(filePath).toLowerCase();
   if (ext === "zip" || ext === "cbz") return "zip";
   if (ext === "cbr") return "cbr";
+  if (ext === "7z") return "7z";
   return null;
 };
 
 type UnrarExtractor = Awaited<ReturnType<typeof createExtractorFromFile>>;
 type UnrarDataExtractor = Awaited<ReturnType<typeof createExtractorFromData>>;
 
+const run7za = async (
+  args: string[]
+): Promise<{ stdout: Buffer; stderr: string }> =>
+  new Promise((resolve, reject) => {
+    const child = spawn(path7za, args, {
+      windowsHide: true
+    });
+
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+
+    child.stdout.on("data", (chunk) => {
+      stdoutChunks.push(Buffer.from(chunk));
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderrChunks.push(Buffer.from(chunk));
+    });
+
+    child.once("error", (error) => {
+      reject(error);
+    });
+
+    child.once("close", (code) => {
+      const stdout = Buffer.concat(stdoutChunks);
+      const stderr = Buffer.concat(stderrChunks).toString("utf8");
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      reject(
+        new Error(
+          `7z command failed (code ${code}): ${stderr || args.join(" ")}`
+        )
+      );
+    });
+  });
+
+const normalizeArchiveEntryPath = (entryPath: string): string =>
+  toPosixPath(entryPath).replace(/\\/g, "/");
+
 const openZip = async (zipPath: string): Promise<yauzl.ZipFile> =>
   new Promise((resolve, reject) => {
     yauzl.open(zipPath, { lazyEntries: true }, (error, zipFile) => {
       if (error || !zipFile) {
-        reject(error ?? new Error(`无法打开 ZIP 文件: ${zipPath}`));
+        reject(error ?? new Error(`cannot open ZIP archive: ${zipPath}`));
         return;
       }
 
@@ -124,10 +169,81 @@ const collectCbrImageEntries = async (archivePath: string): Promise<ArchiveImage
   return entries;
 };
 
+const collect7zImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
+  const { stdout } = await run7za(["l", "-slt", "-ba", archivePath]);
+  const output = stdout.toString("utf8");
+  const blocks = output
+    .split(/\r?\n\r?\n+/)
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0);
+
+  const entries: ArchiveImageEntry[] = [];
+
+  for (const block of blocks) {
+    let entryPath = "";
+    let encrypted = false;
+    let isDirectory = false;
+    let sizeBytes = 0;
+
+    for (const line of block.split(/\r?\n/)) {
+      const separatorIndex = line.indexOf(" = ");
+      if (separatorIndex <= 0) {
+        continue;
+      }
+
+      const key = line.slice(0, separatorIndex).trim();
+      const value = line.slice(separatorIndex + 3).trim();
+
+      if (key === "Path") {
+        entryPath = normalizeArchiveEntryPath(value);
+        continue;
+      }
+
+      if (key === "Encrypted") {
+        encrypted = value === "+";
+        continue;
+      }
+
+      if (key === "Folder") {
+        isDirectory = value === "+";
+        continue;
+      }
+
+      if (key === "Attributes" && value.startsWith("D")) {
+        isDirectory = true;
+        continue;
+      }
+
+      if (key === "Size") {
+        const parsedSize = Number.parseInt(value, 10);
+        sizeBytes = Number.isFinite(parsedSize) ? parsedSize : 0;
+      }
+    }
+
+    if (!entryPath || entryPath.endsWith("/") || isDirectory || encrypted) {
+      continue;
+    }
+
+    const extension = normalizeExtension(entryPath);
+    if (!isSupportedImageExtension(extension)) {
+      continue;
+    }
+
+    entries.push({
+      entryPath,
+      name: path.basename(entryPath),
+      extension,
+      sizeBytes
+    });
+  }
+
+  return entries;
+};
+
 const collectAllImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
   const archiveType = detectArchiveType(archivePath);
   if (!archiveType) {
-    throw new Error(`不支持的压缩包格式: ${archivePath}`);
+    throw new Error(`unsupported archive format: ${archivePath}`);
   }
 
   if (archiveType === "zip") {
@@ -138,7 +254,11 @@ const collectAllImageEntries = async (archivePath: string): Promise<ArchiveImage
     return collectCbrImageEntries(archivePath);
   }
 
-  throw new Error(`未实现的压缩包格式处理: ${archiveType}`);
+  if (archiveType === "7z") {
+    return collect7zImageEntries(archivePath);
+  }
+
+  throw new Error(`archive format handler is not implemented: ${archiveType}`);
 };
 
 export const listRootImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
@@ -183,7 +303,7 @@ const readZipBuffer = async (zipPath: string, entryPath: string): Promise<Buffer
       zipFile.openReadStream(entry, (error, stream) => {
         if (error || !stream) {
           zipFile.close();
-          reject(error ?? new Error(`无法读取 ZIP 条目: ${entryPath}`));
+          reject(error ?? new Error(`cannot read ZIP entry: ${entryPath}`));
           return;
         }
 
@@ -203,7 +323,7 @@ const readZipBuffer = async (zipPath: string, entryPath: string): Promise<Buffer
     zipFile.once("end", () => {
       if (!found) {
         zipFile.close();
-        reject(new Error(`ZIP 条目不存在: ${entryPath}`));
+        reject(new Error(`ZIP entry not found: ${entryPath}`));
       }
     });
 
@@ -232,13 +352,25 @@ const readCbrBuffer = async (archivePath: string, entryPath: string): Promise<Bu
     }
   }
 
-  throw new Error(`CBR 条目不存在: ${entryPath}`);
+  throw new Error(`CBR entry not found: ${entryPath}`);
+};
+
+const read7zBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
+  const { stdout } = await run7za([
+    "e",
+    "-so",
+    "-bd",
+    "-y",
+    archivePath,
+    normalizeArchiveEntryPath(entryPath)
+  ]);
+  return stdout;
 };
 
 export const readArchiveEntryBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
   const archiveType = detectArchiveType(archivePath);
   if (!archiveType) {
-    throw new Error(`不支持的压缩包格式: ${archivePath}`);
+    throw new Error(`unsupported archive format: ${archivePath}`);
   }
 
   if (archiveType === "zip") {
@@ -249,7 +381,11 @@ export const readArchiveEntryBuffer = async (archivePath: string, entryPath: str
     return readCbrBuffer(archivePath, entryPath);
   }
 
-  throw new Error(`未实现的压缩包格式读取: ${archiveType}`);
+  if (archiveType === "7z") {
+    return read7zBuffer(archivePath, entryPath);
+  }
+
+  throw new Error(`archive format reader is not implemented: ${archiveType}`);
 };
 
 export const isArchiveFile = async (filePath: string): Promise<boolean> => {

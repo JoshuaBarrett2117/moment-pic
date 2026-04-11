@@ -13,6 +13,7 @@ interface ScanTask {
 
 interface UseLibraryScanReturn {
   scanningLibraryRootIds: Set<string>;
+  isAnyScanning: boolean;
   isScanning: (libraryRootId: string) => boolean;
   scan: (libraryRootId?: string) => Promise<ScanResultDTO | null>;
   clearScanTask: (libraryRootId: string) => void;
@@ -21,6 +22,9 @@ interface UseLibraryScanReturn {
 export function useLibraryScan(): UseLibraryScanReturn {
   const [scanTasks, setScanTasks] = useState<Map<string, ScanTask>>(new Map());
   const pollIntervalsRef = useRef<Map<string, number>>(new Map());
+  const isAnyScanning = Array.from(scanTasks.values()).some(
+    (task) => task.status === 'running' || task.status === 'pending'
+  );
 
   const scanningLibraryRootIds = new Set(
     Array.from(scanTasks.values())
@@ -152,6 +156,7 @@ export function useLibraryScan(): UseLibraryScanReturn {
 
   return { 
     scanningLibraryRootIds, 
+    isAnyScanning,
     isScanning, 
     scan, 
     clearScanTask 

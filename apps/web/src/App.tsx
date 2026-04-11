@@ -27,8 +27,7 @@ export default function App() {
 
   const { albums, isLoading, error, fetchAlbums } = useAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
-  const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan();
-  const isAnyScanning = scanningLibraryRootIds.size > 0;
+  const { isScanning, scan, scanningLibraryRootIds, isAnyScanning } = useLibraryScan();
   const scanningLibraryRootId = scanningLibraryRootIds.size > 0 ? Array.from(scanningLibraryRootIds)[0] : null;
 
   const { isConnected: wsConnected, lastScanComplete } = useWebSocket(
@@ -220,6 +219,7 @@ export default function App() {
               onKeywordChange={handleKeywordChange}
               onScanAll={handleRefreshAll}
               onScanOne={handleRefreshOne}
+              isAnyScanning={isAnyScanning}
               isScanning={isScanning}
               scanningLibraryRootId={scanningLibraryRootId}
               onAlbumDeleted={loadAlbums}

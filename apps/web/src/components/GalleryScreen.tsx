@@ -30,6 +30,7 @@ interface GalleryScreenProps {
   onKeywordChange: (keyword: string) => void;
   onScanAll: () => void;
   onScanOne: (libraryRootId: string) => void;
+  isAnyScanning: boolean;
   isScanning: (libraryRootId: string) => boolean;
   onAlbumDeleted?: () => void;
 }
@@ -64,6 +65,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onKeywordChange,
   onScanAll,
   onScanOne,
+  isAnyScanning,
   isScanning,
   onAlbumDeleted,
 }) => {
@@ -89,6 +91,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         onLibraryRootChange={onLibraryRootChange}
         onScanAll={onScanAll}
         onScanOne={onScanOne}
+        isAnyScanning={isAnyScanning}
         isScanning={isScanning}
         albumCount={pagination?.total || 0}
         currentKeyword={currentKeyword}

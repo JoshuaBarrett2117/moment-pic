@@ -12,6 +12,7 @@ interface SidebarProps {
   onLibraryRootChange: (id: string) => void;
   onScanAll: () => void;
   onScanOne: (libraryRootId: string) => void;
+  isAnyScanning: boolean;
   isScanning: (libraryRootId: string) => boolean;
   albumCount: number;
   currentKeyword: string;
@@ -27,13 +28,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLibraryRootChange,
   onScanAll,
   onScanOne,
+  isAnyScanning,
   isScanning,
   albumCount,
   currentKeyword,
   onKeywordChange,
 }) => {
-  const isAnyScanning = libraryRoots.some(root => isScanning(root.id));
-
   return (
     <aside className="fixed left-0 top-0 h-full w-80 bg-surface-container-low p-8 flex flex-col z-40 rounded-r-[3rem] shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)] border-r border-outline/5">
       <div className="mb-10 flex flex-col items-start gap-2">

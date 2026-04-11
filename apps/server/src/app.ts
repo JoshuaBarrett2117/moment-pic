@@ -1,5 +1,4 @@
 import Fastify from "fastify";
-import fastifyStatic from "@fastify/static";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,10 +35,34 @@ export const buildApp = () => {
     logger: true
   });
 
-  app.register(fastifyStatic, {
-    root: PUBLIC_DIR,
-    prefix: "/",
-    redirect: false
+  app.get("/*", async (request, reply) => {
+    const pathname = getPathname(request.url);
+    const filePath = path.join(PUBLIC_DIR, pathname === "/" ? "index.html" : pathname);
+    
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isDirectory()) {
+        const indexPath = path.join(filePath, "index.html");
+        const content = await fs.readFile(indexPath);
+        return reply.type("text/html").send(content);
+      }
+      const content = await fs.readFile(filePath);
+      const ext = path.extname(filePath);
+      const contentTypes: Record<string, string> = {
+        ".html": "text/html",
+        ".js": "application/javascript",
+        ".css": "text/css",
+        ".json": "application/json",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".svg": "image/svg+xml",
+        ".ico": "image/x-icon"
+      };
+      const contentType = contentTypes[ext] || "application/octet-stream";
+      return reply.type(contentType).send(content);
+    } catch {
+      return reply.status(404).send({ error: "Not Found" });
+    }
   });
 
   app.setNotFoundHandler(async (request, reply) => {

@@ -28,6 +28,7 @@ export default function App() {
   const { albums, isLoading, error, fetchAlbums } = useAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
   const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan();
+  const isAnyScanning = scanningLibraryRootIds.size > 0;
   const scanningLibraryRootId = scanningLibraryRootIds.size > 0 ? Array.from(scanningLibraryRootIds)[0] : null;
 
   const { isConnected: wsConnected, lastScanComplete } = useWebSocket(
@@ -70,6 +71,20 @@ export default function App() {
       loadAlbums();
     }
   }, [filters.page, filters.pageSize, filters.keyword, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !isAnyScanning) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      loadAlbums();
+    }, 1500);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isAuthenticated, isAnyScanning, loadAlbums]);
 
   const navigate = (screen: Screen, dir: number = 1) => {
     setDirection(dir);

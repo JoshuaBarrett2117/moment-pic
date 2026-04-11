@@ -143,51 +143,67 @@ const scanZipAlbum = async (libraryRootPath: string, zipPath: string): Promise<S
   };
 };
 
-const discoverFolderAlbumsRecursively = async (libraryRootPath: string, folderPath: string): Promise<ScannedAlbum[]> => {
+const iterateFolderAlbumsRecursively = async function* (
+  libraryRootPath: string,
+  folderPath: string
+): AsyncGenerator<ScannedAlbum> {
   let folderEntries: fs.Dirent[];
   try {
     folderEntries = await fs.promises.readdir(folderPath, { withFileTypes: true });
   } catch {
-    return [];
+    return;
   }
 
-  const albums: ScannedAlbum[] = [];
   const folderAlbum = await scanFolderAlbum(libraryRootPath, folderPath);
   if (folderAlbum) {
-    albums.push(folderAlbum);
+    yield folderAlbum;
   }
 
   const childDirectories = folderEntries.filter((entry) => entry.isDirectory()).sort((left, right) => sortNames(left.name, right.name));
   for (const directory of childDirectories) {
     const childPath = path.join(folderPath, directory.name);
-    const childAlbums = await discoverFolderAlbumsRecursively(libraryRootPath, childPath);
-    if (childAlbums.length > 0) {
-      albums.push(...childAlbums);
+    for await (const childAlbum of iterateFolderAlbumsRecursively(libraryRootPath, childPath)) {
+      yield childAlbum;
     }
   }
-
-  return albums;
 };
 
-const discoverAlbumsForRoot = async (libraryRootPath: string): Promise<ScannedAlbum[]> => {
-  let rootEntries: fs.Dirent[];
+const iterateArchiveAlbumsRecursively = async function* (
+  libraryRootPath: string,
+  folderPath: string
+): AsyncGenerator<ScannedAlbum> {
+  let folderEntries: fs.Dirent[];
   try {
-    rootEntries = await fs.promises.readdir(libraryRootPath, { withFileTypes: true });
+    folderEntries = await fs.promises.readdir(folderPath, { withFileTypes: true });
   } catch {
-    return [];
+    return;
   }
 
-  const albums: ScannedAlbum[] = await discoverFolderAlbumsRecursively(libraryRootPath, libraryRootPath);
-  for (const entry of rootEntries.filter((item) => !item.isDirectory())) {
-    const fullPath = path.join(libraryRootPath, entry.name);
+  const sortedEntries = [...folderEntries].sort((left, right) => sortNames(left.name, right.name));
+
+  for (const entry of sortedEntries) {
+    const fullPath = path.join(folderPath, entry.name);
+
+    if (entry.isDirectory()) {
+      for await (const childAlbum of iterateArchiveAlbumsRecursively(libraryRootPath, fullPath)) {
+        yield childAlbum;
+      }
+      continue;
+    }
+
     try {
+      const stats = await fs.promises.stat(fullPath);
+      if (!stats.isFile()) {
+        continue;
+      }
+
       if (!(await isArchiveFile(fullPath))) {
         continue;
       }
 
-      const zipAlbum = await scanZipAlbum(libraryRootPath, fullPath);
-      if (zipAlbum) {
-        albums.push(zipAlbum);
+      const archiveAlbum = await scanZipAlbum(libraryRootPath, fullPath);
+      if (archiveAlbum) {
+        yield archiveAlbum;
       }
     } catch (error) {
       console.error(
@@ -196,9 +212,16 @@ const discoverAlbumsForRoot = async (libraryRootPath: string): Promise<ScannedAl
       );
     }
   }
+};
 
-  albums.sort((left, right) => sortNames(left.name, right.name));
-  return albums;
+const iterateAlbumsForRoot = async function* (libraryRootPath: string): AsyncGenerator<ScannedAlbum> {
+  for await (const album of iterateFolderAlbumsRecursively(libraryRootPath, libraryRootPath)) {
+    yield album;
+  }
+
+  for await (const album of iterateArchiveAlbumsRecursively(libraryRootPath, libraryRootPath)) {
+    yield album;
+  }
 };
 
 const toAssetRecord = (albumId: string, timestamp: string, asset: ScannedAlbum["assets"][number]): AssetRecord => ({
@@ -265,27 +288,15 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
   let assetsDiscovered = 0;
 
   for (const libraryRoot of libraryRoots) {
-    const discoveredAlbums = await discoverAlbumsForRoot(libraryRoot.path);
     const existingAlbums = listAlbumsByLibraryRootIdDb(libraryRoot.id);
     const existingBySourcePath = new Map(existingAlbums.map((album) => [album.sourcePath, album]));
-    const discoveredBySourcePath = new Map(discoveredAlbums.map((album) => [album.sourcePath, album]));
-    const removedAlbumIds: string[] = [];
-    const replacedAlbums: Array<{
-      existingAlbumId: string | null;
-      album: AlbumRecord;
-      assets: AssetRecord[];
-    }> = [];
+    const discoveredSourcePaths = new Set<string>();
 
-    albumsDiscovered += discoveredAlbums.length;
-    assetsDiscovered += discoveredAlbums.reduce((total, album) => total + album.assets.length, 0);
+    for await (const discoveredAlbum of iterateAlbumsForRoot(libraryRoot.path)) {
+      discoveredSourcePaths.add(discoveredAlbum.sourcePath);
+      albumsDiscovered += 1;
+      assetsDiscovered += discoveredAlbum.assets.length;
 
-    for (const existingAlbum of existingAlbums) {
-      if (!discoveredBySourcePath.has(existingAlbum.sourcePath)) {
-        removedAlbumIds.push(existingAlbum.id);
-      }
-    }
-
-    for (const discoveredAlbum of discoveredAlbums) {
       const existingAlbum = existingBySourcePath.get(discoveredAlbum.sourcePath);
       const albumId = existingAlbum?.id ?? makeId("alb");
       const assets = discoveredAlbum.assets.map((asset) => toAssetRecord(albumId, timestamp, asset));
@@ -309,17 +320,27 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
         updatedAt: timestamp
       };
 
-      replacedAlbums.push({
-        existingAlbumId: existingAlbum?.id ?? null,
-        album,
-        assets
+      applyLibraryRootScanDiffDb({
+        removedAlbumIds: [],
+        replacedAlbums: [
+          {
+            existingAlbumId: existingAlbum?.id ?? null,
+            album,
+            assets
+          }
+        ]
       });
     }
 
-    applyLibraryRootScanDiffDb({
-      removedAlbumIds,
-      replacedAlbums
-    });
+    const removedAlbumIds = existingAlbums
+      .filter((album) => !discoveredSourcePaths.has(album.sourcePath))
+      .map((album) => album.id);
+    if (removedAlbumIds.length > 0) {
+      applyLibraryRootScanDiffDb({
+        removedAlbumIds,
+        replacedAlbums: []
+      });
+    }
 
     upsertLibraryRootDb({
       ...libraryRoot,

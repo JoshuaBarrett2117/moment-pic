@@ -39,8 +39,7 @@ export const buildApp = () => {
   app.register(fastifyStatic, {
     root: PUBLIC_DIR,
     prefix: "/",
-    redirect: false,
-    trailingSlash: false
+    redirect: false
   });
 
   app.setNotFoundHandler(async (request, reply) => {

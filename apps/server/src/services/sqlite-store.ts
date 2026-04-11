@@ -388,3 +388,45 @@ export const deleteAssetDb = (assetId: string) => {
   });
   transaction();
 };
+
+export type SystemConfigRecord = {
+  id: string;
+  enablePolling: boolean;
+  pollingInterval: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const getSystemConfigDb = (): SystemConfigRecord => {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM system_config WHERE id = 'system_config'").get() as {
+    id: string;
+    enable_polling: number;
+    polling_interval: number;
+    created_at: string;
+    updated_at: string;
+  };
+  return {
+    id: row.id,
+    enablePolling: row.enable_polling === 1,
+    pollingInterval: row.polling_interval,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+};
+
+export const updateSystemConfigDb = (updates: { enablePolling?: boolean; pollingInterval?: number }): SystemConfigRecord => {
+  const db = getDb();
+  const existing = getSystemConfigDb();
+  
+  const enablePolling = updates.enablePolling ?? existing.enablePolling;
+  const pollingInterval = updates.pollingInterval ?? existing.pollingInterval;
+  
+  db.prepare(`
+    UPDATE system_config 
+    SET enable_polling = ?, polling_interval = ?, updated_at = datetime('now')
+    WHERE id = 'system_config'
+  `).run(enablePolling ? 1 : 0, pollingInterval);
+  
+  return getSystemConfigDb();
+};

@@ -11,6 +11,7 @@ import { assetRoutes } from "./routes/assets.js";
 import { healthRoutes } from "./routes/health.js";
 import { libraryRootRoutes } from "./routes/library-roots.js";
 import { scanRoutes } from "./routes/scan.js";
+import { systemConfigRoutes } from "./routes/system-config.js";
 import { wsService } from "./services/websocket-service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -67,6 +68,7 @@ export const buildApp = () => {
   app.register(assetRoutes);
   app.register(scanRoutes);
   app.register(libraryRootRoutes);
+  app.register(systemConfigRoutes);
 
   app.get("/*", async (request, reply) => {
     const pathname = getPathname(request.url);

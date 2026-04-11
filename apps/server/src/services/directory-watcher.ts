@@ -5,6 +5,7 @@ import { listExistingLibraryRoots } from "./library-scanner.js";
 import { scanLibrary } from "./library-scanner.js";
 import { nowIso } from "../lib/time.js";
 import { wsService } from "./websocket-service.js";
+import { getSystemConfigDb } from "./sqlite-store.js";
 
 type WatchEventType = "add" | "change" | "unlink";
 
@@ -29,12 +30,31 @@ class DirectoryWatcherService {
       ? roots.filter((r) => r.id === libraryRootId)
       : roots.filter((r) => r.enabled);
 
+    const config = getSystemConfigDb();
+    const usePolling = config.enablePolling;
+    const pollingInterval = config.pollingInterval;
+
     for (const root of targetRoots) {
       if (this.watchers.has(root.id)) {
         continue;
       }
 
-      const watcher = chokidar.watch(root.path, {
+      const watcherOptions: {
+        usePolling?: boolean;
+        interval?: number;
+        binaryInterval?: number;
+        ignored?: RegExp;
+        persistent?: boolean;
+        ignoreInitial?: boolean;
+        depth?: number;
+        awaitWriteFinish?: {
+          stabilityThreshold?: number;
+          pollInterval?: number;
+        };
+      } = {
+        usePolling,
+        interval: pollingInterval,
+        binaryInterval: pollingInterval,
         ignored: /(^|[\/\\])\../,
         persistent: true,
         ignoreInitial: true,
@@ -43,7 +63,9 @@ class DirectoryWatcherService {
           stabilityThreshold: 1000,
           pollInterval: 100
         }
-      });
+      };
+
+      const watcher = chokidar.watch(root.path, watcherOptions);
 
       watcher
         .on("add", (filePath) => this.handleFileEvent("add", filePath, root.id, root.path))
@@ -122,6 +144,11 @@ class DirectoryWatcherService {
       clearTimeout(timer);
     }
     this.debounceTimers.clear();
+  }
+
+  async restartWatching(): Promise<void> {
+    this.stopWatching();
+    await this.startWatching();
   }
 
   onFileChange(callback: WatchCallback): () => void {

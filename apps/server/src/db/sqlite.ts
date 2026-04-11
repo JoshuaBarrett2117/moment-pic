@@ -1,4 +1,4 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 
 import Database from "better-sqlite3";
@@ -70,6 +70,17 @@ const bootstrap = (db: Database.Database) => {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS system_config (
+      id TEXT PRIMARY KEY DEFAULT 'system_config',
+      enable_polling INTEGER NOT NULL DEFAULT 0,
+      polling_interval INTEGER NOT NULL DEFAULT 60000,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    INSERT OR IGNORE INTO system_config (id, enable_polling, polling_interval, created_at, updated_at)
+    VALUES ('system_config', 0, 60000, datetime('now'), datetime('now'));
 
     CREATE INDEX IF NOT EXISTS idx_albums_library_root_id ON albums (library_root_id);
     CREATE INDEX IF NOT EXISTS idx_albums_name ON albums (name);

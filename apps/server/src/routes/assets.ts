@@ -25,14 +25,22 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/assets/:assetId/thumbnail", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
-    const query = request.query as { w?: string; h?: string };
+    const query = request.query as { w?: string; h?: string; format?: "webp" | "jpeg" };
     const requestedWidth = query.w ? Number(query.w) : undefined;
     const requestedHeight = query.h ? Number(query.h) : undefined;
+    const acceptHeader = normalizeHeader(request.headers.accept) ?? "";
+    const preferredFormat =
+      query.format === "webp" || query.format === "jpeg"
+        ? query.format
+        : acceptHeader.includes("image/webp")
+          ? "webp"
+          : "jpeg";
 
     try {
       const thumbnail = await ensureThumbnail(assetId, {
         width: requestedWidth,
-        height: requestedHeight
+        height: requestedHeight,
+        format: preferredFormat
       });
       const etag = `"thumb-${thumbnail.cacheKey}"`;
       const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);

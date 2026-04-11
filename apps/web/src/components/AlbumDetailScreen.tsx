@@ -1,5 +1,5 @@
 ﻿import type { FC } from 'react';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { ArrowLeft, Camera, Home, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2 } from 'lucide-react';
 import { Polaroid } from './Polaroid';
 import { PhotoSwipeGallery } from './PhotoSwipeGallery';
@@ -12,7 +12,7 @@ interface AlbumDetailScreenProps {
   onAssetDeleted?: () => void;
 }
 
-const PAGE_SIZE = 96;
+const PAGE_SIZE = 24;
 
 export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onAssetDeleted }) => {
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
@@ -21,6 +21,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   const [currentPage, setCurrentPage] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
 
   const loadPage = useCallback(
     async (targetPage: number, append: boolean) => {
@@ -87,6 +89,38 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     await loadPage(1, false);
   }, [loadPage]);
 
+  useEffect(() => {
+    if (!hasMore || isLoading || isLoadingMore) {
+      return;
+    }
+
+    const root = scrollContainerRef.current;
+    const target = loadMoreTriggerRef.current;
+    if (!root || !target) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first?.isIntersecting) {
+          void handleLoadMore();
+        }
+      },
+      {
+        root,
+        rootMargin: '0px 0px 240px 0px',
+        threshold: 0.1
+      }
+    );
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasMore, isLoading, isLoadingMore, handleLoadMore]);
+
   return (
     <div className="flex h-screen w-full bg-surface overflow-hidden">
       <aside className="w-[280px] bg-surface-container-low h-full flex flex-col px-6 pt-10 pb-8 z-10 relative overflow-y-auto custom-scrollbar">
@@ -144,7 +178,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           </h2>
         </header>
 
-        <section className="flex-1 overflow-y-auto px-12 py-8 custom-scrollbar scroll-smooth">
+        <section ref={scrollContainerRef} className="flex-1 overflow-y-auto px-12 py-8 custom-scrollbar scroll-smooth">
           {isLoading && loadedItems.length === 0 ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-12 h-12 animate-spin text-outline" />
@@ -184,16 +218,10 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                 ))}
               </div>
 
-              {hasMore && (
-                <div className="mt-8 flex justify-center">
-                  <button
-                    onClick={handleLoadMore}
-                    disabled={isLoadingMore || isLoading}
-                    className="px-6 py-3 rounded-lg bg-primary-container text-on-primary-container font-medium disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    {isLoadingMore ? '加载中...' : '加载更多'}
-                  </button>
+              {hasMore && <div ref={loadMoreTriggerRef} className="h-2 w-full" />}
+              {isLoadingMore && (
+                <div className="mt-8 flex justify-center text-outline">
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 </div>
               )}
             </>

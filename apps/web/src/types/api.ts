@@ -89,3 +89,11 @@ export type ScanResultDTO = {
   albumsDiscovered: number;
   assetsDiscovered: number;
 };
+
+export type SystemConfigDTO = {
+  id: string;
+  enablePolling: boolean;
+  pollingInterval: number;
+  createdAt: string;
+  updatedAt: string;
+};

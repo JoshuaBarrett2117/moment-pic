@@ -100,3 +100,13 @@ model Thumbnail {
 
   @@map("thumbnails")
 }
+
+model SystemConfig {
+  id               String   @id @default("system_config")
+  enablePolling    Boolean  @default(false)
+  pollingInterval  Int      @default(60000)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("system_config")
+}

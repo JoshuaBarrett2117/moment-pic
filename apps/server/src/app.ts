@@ -63,10 +63,10 @@ export const buildApp = () => {
 
   app.register(healthRoutes);
   app.register(authRoutes);
-  app.register(albumRoutes, { prefix: "/api/v1" });
-  app.register(assetRoutes, { prefix: "/api/v1" });
-  app.register(scanRoutes, { prefix: "/api/v1" });
-  app.register(libraryRootRoutes, { prefix: "/api/v1" });
+  app.register(albumRoutes);
+  app.register(assetRoutes);
+  app.register(scanRoutes);
+  app.register(libraryRootRoutes);
 
   app.get("/*", async (request, reply) => {
     const pathname = getPathname(request.url);

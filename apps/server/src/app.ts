@@ -78,6 +78,9 @@ export const buildApp = () => {
     }
 
     if (pathname.startsWith("/api/")) {
+      if (pathname === "/api/v1/auth/login" || pathname === "/api/v1/auth/logout" || pathname === "/api/v1/health") {
+        return;
+      }
       const authed = isAuthenticated(request, app.config.adminPassword);
       if (!authed) {
         return reply.status(401).send({

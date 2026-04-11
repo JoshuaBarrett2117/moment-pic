@@ -4,7 +4,7 @@ FROM node:24-slim AS web-builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-COPY apps/web/package.json apps/web/package-lock.json ./
+COPY apps/web/package.json ./
 RUN npm ci
 
 COPY apps/web/vite.config.ts apps/web/index.html ./

@@ -65,22 +65,6 @@ export const buildApp = () => {
     }
   });
 
-  app.setNotFoundHandler(async (request, reply) => {
-    const pathname = getPathname(request.url);
-    
-    if (pathname.startsWith("/api/") || pathname.startsWith("/assets/") || pathname === "/ws") {
-      return reply.status(404).send({ error: "Not Found" });
-    }
-    
-    const indexPath = path.join(PUBLIC_DIR, "index.html");
-    try {
-      const content = await fs.readFile(indexPath);
-      reply.type("text/html").send(content);
-    } catch {
-      reply.status(404).send({ error: "Not Found" });
-    }
-  });
-
   app.decorate("config", env);
   app.decorate("readFile", fs.readFile);
 
@@ -109,12 +93,12 @@ export const buildApp = () => {
     return reply.redirect("/");
   });
 
-  app.register(authRoutes);
   app.register(healthRoutes);
-  app.register(libraryRootRoutes);
-  app.register(scanRoutes);
-  app.register(albumRoutes);
-  app.register(assetRoutes);
+  app.register(authRoutes);
+  app.register(albumRoutes, { prefix: "/api/v1" });
+  app.register(assetRoutes, { prefix: "/api/v1" });
+  app.register(scanRoutes, { prefix: "/api/v1" });
+  app.register(libraryRootRoutes, { prefix: "/api/v1" });
 
   return app;
 };

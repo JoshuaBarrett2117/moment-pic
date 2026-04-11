@@ -42,7 +42,13 @@ export const buildApp = () => {
     redirect: false
   });
 
-  app.setNotFoundHandler(async (_request, reply) => {
+  app.setNotFoundHandler(async (request, reply) => {
+    const pathname = getPathname(request.url);
+    
+    if (pathname.startsWith("/api/") || pathname.startsWith("/assets/") || pathname === "/ws") {
+      return reply.status(404).send({ error: "Not Found" });
+    }
+    
     const indexPath = path.join(PUBLIC_DIR, "index.html");
     try {
       const content = await fs.readFile(indexPath);

@@ -5,7 +5,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./
-RUN npm ci
+RUN npm install
 
 COPY apps/web/vite.config.ts apps/web/index.html ./
 COPY apps/web/src ./apps/web/src
@@ -28,7 +28,7 @@ COPY apps/server/prisma ./apps/server/prisma
 COPY tsconfig.base.json ./
 COPY apps/server/tsconfig.json ./apps/server/tsconfig.json
 
-RUN npm ci --workspace @moment-pic/server --include-workspace-root=false
+RUN npm install --workspace @moment-pic/server --include-workspace-root=false
 
 COPY apps/server/src ./apps/server/src
 

@@ -77,20 +77,15 @@ export const buildApp = () => {
       return;
     }
 
-    const authed = isAuthenticated(request, app.config.adminPassword);
-
-    if (publicRoutes.has(pathname) || authed) {
-      return;
-    }
-
     if (pathname.startsWith("/api/")) {
-      return reply.status(401).send({
-        code: 4010,
-        message: "unauthorized"
-      });
+      const authed = isAuthenticated(request, app.config.adminPassword);
+      if (!authed) {
+        return reply.status(401).send({
+          code: 4010,
+          message: "unauthorized"
+        });
+      }
     }
-
-    return reply.redirect("/");
   });
 
   app.register(healthRoutes);

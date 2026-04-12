@@ -1,5 +1,5 @@
 export { useAuth } from './useAuth';
-export { useAlbums, useAlbumAssets, deleteAlbum, deleteAsset } from './useAlbums';
+export { useAlbums, useAlbumAssets, deleteAlbum, deleteAsset, useRecentAlbums, recordAlbumView } from './useAlbums';
 export { useLibraryRoots } from './useLibraryRoots';
 export { useScan } from './useScan';
 export { useLibraryScan } from './useLibraryScan';

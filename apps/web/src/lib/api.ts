@@ -27,6 +27,8 @@ class ApiClient {
       (response) => response,
       (error: AxiosError<ApiErrorResponse>) => {
         if (error.response?.status === 401) {
+          localStorage.removeItem('auth_token');
+          document.cookie = 'moment_pic_auth=; Max-Age=0; Path=/; HttpOnly';
           window.location.href = '/';
         }
         return Promise.reject(error);

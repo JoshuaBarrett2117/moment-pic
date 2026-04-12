@@ -71,6 +71,10 @@ export type AlbumsListDTO = {
   pagination: PaginationDTO;
 };
 
+export type RecentAlbumsDTO = {
+  items: AlbumListItemDTO[];
+};
+
 export type LoginResponseDTO = {
   username: string;
   expiresAt: string;

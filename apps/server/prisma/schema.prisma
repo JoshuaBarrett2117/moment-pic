@@ -113,3 +113,13 @@ model SystemConfig {
 
   @@map("system_config")
 }
+
+model AlbumView {
+  id        String   @id @default(cuid())
+  albumId   String
+  viewedAt  DateTime @default(now())
+
+  @@index([albumId], map: "idx_album_views_album_id")
+  @@index([viewedAt], map: "idx_album_views_viewed_at")
+  @@map("album_views")
+}

@@ -1,4 +1,4 @@
-﻿export type SourceType = "folder" | "zip";
+export type SourceType = "folder" | "zip";
 
 export type LibraryRootRecord = {
   id: string;
@@ -58,9 +58,16 @@ export type ThumbnailRecord = {
   updatedAt: string;
 };
 
+export type AlbumViewRecord = {
+  id: string;
+  albumId: string;
+  viewedAt: string;
+};
+
 export type IndexStore = {
   libraryRoots: LibraryRootRecord[];
   albums: AlbumRecord[];
   assets: AssetRecord[];
   thumbnails: ThumbnailRecord[];
+  albumViews: AlbumViewRecord[];
 };

@@ -20,7 +20,9 @@ import {
   listLibraryRootsDb,
   makeId,
   upsertLibraryRootDb,
-  updateLibraryRootDb
+  updateLibraryRootDb,
+  recordAlbumViewDb,
+  getRecentAlbumIdsDb
 } from "./sqlite-store.js";
 
 const toAssetUrls = (assetId: string) => ({
@@ -250,4 +252,32 @@ export const updateLibraryRoot = async (id: string, updates: { name?: string; pa
     enabled: updated.enabled,
     lastScannedAt: updated.lastScannedAt
   };
+};
+
+export const recordAlbumView = async (albumId: string): Promise<void> => {
+  recordAlbumViewDb(albumId);
+};
+
+export const getRecentAlbums = async (limit = 50): Promise<AlbumListItemDTO[]> => {
+  const albumIds = getRecentAlbumIdsDb(limit);
+  if (albumIds.length === 0) {
+    return [];
+  }
+
+  const items: AlbumListItemDTO[] = [];
+  for (const albumId of albumIds) {
+    const album = findAlbumByIdDb(albumId);
+    if (album) {
+      items.push({
+        id: album.id,
+        name: album.name,
+        sourceType: album.sourceType,
+        assetCount: album.assetCount,
+        coverUrl: album.coverAssetId ? `/api/v1/assets/${album.coverAssetId}/thumbnail` : null,
+        updatedAt: album.updatedAt
+      });
+    }
+  }
+
+  return items;
 };

@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Camera, Images, Settings, Search, RefreshCw, Loader2 } from 'lucide-react';
+import { Camera, Images, Settings, RefreshCw, Loader2, Clock } from 'lucide-react';
 import type { LibraryRootDTO } from '../types/api';
 
 interface SidebarProps {
@@ -15,8 +15,8 @@ interface SidebarProps {
   isAnyScanning: boolean;
   isScanning: (libraryRootId: string) => boolean;
   albumCount: number;
-  currentKeyword: string;
-  onKeywordChange: (keyword: string) => void;
+  onRecentClick: () => void;
+  isRecentActive: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
@@ -31,8 +31,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isAnyScanning,
   isScanning,
   albumCount,
-  currentKeyword,
-  onKeywordChange,
+  onRecentClick,
+  isRecentActive,
 }) => {
   return (
     <aside className="fixed left-0 top-0 h-full w-80 bg-surface-container-low p-8 flex flex-col z-40 rounded-r-[3rem] shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)] border-r border-outline/5">
@@ -52,7 +52,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <button
-        onClick={onScanAll}
+        onClick={() => {
+          if (confirm('确定要扫描全部图库吗？')) {
+            onScanAll();
+          }
+        }}
         disabled={isAnyScanning}
         className="mb-4 flex items-center justify-center gap-2 px-4 py-3 bg-primary-container text-on-primary-container rounded-full font-bold hover:brightness-95 transition-all disabled:opacity-50"
       >
@@ -86,29 +90,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       <div className="flex flex-col gap-6 w-full">
-        <div className="relative">
-          <input 
-            className="w-full bg-surface-container-highest border-2 border-outline/30 rounded-full py-3 px-12 focus:ring-2 focus:ring-primary-container focus:border-transparent outline-none text-sm placeholder:text-outline/50 wobbly-border" 
-            placeholder="Search memories..." 
-            type="text"
-            value={currentKeyword}
-            onChange={(event) => onKeywordChange(event.target.value)}
-          />
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-outline w-5 h-5" />
-        </div>
       </div>
 
       <div className="mt-auto pt-8 border-t border-outline/10 flex flex-col gap-4">
         <button
           onClick={() => onLibraryRootChange('')}
           className={`flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer transition-all ${
-            currentLibraryRootId === '' 
+            currentLibraryRootId === '' && !isRecentActive
               ? 'bg-primary-container text-on-primary-container font-bold' 
               : 'hover:bg-primary-container/10'
           }`}
         >
           <Images className="w-5 h-5" />
           <span className="text-sm font-semibold">全部图片</span>
+        </button>
+
+        <button
+          onClick={onRecentClick}
+          className={`flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer transition-all ${
+            isRecentActive
+              ? 'bg-primary-container text-on-primary-container font-bold' 
+              : 'hover:bg-primary-container/10'
+          }`}
+        >
+          <Clock className="w-5 h-5" />
+          <span className="text-sm font-semibold">近期查看</span>
         </button>
         
         {libraryRoots.map((root) => (

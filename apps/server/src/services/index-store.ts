@@ -1,4 +1,4 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 
 import { env } from "../config/env.js";
@@ -8,7 +8,8 @@ const emptyStore = (): IndexStore => ({
   libraryRoots: [],
   albums: [],
   assets: [],
-  thumbnails: []
+  thumbnails: [],
+  albumViews: []
 });
 
 export const ensureDataDir = async () => {

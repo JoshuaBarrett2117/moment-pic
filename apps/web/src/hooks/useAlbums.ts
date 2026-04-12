@@ -1,6 +1,6 @@
-﻿import { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { api } from '../lib/api';
-import type { AlbumsListDTO, AlbumAssetsDTO } from '../types/api';
+import type { AlbumsListDTO, AlbumAssetsDTO, RecentAlbumsDTO, AlbumListItemDTO } from '../types/api';
 
 interface UseAlbumsOptions {
   page?: number;
@@ -107,3 +107,48 @@ export const deleteAsset = async (assetId: string): Promise<boolean> => {
     return false;
   }
 };
+
+export const recordAlbumView = async (albumId: string): Promise<boolean> => {
+  try {
+    await api.post<{ success: boolean }>(`/albums/${albumId}/view`, undefined);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+interface UseRecentAlbumsOptions {
+  limit?: number;
+}
+
+interface UseRecentAlbumsReturn {
+  recentAlbums: AlbumListItemDTO[] | null;
+  isLoading: boolean;
+  error: string | null;
+  fetchRecentAlbums: (options?: UseRecentAlbumsOptions) => Promise<void>;
+}
+
+export function useRecentAlbums(): UseRecentAlbumsReturn {
+  const [recentAlbums, setRecentAlbums] = useState<AlbumListItemDTO[] | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRecentAlbums = useCallback(async (options: UseRecentAlbumsOptions = {}): Promise<void> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (options.limit) params.append('limit', String(options.limit));
+
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const result = await api.get<RecentAlbumsDTO>(`/albums/recent${query}`);
+      setRecentAlbums(result.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取近期查看失败');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  return { recentAlbums, isLoading, error, fetchRecentAlbums };
+}

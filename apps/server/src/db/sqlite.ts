@@ -80,6 +80,12 @@ const bootstrap = (db: Database.Database) => {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS album_views (
+      id TEXT PRIMARY KEY,
+      album_id TEXT NOT NULL,
+      viewed_at TEXT NOT NULL
+    );
+
     INSERT OR IGNORE INTO system_config (id, enable_polling, polling_interval, created_at, updated_at)
     VALUES ('system_config', 1, 60000, datetime('now'), datetime('now'));
 
@@ -89,6 +95,8 @@ const bootstrap = (db: Database.Database) => {
     CREATE INDEX IF NOT EXISTS idx_assets_album_id ON assets (album_id);
     CREATE INDEX IF NOT EXISTS idx_assets_album_sort ON assets (album_id, sort_index);
     CREATE INDEX IF NOT EXISTS idx_assets_thumbnail_key ON assets (thumbnail_key);
+    CREATE INDEX IF NOT EXISTS idx_album_views_album_id ON album_views (album_id);
+    CREATE INDEX IF NOT EXISTS idx_album_views_viewed_at ON album_views (viewed_at);
   `);
 
   try {

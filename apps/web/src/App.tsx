@@ -3,7 +3,104 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
 import { PaperGrain } from './components/PaperGrain';
-import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan } from './hooks';
+import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan, useRecentAlbums, recordAlbumView } from './hooks';
+import { api } from './lib/api';
+
+const STORAGE_KEY = 'gallery_filters';
+
+interface GalleryFilters {
+  page: number;
+  pageSize: number;
+  keyword: string;
+  sortBy: 'name' | 'updatedAt' | 'assetCount';
+  sortOrder: 'asc' | 'desc';
+  sourceType: '' | 'folder' | 'zip';
+  libraryRootId: string;
+}
+
+const parseFiltersFromUrl = (): Partial<GalleryFilters> => {
+  const params = new URLSearchParams(window.location.search);
+  const result: Partial<GalleryFilters> = {};
+
+  const page = params.get('page');
+  if (page && !isNaN(Number(page))) {
+    result.page = Math.max(1, Number(page));
+  }
+
+  const pageSize = params.get('pageSize');
+  if (pageSize && !isNaN(Number(pageSize))) {
+    result.pageSize = Number(pageSize);
+  }
+
+  const keyword = params.get('keyword');
+  if (keyword) {
+    result.keyword = keyword;
+  }
+
+  const sortBy = params.get('sortBy');
+  if (sortBy === 'name' || sortBy === 'updatedAt' || sortBy === 'assetCount') {
+    result.sortBy = sortBy;
+  }
+
+  const sortOrder = params.get('sortOrder');
+  if (sortOrder === 'asc' || sortOrder === 'desc') {
+    result.sortOrder = sortOrder;
+  }
+
+  const sourceType = params.get('sourceType');
+  if (sourceType === '' || sourceType === 'folder' || sourceType === 'zip') {
+    result.sourceType = sourceType;
+  }
+
+  const libraryRootId = params.get('libraryRootId');
+  if (libraryRootId) {
+    result.libraryRootId = libraryRootId;
+  }
+
+  return result;
+};
+
+const syncFiltersToUrl = (filters: GalleryFilters) => {
+  const params = new URLSearchParams();
+  params.set('page', String(filters.page));
+  params.set('pageSize', String(filters.pageSize));
+  if (filters.keyword) {
+    params.set('keyword', filters.keyword);
+  }
+  if (filters.sortBy !== 'name') {
+    params.set('sortBy', filters.sortBy);
+  }
+  if (filters.sortOrder !== 'asc') {
+    params.set('sortOrder', filters.sortOrder);
+  }
+  if (filters.sourceType) {
+    params.set('sourceType', filters.sourceType);
+  }
+  if (filters.libraryRootId) {
+    params.set('libraryRootId', filters.libraryRootId);
+  }
+
+  const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+  window.history.replaceState({}, '', newUrl);
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
+  } catch {
+  }
+};
+
+const getInitialFilters = (): GalleryFilters => {
+  const urlFilters = parseFiltersFromUrl();
+  return {
+    page: urlFilters.page || 1,
+    pageSize: urlFilters.pageSize || 24,
+    keyword: urlFilters.keyword || '',
+    sortBy: urlFilters.sortBy || 'name',
+    sortOrder: urlFilters.sortOrder || 'asc',
+    sourceType: urlFilters.sourceType || '',
+    libraryRootId: urlFilters.libraryRootId || '',
+  };
+};
 
 const GalleryScreen = lazy(() =>
   import('./components/GalleryScreen').then((module) => ({
@@ -27,18 +124,13 @@ export default function App() {
   const [direction, setDirection] = useState(1);
   const [activeTab, setActiveTab] = useState<'gallery' | 'settings'>('gallery');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isRecentActive, setIsRecentActive] = useState(false);
+  const [scrollPosition, setScrollPosition] = useState(0);
   
-  const [filters, setFilters] = useState({
-    page: 1,
-    pageSize: 24,
-    keyword: '',
-    sortBy: 'name' as 'name' | 'updatedAt' | 'assetCount',
-    sortOrder: 'asc' as 'asc' | 'desc',
-    sourceType: '' as '' | 'folder' | 'zip',
-    libraryRootId: '' as string,
-  });
+  const [filters, setFilters] = useState<GalleryFilters>(getInitialFilters);
 
   const { albums, isLoading, error, fetchAlbums } = useAlbums();
+  const { recentAlbums, isLoading: isRecentLoading, fetchRecentAlbums } = useRecentAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
   const { isScanning, scan, scanningLibraryRootIds, isAnyScanning } = useLibraryScan();
   const scanningLibraryRootId = scanningLibraryRootIds.size > 0 ? Array.from(scanningLibraryRootIds)[0] : null;
@@ -64,11 +156,22 @@ export default function App() {
   }, [fetchAlbums, filters.page, filters.pageSize, filters.keyword, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId]);
 
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      setIsAuthenticated(true);
-      setCurrentScreen(Screen.GALLERY);
-    }
+    const verifyAuth = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        try {
+          await api.get('/albums', { page: 1, pageSize: 1 });
+          setIsAuthenticated(true);
+          setCurrentScreen(Screen.GALLERY);
+        } catch {
+          localStorage.removeItem('auth_token');
+          setIsAuthenticated(false);
+          setCurrentScreen(Screen.LOGIN);
+          window.history.replaceState({}, '', '/');
+        }
+      }
+    };
+    verifyAuth();
   }, []);
 
   useEffect(() => {
@@ -82,6 +185,12 @@ export default function App() {
       loadAlbums();
     }
   }, [isAuthenticated, currentScreen, filters.page, filters.pageSize, filters.keyword, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId]);
+
+  useEffect(() => {
+    if (currentScreen === Screen.GALLERY && isAuthenticated) {
+      syncFiltersToUrl(filters);
+    }
+  }, [filters, currentScreen, isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated || !isAnyScanning) {
@@ -125,6 +234,7 @@ export default function App() {
 
   const handleNavigateToAlbum = (albumId: string) => {
     setSelectedAlbum(albumId);
+    recordAlbumView(albumId);
     navigate(Screen.ALBUM_DETAIL, 1);
   };
 
@@ -135,23 +245,22 @@ export default function App() {
   };
 
   const handleBackToGallery = () => {
-    const nextFilters = { ...filters, libraryRootId: '', page: 1 };
     setActiveTab('gallery');
-    setFilters(nextFilters);
     fetchAlbums({
-      page: nextFilters.page,
-      pageSize: nextFilters.pageSize,
-      keyword: nextFilters.keyword || undefined,
-      sortBy: nextFilters.sortBy,
-      sortOrder: nextFilters.sortOrder,
-      sourceType: nextFilters.sourceType || undefined,
-      libraryRootId: undefined,
+      page: filters.page,
+      pageSize: filters.pageSize,
+      keyword: filters.keyword || undefined,
+      sortBy: filters.sortBy,
+      sortOrder: filters.sortOrder,
+      sourceType: filters.sourceType || undefined,
+      libraryRootId: filters.libraryRootId || undefined,
     });
     navigate(Screen.GALLERY, -1);
   };
 
   const handleSidebarNavigate = (tab: 'gallery' | 'settings') => {
     setActiveTab(tab);
+    setIsRecentActive(false);
     if (tab === 'gallery') {
       const nextFilters = { ...filters, libraryRootId: '', page: 1 };
       setFilters(nextFilters);
@@ -168,6 +277,13 @@ export default function App() {
     } else if (tab === 'settings') {
       navigate(Screen.SETTINGS, 1);
     }
+  };
+
+  const handleRecentClick = () => {
+    setIsRecentActive(true);
+    setFilters(prev => ({ ...prev, libraryRootId: '', page: 1 }));
+    fetchRecentAlbums({ limit: 50 });
+    navigate(Screen.GALLERY, 1);
   };
 
   const handlePageChange = (page: number) => {
@@ -195,6 +311,7 @@ export default function App() {
   };
 
   const handleLibraryRootChange = (libraryRootId: string) => {
+    setIsRecentActive(false);
     setFilters(prev => ({ ...prev, libraryRootId, page: 1 }));
   };
 
@@ -225,7 +342,7 @@ export default function App() {
     <div className="relative w-full h-screen overflow-hidden bg-background">
       <PaperGrain />
       
-      <AnimatePresence initial={false} custom={direction} mode="wait">
+      <AnimatePresence initial={false} custom={direction} mode="sync">
         <motion.div
           key={currentScreen}
           custom={direction}
@@ -234,10 +351,10 @@ export default function App() {
           animate="center"
           exit="exit"
           transition={{
-            x: { type: "spring", stiffness: 300, damping: 30 },
-            opacity: { duration: 0.2 }
+            x: { type: "spring", stiffness: 200, damping: 35, mass: 1 },
+            opacity: { duration: 0.15 }
           }}
-          className="absolute inset-0 w-full h-full"
+          className="absolute inset-0 w-full h-full will-change-transform"
         >
           {(currentScreen === Screen.LOGIN || !isAuthenticated) && (
             <LoginScreen onLogin={handleLogin} />
@@ -251,12 +368,12 @@ export default function App() {
               }
             >
               <GalleryScreen 
-                albums={albums?.items || []}
-                isLoading={isLoading}
-                pagination={albums?.pagination || null}
+                albums={isRecentActive ? (recentAlbums || []) : (albums?.items || [])}
+                isLoading={isRecentActive ? isRecentLoading : isLoading}
+                pagination={isRecentActive ? null : (albums?.pagination || null)}
                 onNavigateToAlbum={handleNavigateToAlbum}
                 onProfileClick={handleProfileClick}
-                onRefresh={loadAlbums}
+                onRefresh={isRecentActive ? handleRecentClick : loadAlbums}
                 onPageChange={handlePageChange}
                 onSortByChange={handleSortByChange}
                 onSortOrderChange={handleSortOrderChange}
@@ -279,6 +396,10 @@ export default function App() {
                 isScanning={isScanning}
                 scanningLibraryRootId={scanningLibraryRootId}
                 onAlbumDeleted={loadAlbums}
+                onRecentClick={handleRecentClick}
+                isRecentActive={isRecentActive}
+                scrollPosition={scrollPosition}
+                onScrollPositionChange={setScrollPosition}
               />
             </Suspense>
           )}

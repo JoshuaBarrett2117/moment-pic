@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 
 import { getDb } from "../db/sqlite.js";
-import type { AlbumRecord, AssetRecord, LibraryRootRecord, ThumbnailRecord } from "../types/store.js";
+import type { AlbumRecord, AssetRecord, LibraryRootRecord, ThumbnailRecord, AlbumViewRecord } from "../types/store.js";
 
 export type AlbumSortBy = "name" | "updatedAt" | "assetCount";
 export type SortOrder = "asc" | "desc";
@@ -455,4 +455,41 @@ export const updateSystemConfigDb = (updates: { enablePolling?: boolean; polling
   `).run(enablePolling ? 1 : 0, pollingInterval, preloadBefore, preloadAfter);
 
   return getSystemConfigDb();
+};
+
+export const recordAlbumViewDb = (albumId: string): void => {
+  const db = getDb();
+  const id = makeId("view");
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO album_views (id, album_id, viewed_at) VALUES (?, ?, ?)`).run(id, albumId, now);
+};
+
+export const listRecentAlbumViewsDb = (limit = 50): AlbumViewRecord[] => {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT DISTINCT album_id, MAX(viewed_at) as viewed_at
+    FROM album_views
+    GROUP BY album_id
+    ORDER BY MAX(viewed_at) DESC
+    LIMIT ?
+  `).all(limit) as { album_id: string; viewed_at: string }[];
+
+  return rows.map((row) => ({
+    id: row.album_id,
+    albumId: row.album_id,
+    viewedAt: row.viewed_at
+  }));
+};
+
+export const getRecentAlbumIdsDb = (limit = 50): string[] => {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT DISTINCT album_id
+    FROM album_views
+    GROUP BY album_id
+    ORDER BY MAX(viewed_at) DESC
+    LIMIT ?
+  `).all(limit) as { album_id: string }[];
+
+  return rows.map((row) => row.album_id);
 };

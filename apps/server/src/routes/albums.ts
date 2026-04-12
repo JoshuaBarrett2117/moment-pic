@@ -2,10 +2,24 @@ import crypto from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
-import { deleteAlbum, getAlbumAssets, getAlbumDetail, listAlbums } from "../services/album-service.js";
+import { deleteAlbum, getAlbumAssets, getAlbumDetail, listAlbums, recordAlbumView, getRecentAlbums } from "../services/album-service.js";
 
 export const albumRoutes: FastifyPluginAsync = async (app) => {
   const normalizeHeader = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+
+  app.get("/api/v1/albums/recent", async (request, reply) => {
+    const query = request.query as { limit?: string };
+    const limit = Math.max(1, Math.min(100, Number(query.limit ?? 50)));
+    const payload = await getRecentAlbums(limit);
+
+    return ok({ items: payload });
+  });
+
+  app.post("/api/v1/albums/:albumId/view", async (request, reply) => {
+    const { albumId } = request.params as { albumId: string };
+    await recordAlbumView(albumId);
+    return ok({ success: true });
+  });
 
   app.get("/api/v1/albums", async (request, reply) => {
     const query = request.query as {
@@ -55,6 +69,8 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
         message: "album not found"
       });
     }
+
+    await recordAlbumView(albumId);
 
     return ok(album);
   });

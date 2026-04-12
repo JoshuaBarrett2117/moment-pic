@@ -23,6 +23,7 @@
     "react": "^19.0.0",
     "react-cool-img": "^1.2.12",
     "react-dom": "^19.0.0",
+    "react-responsive": "^10.0.1",
     "react-viewer": "^3.2.2",
     "vite": "^6.2.0"
   },

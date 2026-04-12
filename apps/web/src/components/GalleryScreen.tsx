@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Plus, ArrowRight, Loader2, ChevronLeft, ChevronRight, Trash2, Search, X } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { ThrottledImage } from './ThrottledImage';
-import { deleteAlbum } from '../hooks';
+import { deleteAlbum, useMobile } from '../hooks';
 import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO } from '../types/api';
 
 interface GalleryScreenProps {
@@ -78,8 +78,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   scrollPosition,
   onScrollPositionChange,
 }) => {
+  const isMobile = useMobile();
   const RENDER_CHUNK_SIZE = 72;
   const [visibleCount, setVisibleCount] = useState(RENDER_CHUNK_SIZE);
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
   const totalPages = pagination ? Math.ceil(pagination.total / pagination.pageSize) : 1;
@@ -91,6 +93,12 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
       mainRef.current.scrollTop = scrollPosition;
     }
   }, [scrollPosition]);
+
+  useEffect(() => {
+    if (isMobile) {
+      setIsFilterExpanded(false);
+    }
+  }, [isMobile]);
 
   const handleNavigateToAlbum = (albumId: string) => {
     if (mainRef.current && onScrollPositionChange) {
@@ -160,108 +168,118 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         isRecentActive={isRecentActive}
       />
       
-      <main ref={mainRef} className="ml-80 flex-1 h-full overflow-y-auto custom-scrollbar bg-surface px-12 pt-16 pb-24 relative">
-        <header className="flex justify-between items-start w-full mb-8">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-6xl text-on-surface tracking-tighter leading-tight font-script font-bold">瞬间图库</h1>
-            <p className="text-xl font-body text-outline/70">更懂你的，也更懂在这里</p>
+      <main ref={mainRef} className="md:ml-80 ml-0 flex-1 h-full overflow-y-auto custom-scrollbar bg-surface md:px-12 px-4 pt-12 md:pt-16 pb-24 relative">
+        <header className="flex justify-between items-center w-full mb-4 md:mb-8">
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl md:text-6xl text-on-surface tracking-tighter leading-tight font-script font-bold">瞬间图库</h1>
+            <p className="text-base md:text-xl font-body text-outline/70 hidden md:block">更懂你的，也更懂在这里</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div 
-              onClick={onProfileClick}
-              className="w-14 h-14 rounded-full border-4 border-white shadow-xl overflow-hidden hover:scale-105 transition-transform cursor-pointer"
-            >
-              <img 
-                alt="Curator Portrait" 
-                className="w-full h-full object-cover" 
-                src="https://picsum.photos/seed/portrait/200/200" 
-              />
-            </div>
+          <div 
+            onClick={onProfileClick}
+            className="w-10 md:w-14 h-10 md:h-14 rounded-full border-2 md:border-4 border-white shadow-md md:shadow-xl overflow-hidden hover:scale-105 transition-transform cursor-pointer"
+          >
+            <img 
+              alt="Curator Portrait" 
+              className="w-full h-full object-cover" 
+              src="https://picsum.photos/seed/portrait/200/200" 
+            />
           </div>
         </header>
 
-        <div className="flex flex-wrap items-center gap-4 mb-8 p-4 bg-surface-container-highest rounded-xl">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-outline">来源:</span>
-            <select 
-              value={currentSourceType}
-              onChange={(e) => onSourceTypeChange(e.target.value as 'folder' | 'zip' | '')}
-              className="px-3 py-2 bg-surface-container-high rounded-lg text-sm border-none outline-none cursor-pointer"
-            >
-              <option value="">全部</option>
-              <option value="folder">文件夹</option>
-              <option value="zip">压缩包</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-outline">排序:</span>
-            <select 
-              value={currentSortBy}
-              onChange={(e) => onSortByChange(e.target.value as 'name' | 'updatedAt' | 'assetCount')}
-              className="px-3 py-2 bg-surface-container-high rounded-lg text-sm border-none outline-none cursor-pointer"
-            >
-              {sortOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-
+        <div className="mb-4">
           <button
-            onClick={() => onSortOrderChange(currentSortOrder === 'asc' ? 'desc' : 'asc')}
-            className="flex items-center gap-1 px-3 py-2 bg-surface-container-high rounded-lg text-sm hover:bg-primary-container/20 transition-colors"
+            onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+            className="md:hidden flex items-center gap-2 px-4 py-2 bg-surface-container-high rounded-lg text-sm"
           >
-            {currentSortOrder === 'asc' ? '正序' : '倒序'}
+            <span>筛选</span>
+            <ChevronRight className={`w-4 h-4 transition-transform ${isFilterExpanded ? 'rotate-90' : ''}`} />
           </button>
+          
+          <div className={`${isFilterExpanded ? 'block' : 'hidden'} md:block`}>
+            <div className="flex flex-wrap items-center gap-2 md:gap-4 mb-6 md:mb-8 p-3 md:p-4 bg-surface-container-highest rounded-xl">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-outline hidden sm:inline">来源:</span>
+                <select 
+                  value={currentSourceType}
+                  onChange={(e) => onSourceTypeChange(e.target.value as 'folder' | 'zip' | '')}
+                  className="px-2 md:px-3 py-2 bg-surface-container-high rounded-lg text-sm border-none outline-none cursor-pointer"
+                >
+                  <option value="">全部</option>
+                  <option value="folder">文件夹</option>
+                  <option value="zip">压缩包</option>
+                </select>
+              </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-outline">每页:</span>
-            <select 
-              value={currentPageSize}
-              onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="px-3 py-2 bg-surface-container-high rounded-lg text-sm border-none outline-none cursor-pointer"
-            >
-              {pageSizeOptions.map(size => (
-                <option key={size} value={size}>{size}</option>
-              ))}
-            </select>
-          </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-outline hidden sm:inline">排序:</span>
+                <select 
+                  value={currentSortBy}
+                  onChange={(e) => onSortByChange(e.target.value as 'name' | 'updatedAt' | 'assetCount')}
+                  className="px-2 md:px-3 py-2 bg-surface-container-high rounded-lg text-sm border-none outline-none cursor-pointer"
+                >
+                  {sortOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="relative flex-1 min-w-[200px] max-w-[300px]">
-            <input 
-              className="w-full bg-surface-container-high border-2 border-outline/30 rounded-full py-2 pl-10 pr-10 focus:ring-2 focus:ring-primary-container focus:border-transparent outline-none text-sm placeholder:text-outline/50" 
-              placeholder="Search moment"
-              type="text"
-              value={currentKeyword}
-              onChange={(e) => onKeywordChange(e.target.value)}
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
-            {currentKeyword && (
-              <button 
-                onClick={() => onKeywordChange('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors"
+              <button
+                onClick={() => onSortOrderChange(currentSortOrder === 'asc' ? 'desc' : 'asc')}
+                className="flex items-center gap-1 px-3 py-2 bg-surface-container-high rounded-lg text-sm hover:bg-primary-container/20 transition-colors"
+              >
+                {currentSortOrder === 'asc' ? '正序' : '倒序'}
+              </button>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-outline">每页:</span>
+                <select 
+                  value={currentPageSize}
+                  onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                  className="px-3 py-2 bg-surface-container-high rounded-lg text-sm border-none outline-none cursor-pointer"
+                >
+                  {pageSizeOptions.map(size => (
+                    <option key={size} value={size}>{size}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="relative flex-1 min-w-[200px] max-w-[300px]">
+                <input 
+                  className="w-full bg-surface-container-high border-2 border-outline/30 rounded-full py-2 pl-10 pr-10 focus:ring-2 focus:ring-primary-container focus:border-transparent outline-none text-sm placeholder:text-outline/50" 
+                  placeholder="Search moment"
+                  type="text"
+                  value={currentKeyword}
+                  onChange={(e) => onKeywordChange(e.target.value)}
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-outline w-4 h-4" />
+                {currentKeyword && (
+                  <button 
+                    onClick={() => onKeywordChange('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <button
+                onClick={() => {
+                  onKeywordChange('');
+                  onSourceTypeChange('');
+                  onSortByChange('updatedAt');
+                  onSortOrderChange('desc');
+                  onPageSizeChange(24);
+                }}
+                className="flex items-center gap-1 px-4 py-2 bg-surface-container-high rounded-lg text-sm hover:bg-primary-container/20 transition-colors text-outline"
               >
                 <X className="w-4 h-4" />
+                重置
               </button>
-            )}
+            </div>
           </div>
-
-          <button
-            onClick={() => {
-              onKeywordChange('');
-              onSourceTypeChange('');
-              onSortByChange('updatedAt');
-              onSortOrderChange('desc');
-              onPageSizeChange(24);
-            }}
-            className="flex items-center gap-1 px-4 py-2 bg-surface-container-high rounded-lg text-sm hover:bg-primary-container/20 transition-colors text-outline"
-          >
-            <X className="w-4 h-4" />
-            重置
-          </button>
         </div>
 
-        <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+        <div className="grid gap-4 md:gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
           {isLoading && albums.length === 0 ? (
             <div className="col-span-full flex items-center justify-center py-20">
               <Loader2 className="w-12 h-12 animate-spin text-outline" />
@@ -340,11 +358,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         )}
 
         {pagination && totalPages > 1 && (
-          <div className="mt-12 flex items-center justify-center gap-4">
+          <div className="mt-8 md:mt-12 flex items-center justify-center gap-2 md:gap-4 flex-wrap">
             <button
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage <= 1 || isLoading}
-              className="p-2 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-primary-container disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="p-2 md:p-2 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-primary-container disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -381,12 +399,12 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             <button
               onClick={() => onPageChange(currentPage + 1)}
               disabled={currentPage >= totalPages || isLoading}
-              className="p-2 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-primary-container disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="p-2 md:p-2 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-primary-container disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
 
-            <span className="text-sm text-outline ml-4">
+            <span className="text-xs md:text-sm text-outline ml-2 md:ml-4">
               共 {pagination.total} 条 / {totalPages} 页
             </span>
           </div>

@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize2, X, Loader2 } from 'lucide-react';
+import { useMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
 interface ViewerGalleryProps {
@@ -16,6 +17,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   onClose,
   initialIndex = 0,
 }) => {
+  const isMobile = useMobile();
   const safeItems = items ?? [];
   
   const images = useMemo(
@@ -39,7 +41,13 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [showControls, setShowControls] = useState(false);
+  const [isImageLoading, setIsImageLoading] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number>(0);
+  const touchStartY = useRef<number>(0);
+  const lastTouchDistance = useRef<number>(0);
+  const isZooming = useRef<boolean>(false);
 
   useEffect(() => {
     if (isOpen && images.length > 0) {
@@ -47,8 +55,16 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       setActiveIndex(validIndex);
       setScale(1);
       setRotation(0);
+      setPosition({ x: 0, y: 0 });
+      setIsImageLoading(true);
     }
   }, [isOpen, initialIndex, images.length]);
+
+  useEffect(() => {
+    if (isMobile) {
+      setShowControls(false);
+    }
+  }, [isMobile]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -73,14 +89,26 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
         setScale((prev) => Math.max(prev / 1.1, 0.1));
       }
     };
+
+    if (!isMobile) {
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('wheel', handleWheel, { passive: false });
+    }
     
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('wheel', handleWheel);
     };
-  }, [isOpen, images.length]);
+  }, [isOpen, images.length, isMobile]);
+
+  useEffect(() => {
+    if (isMobile) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [isMobile, isOpen]);
 
   const goToPrev = useCallback(() => {
     if (images.length === 0) return;
@@ -88,6 +116,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     setScale(1);
     setRotation(0);
     setPosition({ x: 0, y: 0 });
+    setIsImageLoading(true);
   }, [images.length]);
 
   const goToNext = useCallback(() => {
@@ -96,6 +125,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     setScale(1);
     setRotation(0);
     setPosition({ x: 0, y: 0 });
+    setIsImageLoading(true);
   }, [images.length]);
 
   const handleClose = useCallback(() => {
@@ -143,6 +173,71 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     setIsDragging(false);
   }, []);
 
+  const getTouchDistance = (touches: React.TouchList) => {
+    if (touches.length < 2) return 0;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+      isZooming.current = false;
+    } else if (e.touches.length === 2) {
+      isZooming.current = true;
+      lastTouchDistance.current = getTouchDistance(e.touches);
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      isZooming.current = true;
+      const distance = getTouchDistance(e.touches);
+      if (lastTouchDistance.current > 0) {
+        const scaleChange = distance / lastTouchDistance.current;
+        setScale((prev) => Math.min(Math.max(prev * scaleChange, 0.1), 6));
+      }
+      lastTouchDistance.current = distance;
+    } else if (e.touches.length === 1) {
+      const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current);
+      const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current);
+      
+      if (deltaY > deltaX && scale <= 1) {
+        isZooming.current = true;
+      }
+    }
+  }, [scale]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    lastTouchDistance.current = 0;
+    
+    if (e.touches.length > 0) return;
+    if (isZooming.current) return;
+    if (!e.changedTouches || !e.changedTouches[0]) return;
+    
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    const minSwipeDistance = isMobile ? 60 : 50;
+    
+    if (Math.abs(deltaX) > minSwipeDistance) {
+      if (deltaX > 0) {
+        goToPrev();
+      } else {
+        goToNext();
+      }
+    }
+  }, [isMobile, goToPrev, goToNext]);
+
+  const handleImageLoad = useCallback(() => {
+    setIsImageLoading(false);
+  }, []);
+
+  const handleImageError = useCallback(() => {
+    setIsImageLoading(false);
+  }, []);
+
   if (!isOpen || images.length === 0) {
     return null;
   }
@@ -152,49 +247,90 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     return null;
   }
 
+  const btnSize = isMobile ? 64 : 44;
+  const toolbarBtnSize = isMobile ? 56 : 44;
+  const closeBtnSize = isMobile ? 56 : 48;
+  const navBtnSize = isMobile ? 64 : 56;
+
+  const handleImageClick = useCallback(() => {
+    if (isMobile) {
+      setShowControls((prev) => !prev);
+    }
+  }, [isMobile]);
+
   return (
-    <div className="fixed inset-0 z-[99999] viewer-gallery flex items-center justify-center bg-black">
+    <div 
+      className="fixed inset-0 z-[99999] viewer-gallery flex items-center justify-center bg-black touch-none"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onMouseEnter={() => !isMobile && setShowControls(true)}
+      onMouseLeave={() => !isMobile && setShowControls(false)}
+    >
       <style>{`
         .viewer-btn {
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 44px;
-          height: 44px;
-          background: rgba(255, 255, 255, 0.15);
+          background: rgba(255, 255, 255, 0.2);
           border: none;
-          border-radius: 10px;
+          border-radius: 12px;
           color: white;
           cursor: pointer;
           transition: all 0.2s;
+          -webkit-tap-highlight-color: transparent;
+          user-select: none;
         }
         .viewer-btn:hover {
-          background: rgba(255, 255, 255, 0.25);
+          background: rgba(255, 255, 255, 0.3);
+        }
+        .viewer-btn:active {
+          transform: scale(0.95);
+          background: rgba(255, 255, 255, 0.4);
         }
         .viewer-counter {
           position: fixed;
           top: 20px;
           left: 50%;
-          transform: translateX(-50%);
-          padding: 8px 16px;
-          background: rgba(0, 0, 0, 0.6);
-          border-radius: 20px;
+          transform: translateX(-50%) translateY(${showControls ? '-10px' : '0'});
+          padding: 10px 20px;
+          background: rgba(0, 0, 0, 0.7);
+          border-radius: 24px;
           color: white;
-          font-size: 14px;
+          font-size: 15px;
+          font-weight: 500;
           backdrop-filter: blur(10px);
           z-index: 20;
-          opacity: 0;
-          transition: opacity 0.3s;
-        }
-        .viewer-gallery:hover .viewer-counter {
-          opacity: 1;
+          opacity: ${showControls ? 1 : 0};
+          transition: all 0.3s;
         }
         .viewer-close {
           position: fixed;
           top: 20px;
           right: 20px;
-          width: 44px;
-          height: 44px;
+          transform: translateY(${showControls ? '-10px' : '0'});
+          background: rgba(255, 255, 255, 0.2);
+          border: none;
+          border-radius: 50%;
+          color: white;
+          cursor: pointer;
+          transition: all 0.3s;
+          z-index: 20;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .viewer-close:hover {
+          background: rgba(255, 255, 255, 0.3);
+        }
+        .viewer-close:active {
+          transform: scale(0.95);
+        }
+        .viewer-nav-btn {
+          position: fixed;
+          top: 50%;
+          transform: translateY(-50%);
           background: rgba(255, 255, 255, 0.15);
           border: none;
           border-radius: 50%;
@@ -202,54 +338,39 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           cursor: pointer;
           transition: all 0.2s;
           z-index: 20;
-        }
-        .viewer-close:hover {
-          background: rgba(255, 255, 255, 0.25);
-        }
-        .viewer-nav-btn {
-          position: fixed;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 56px;
-          height: 56px;
-          background: rgba(255, 255, 255, 0.1);
-          border: none;
-          border-radius: 50%;
-          color: white;
-          cursor: pointer;
-          transition: all 0.2s;
-          z-index: 20;
-          opacity: 0;
-        }
-        .viewer-gallery:hover .viewer-nav-btn {
-          opacity: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          -webkit-tap-highlight-color: transparent;
+          opacity: ${showControls ? 1 : 0};
         }
         .viewer-nav-btn.prev {
-          left: 20px;
+          left: 12px;
         }
         .viewer-nav-btn.next {
-          right: 20px;
+          right: 12px;
         }
         .viewer-nav-btn:hover {
-          background: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.25);
+        }
+        .viewer-nav-btn:active {
+          transform: translateY(-50%) scale(0.95);
+          background: rgba(255, 255, 255, 0.35);
         }
         .viewer-toolbar {
           position: fixed;
-          bottom: 20px;
+          bottom: 30px;
           left: 50%;
-          transform: translateX(-50%);
+          transform: translateX(-50%) translateY(${showControls ? '-20px' : '0'});
           display: flex;
-          gap: 8px;
-          padding: 12px 20px;
-          background: rgba(0, 0, 0, 0.6);
-          border-radius: 16px;
-          backdrop-filter: blur(10px);
+          gap: 12px;
+          padding: 16px 24px;
+          background: rgba(0, 0, 0, 0.7);
+          border-radius: 20px;
+          backdrop-filter: blur(12px);
           z-index: 20;
-          opacity: 0;
-          transition: opacity 0.3s;
-        }
-        .viewer-gallery:hover .viewer-toolbar {
-          opacity: 1;
+          opacity: ${showControls ? 1 : 0};
+          transition: all 0.3s;
         }
         .viewer-image-container {
           position: absolute;
@@ -257,6 +378,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
+          transform: translateY(-30px);
+          transition: transform 0.3s;
         }
         .viewer-image {
           max-width: 100%;
@@ -264,30 +387,70 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           width: auto;
           height: auto;
           object-fit: contain;
-          transition: transform 0.2s ease-out;
+          transition: transform 0.15s ease-out;
+        }
+        .viewer-loading {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(0, 0, 0, 0.5);
+        }
+        .viewer-loading-spinner {
+          width: 48px;
+          height: 48px;
+          border: 3px solid rgba(255, 255, 255, 0.3);
+          border-top-color: white;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
 
-      <button className="viewer-close" onClick={handleClose} title="关闭">
-        <X size={24} />
+      <button 
+        className="viewer-close" 
+        onClick={handleClose} 
+        title="关闭"
+        style={{ width: closeBtnSize, height: closeBtnSize }}
+      >
+        <X size={isMobile ? 28 : 24} />
       </button>
 
-      <button className="viewer-nav-btn prev" onClick={goToPrev} title="上一张 (←)">
-        <ChevronLeft size={32} />
+      <button 
+        className="viewer-nav-btn prev" 
+        onClick={goToPrev} 
+        title="上一张"
+        style={{ width: navBtnSize, height: navBtnSize }}
+      >
+        <ChevronLeft size={isMobile ? 44 : 36} />
       </button>
 
-      <button className="viewer-nav-btn next" onClick={goToNext} title="下一张 (→)">
-        <ChevronRight size={32} />
+      <button 
+        className="viewer-nav-btn next" 
+        onClick={goToNext} 
+        title="下一张"
+        style={{ width: navBtnSize, height: navBtnSize }}
+      >
+        <ChevronRight size={isMobile ? 44 : 36} />
       </button>
 
       <div 
         className="viewer-image-container"
+        onClick={handleImageClick}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+        style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'pointer' }}
       >
+        {isImageLoading && (
+          <div className="viewer-loading">
+            <div className="viewer-loading-spinner" />
+          </div>
+        )}
         <img
           src={currentImage.src}
           alt={currentImage.alt}
@@ -295,6 +458,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           style={{
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
           }}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
           draggable={false}
         />
       </div>
@@ -304,17 +469,37 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       </div>
 
       <div className="viewer-toolbar">
-        <button className="viewer-btn" onClick={handleZoomOut} title="缩小">
-          <ZoomOut size={22} />
+        <button 
+          className="viewer-btn" 
+          onClick={handleZoomOut} 
+          title="缩小"
+          style={{ width: toolbarBtnSize, height: toolbarBtnSize }}
+        >
+          <ZoomOut size={isMobile ? 28 : 22} />
         </button>
-        <button className="viewer-btn" onClick={handleZoomIn} title="放大">
-          <ZoomIn size={22} />
+        <button 
+          className="viewer-btn" 
+          onClick={handleZoomIn} 
+          title="放大"
+          style={{ width: toolbarBtnSize, height: toolbarBtnSize }}
+        >
+          <ZoomIn size={isMobile ? 28 : 22} />
         </button>
-        <button className="viewer-btn" onClick={handleRotate} title="旋转">
-          <RotateCw size={22} />
+        <button 
+          className="viewer-btn" 
+          onClick={handleRotate} 
+          title="旋转"
+          style={{ width: toolbarBtnSize, height: toolbarBtnSize }}
+        >
+          <RotateCw size={isMobile ? 28 : 22} />
         </button>
-        <button className="viewer-btn" onClick={handleReset} title="重置">
-          <Maximize2 size={22} />
+        <button 
+          className="viewer-btn" 
+          onClick={handleReset} 
+          title="重置"
+          style={{ width: toolbarBtnSize, height: toolbarBtnSize }}
+        >
+          <Maximize2 size={isMobile ? 28 : 22} />
         </button>
       </div>
     </div>

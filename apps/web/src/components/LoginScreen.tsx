@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Camera, PersonStanding, Lock, Info, ArrowRight, AlertCircle } from 'lucide-react';
 import { WobblyButton } from './WobblyButton';
 import { Polaroid } from './Polaroid';
+import { useMobile } from '../hooks';
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -10,6 +11,7 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }) => {
+  const isMobile = useMobile();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);

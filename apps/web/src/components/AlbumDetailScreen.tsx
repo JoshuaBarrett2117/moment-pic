@@ -1,8 +1,8 @@
 import { type FC, useEffect, useState, useCallback, useRef } from 'react';
-import { ArrowLeft, Camera, Home, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Camera, Home, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2, Menu } from 'lucide-react';
 import { Polaroid } from './Polaroid';
 import { ViewerGallery } from './ViewerGallery';
-import { useAlbumAssets, deleteAsset } from '../hooks';
+import { useAlbumAssets, deleteAsset, useMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
 interface AlbumDetailScreenProps {
@@ -15,6 +15,7 @@ const PAGE_SIZE = 24;
 const RENDER_CHUNK_SIZE = 96;
 
 export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onAssetDeleted }) => {
+  const isMobile = useMobile();
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [loadedItems, setLoadedItems] = useState<AssetListItemDTO[]>([]);
@@ -131,62 +132,82 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
 
   return (
     <div className="flex h-screen w-full bg-surface overflow-hidden">
-      <aside className="w-[280px] bg-surface-container-low h-full flex flex-col px-6 pt-10 pb-8 z-10 relative overflow-y-auto custom-scrollbar">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-primary-container rounded-xl flex items-center justify-center -rotate-3 shadow-sm">
-            <Camera className="w-5 h-5 text-on-primary-container" />
+      {!isMobile && (
+        <aside className="w-[280px] bg-surface-container-low h-full flex flex-col px-6 pt-10 pb-8 z-10 relative overflow-y-auto custom-scrollbar">
+          <div className="flex items-center gap-3 mb-10">
+            <div className="w-10 h-10 bg-primary-container rounded-xl flex items-center justify-center -rotate-3 shadow-sm">
+              <Camera className="w-5 h-5 text-on-primary-container" />
+            </div>
+            <h1 className="text-xl font-headline font-extrabold tracking-tight text-primary">Moment Pic</h1>
           </div>
-          <h1 className="text-xl font-headline font-extrabold tracking-tight text-primary">Moment Pic</h1>
-        </div>
 
-        <div className="mb-8 flex">
-          <button
-            onClick={onBack}
-            className="bg-secondary-container text-on-secondary-container px-4 py-1.5 rounded-sm text-xs font-medium rotate-1 shadow-sm wobbly-mask flex items-center gap-1 hover:brightness-95 transition-all"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            返回首页
-          </button>
-        </div>
+          <div className="mb-8 flex">
+            <button
+              onClick={onBack}
+              className="bg-secondary-container text-on-secondary-container px-4 py-1.5 rounded-sm text-xs font-medium rotate-1 shadow-sm wobbly-mask flex items-center gap-1 hover:brightness-95 transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              返回首页
+            </button>
+          </div>
 
-        <div className="flex flex-col items-center gap-16 mt-4">
-          <Heart className="w-10 h-10 text-primary opacity-40 rotate-12 fill-primary" />
-          <Sparkles className="w-8 h-8 text-primary opacity-30 -rotate-8 self-start ml-8" />
-          <Leaf className="w-6 h-6 text-primary opacity-40 rotate-6 self-end mr-8" />
-        </div>
+          <div className="flex flex-col items-center gap-16 mt-4">
+            <Heart className="w-10 h-10 text-primary opacity-40 rotate-12 fill-primary" />
+            <Sparkles className="w-8 h-8 text-primary opacity-30 -rotate-8 self-start ml-8" />
+            <Leaf className="w-6 h-6 text-primary opacity-40 rotate-6 self-end mr-8" />
+          </div>
 
-        <div className="mt-auto opacity-20 text-primary self-center">
-          <PenTool className="w-12 h-12 -rotate-12" />
-        </div>
+          <div className="mt-auto opacity-20 text-primary self-center">
+            <PenTool className="w-12 h-12 -rotate-12" />
+          </div>
 
-        <div className="mt-auto bg-tertiary-container p-6 rounded-2xl -rotate-2 shadow-sm relative wobbly-mask">
-          <Paperclip className="absolute -top-3 right-4 text-outline rotate-12 w-5 h-5" />
-          {assets?.album ? (
-            <>
-              <p className="text-sm font-medium text-on-tertiary-container leading-relaxed">
-                共 {assets.album.assetCount} 张图片
-              </p>
-              <p className="text-[10px] mt-2 text-on-tertiary-container/60">
-                已加载 {loadedItems.length} 张
-              </p>
-              <p className="text-[10px] mt-1 text-on-tertiary-container/60">
-                更新于 {new Date(assets.album.updatedAt || Date.now()).toLocaleDateString('zh-CN')}
-              </p>
-            </>
-          ) : (
-            <p className="text-sm font-medium text-on-tertiary-container leading-relaxed">加载中...</p>
-          )}
-        </div>
-      </aside>
+          <div className="mt-auto bg-tertiary-container p-6 rounded-2xl -rotate-2 shadow-sm relative wobbly-mask">
+            <Paperclip className="absolute -top-3 right-4 text-outline rotate-12 w-5 h-5" />
+            {assets?.album ? (
+              <>
+                <p className="text-sm font-medium text-on-tertiary-container leading-relaxed">
+                  共 {assets.album.assetCount} 张图片
+                </p>
+                <p className="text-[10px] mt-2 text-on-tertiary-container/60">
+                  已加载 {loadedItems.length} 张
+                </p>
+                <p className="text-[10px] mt-1 text-on-tertiary-container/60">
+                  更新于 {new Date(assets.album.updatedAt || Date.now()).toLocaleDateString('zh-CN')}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm font-medium text-on-tertiary-container leading-relaxed">加载中...</p>
+            )}
+          </div>
+        </aside>
+      )}
 
-      <main className="flex-1 flex flex-col h-full bg-surface relative">
-        <header className="h-32 flex flex-col justify-center px-12 pt-8">
-          <h2 className="text-4xl font-headline font-extrabold text-on-surface tracking-tight">
-            {assets?.album?.name || albumId} - 相册详情
-          </h2>
-        </header>
+      <main className={`flex-1 flex flex-col h-full bg-surface relative ${isMobile ? 'w-full' : ''}`}>
+        {isMobile && (
+          <header className="h-16 flex items-center justify-between px-4 pt-4 bg-surface/80 backdrop-blur-sm border-b border-outline/10">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1 text-outline hover:text-on-surface transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="text-sm">返回</span>
+            </button>
+            <h2 className="text-lg font-headline font-bold text-on-surface tracking-tight truncate max-w-[200px]">
+              {assets?.album?.name || albumId}
+            </h2>
+            <div className="w-16" />
+          </header>
+        )}
+        
+        {!isMobile && (
+          <header className="h-32 flex flex-col justify-center px-12 pt-8">
+            <h2 className="text-4xl font-headline font-extrabold text-on-surface tracking-tight">
+              {assets?.album?.name || albumId} - 相册详情
+            </h2>
+          </header>
+        )}
 
-        <section ref={scrollContainerRef} className="flex-1 overflow-y-auto px-12 py-8 custom-scrollbar scroll-smooth">
+        <section ref={scrollContainerRef} className="flex-1 overflow-y-auto md:px-12 px-4 md:py-8 py-4 custom-scrollbar scroll-smooth">
           {isLoading && loadedItems.length === 0 ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-12 h-12 animate-spin text-outline" />
@@ -236,7 +257,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           )}
         </section>
 
-        <footer className="h-20 px-12 border-t-2 border-outline/5 flex items-center justify-between bg-surface/50 backdrop-blur-sm z-10">
+        <footer className="hidden md:flex h-20 px-12 border-t-2 border-outline/5 flex items-center justify-between bg-surface/50 backdrop-blur-sm z-10">
           <div className="flex items-center gap-3 text-outline-variant/80">
             <Paperclip className="w-4 h-4" />
             <code className="text-xs font-medium tracking-tight">/Volume1/pb1/{albumId}/moments/</code>

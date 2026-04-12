@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:24-noble-slim AS web-builder
+FROM node:20-noble-slim AS web-builder
 WORKDIR /app/web
 
 COPY apps/web/package.json apps/web/package-lock.json ./
@@ -12,7 +12,7 @@ COPY apps/web/src ./src
 RUN npm run build
 
 # Stage 2: Build backend
-FROM node:24-noble-slim AS builder
+FROM node:20-noble-slim AS builder
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
@@ -30,7 +30,7 @@ WORKDIR /app/apps/server
 RUN npx prisma generate && npx tsc -p tsconfig.json
 
 # Stage 3: Production image
-FROM node:24-noble-slim
+FROM node:20-noble-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends libvips42 && rm -rf /var/lib/apt/lists/*

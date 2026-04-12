@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { ImageOff } from 'lucide-react';
+import { ThrottledImage } from './ThrottledImage';
 
 interface PolaroidProps {
   src: string;
@@ -37,13 +38,11 @@ export const Polaroid: React.FC<PolaroidProps> = ({
             <span className="text-xs font-medium tracking-wide">预览不可用</span>
           </div>
         ) : (
-          <img 
+          <ThrottledImage
             src={src} 
             alt={alt} 
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover"
-            loading="lazy"
-            decoding="async"
             onError={() => setHasError(true)}
           />
         )}

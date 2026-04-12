@@ -17,6 +17,7 @@ export type AlbumRecord = {
   sourceType: SourceType;
   sourcePath: string;
   sourceMtime: string | null;
+  assetsFingerprint: string | null;
   coverAssetId: string | null;
   assetCount: number;
   scanStatus: "ready" | "error";

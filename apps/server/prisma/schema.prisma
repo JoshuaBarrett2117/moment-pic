@@ -43,6 +43,7 @@ model Album {
   sourceType    SourceType
   sourcePath    String      @unique
   sourceMtime   String?
+  assetsFingerprint String? @map("assets_fingerprint")
   coverAssetId  String?
   assetCount    Int         @default(0)
   scanStatus    ScanStatus  @default(ready)
@@ -103,8 +104,10 @@ model Thumbnail {
 
 model SystemConfig {
   id               String   @id @default("system_config")
-  enablePolling    Boolean  @default(false)
+  enablePolling    Boolean  @default(true)
   pollingInterval  Int      @default(60000)
+  preloadBefore    Int      @default(2)
+  preloadAfter     Int      @default(3)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

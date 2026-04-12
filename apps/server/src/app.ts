@@ -1,7 +1,7 @@
 import Fastify from "fastify";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import fastifyStatic from "@fastify/static";
 
 import { env } from "./config/env.js";
 import { isAuthenticated } from "./lib/auth.js";
@@ -17,18 +17,26 @@ import { wsService } from "./services/websocket-service.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(env.publicDir);
 
-const publicRoutes = new Set([
-  "/",
-  "/index.html",
-  "/api/v1/auth/login",
-  "/api/v1/auth/logout",
-  "/api/v1/health",
-  "/favicon.ico"
-]);
-
 const getPathname = (url: string): string => {
   const queryIndex = url.indexOf("?");
   return queryIndex >= 0 ? url.slice(0, queryIndex) : url;
+};
+
+const appendUtf8Charset = (contentType: string): string => {
+  if (/;\s*charset=/i.test(contentType)) {
+    return contentType;
+  }
+
+  const normalized = contentType.toLowerCase();
+  const shouldForceUtf8 =
+    normalized.startsWith("text/") ||
+    normalized.startsWith("application/json") ||
+    normalized.startsWith("application/javascript") ||
+    normalized.startsWith("text/javascript") ||
+    normalized.startsWith("application/xml") ||
+    normalized.startsWith("image/svg+xml");
+
+  return shouldForceUtf8 ? `${contentType}; charset=utf-8` : contentType;
 };
 
 export const buildApp = () => {
@@ -37,11 +45,22 @@ export const buildApp = () => {
   });
 
   app.decorate("config", env);
-  app.decorate("readFile", fs.readFile);
 
   wsService.initialize(app);
 
   app.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (origin) {
+      reply.header("Access-Control-Allow-Origin", origin);
+      reply.header("Access-Control-Allow-Credentials", "true");
+      reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    }
+
+    if (request.method === "OPTIONS") {
+      return reply.status(200).send();
+    }
+
     const pathname = getPathname(request.url);
 
     if (pathname === "/ws") {
@@ -69,42 +88,35 @@ export const buildApp = () => {
   app.register(scanRoutes);
   app.register(libraryRootRoutes);
   app.register(systemConfigRoutes);
+  app.register(fastifyStatic, {
+    root: PUBLIC_DIR,
+    prefix: "/",
+    index: ["index.html"],
+    wildcard: false,
+    setHeaders: (res, filePath) => {
+      const currentTypeHeader = res.getHeader("Content-Type");
+      const currentType = Array.isArray(currentTypeHeader)
+        ? String(currentTypeHeader[0] ?? "")
+        : String(currentTypeHeader ?? "");
+      if (!currentType) {
+        return;
+      }
 
-  app.get("/*", async (request, reply) => {
+      const nextType = appendUtf8Charset(currentType);
+      if (nextType !== currentType) {
+        res.setHeader("Content-Type", nextType);
+      }
+    }
+  });
+
+  app.setNotFoundHandler(async (request, reply) => {
     const pathname = getPathname(request.url);
-    
+
     if (pathname.startsWith("/api/") || pathname.startsWith("/ws")) {
       return reply.status(404).send({ error: "Not Found" });
     }
-    
-    const filePath = path.join(PUBLIC_DIR, pathname === "/" ? "index.html" : pathname);
-    
-    try {
-      const stat = await fs.stat(filePath);
-      if (stat.isDirectory()) {
-        const indexPath = path.join(filePath, "index.html");
-        const content = await fs.readFile(indexPath);
-        return reply.type("text/html").send(content);
-      }
-      const content = await fs.readFile(filePath);
-      const ext = path.extname(filePath);
-      const contentTypes: Record<string, string> = {
-        ".html": "text/html",
-        ".js": "application/javascript",
-        ".css": "text/css",
-        ".json": "application/json",
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".svg": "image/svg+xml",
-        ".ico": "image/x-icon"
-      };
-      const contentType = contentTypes[ext] || "application/octet-stream";
-      return reply.type(contentType).send(content);
-    } catch {
-      const indexPath = path.join(PUBLIC_DIR, "index.html");
-      const content = await fs.readFile(indexPath);
-      return reply.type("text/html").send(content);
-    }
+
+    return reply.type("text/html; charset=utf-8").sendFile("index.html");
   });
 
   return app;

@@ -13,6 +13,37 @@ const DEFAULT_THUMBNAIL_HEIGHT = 360;
 const MIN_THUMBNAIL_SIZE = 80;
 const MAX_THUMBNAIL_SIZE = 720;
 type ThumbnailFormat = "webp" | "jpeg";
+const THUMBNAIL_GENERATION_CONCURRENCY = 6;
+const inFlightThumbnailTasks = new Map<string, Promise<{
+  filePath: string;
+  mimeType: string;
+  cacheKey: string;
+  width: number;
+  height: number;
+  format: ThumbnailFormat;
+}>>();
+const dimensionSyncedAssetIds = new Set<string>();
+let activeGenerationCount = 0;
+const generationWaitQueue: Array<() => void> = [];
+
+const withGenerationSlot = async <T>(fn: () => Promise<T>): Promise<T> => {
+  if (activeGenerationCount >= THUMBNAIL_GENERATION_CONCURRENCY) {
+    await new Promise<void>((resolve) => {
+      generationWaitQueue.push(resolve);
+    });
+  }
+
+  activeGenerationCount += 1;
+  try {
+    return await fn();
+  } finally {
+    activeGenerationCount = Math.max(0, activeGenerationCount - 1);
+    const next = generationWaitQueue.shift();
+    if (next) {
+      next();
+    }
+  }
+};
 
 const ensureCacheDir = async () => {
   await fs.promises.mkdir(env.cacheDir, { recursive: true });
@@ -49,6 +80,59 @@ const resolveThumbnailFormat = (format?: string): ThumbnailFormat => {
   return format === "webp" ? "webp" : "jpeg";
 };
 
+const hasValidDimension = (value: number | null | undefined): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0;
+
+const normalizeMetadataDimensions = (metadata: sharp.Metadata): { width: number | null; height: number | null } => {
+  const rawWidth = hasValidDimension(metadata.width) ? metadata.width : null;
+  const rawHeight = hasValidDimension(metadata.height) ? metadata.height : null;
+
+  if (!rawWidth || !rawHeight) {
+    return { width: null, height: null };
+  }
+
+  const orientation = metadata.orientation ?? 1;
+  if (orientation >= 5 && orientation <= 8) {
+    return {
+      width: rawHeight,
+      height: rawWidth
+    };
+  }
+
+  return {
+    width: rawWidth,
+    height: rawHeight
+  };
+};
+
+const syncAssetDimensions = async (input: {
+  asset: ReturnType<typeof findAssetByIdDb> extends infer T ? (T extends null ? never : T) : never;
+  buffer?: Buffer;
+}) => {
+  const { asset } = input;
+  if (dimensionSyncedAssetIds.has(asset.id)) {
+    return;
+  }
+
+  const sourceBuffer = input.buffer ?? (await readOriginalBuffer(asset.id)).buffer;
+  const metadata = await sharp(sourceBuffer, { animated: true }).metadata();
+  const normalized = normalizeMetadataDimensions(metadata);
+  if (!normalized.width || !normalized.height) {
+    return;
+  }
+
+  if (asset.width !== normalized.width || asset.height !== normalized.height) {
+    updateAssetMetadataDb(asset.id, {
+      width: normalized.width,
+      height: normalized.height,
+      thumbnailKey: asset.thumbnailKey,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  dimensionSyncedAssetIds.add(asset.id);
+};
+
 const readOriginalBuffer = async (assetId: string) => {
   const asset = findAssetByIdDb(assetId);
 
@@ -69,6 +153,166 @@ const readOriginalBuffer = async (assetId: string) => {
   };
 };
 
+const ensureThumbnailWithResolvedInput = async (input: {
+  assetId: string;
+  width: number;
+  height: number;
+  format: ThumbnailFormat;
+  cacheKey: string;
+}) => {
+  const asset = findAssetByIdDb(input.assetId);
+  if (!asset) {
+    throw new Error("asset not found");
+  }
+
+  const isDefaultSize = input.width === DEFAULT_THUMBNAIL_WIDTH && input.height === DEFAULT_THUMBNAIL_HEIGHT;
+  const canUseDbRecord = isDefaultSize && input.format === "jpeg";
+  const fileExt = input.format === "webp" ? "webp" : "jpg";
+  const filePath = path.join(env.cacheDir, `${input.cacheKey}.${fileExt}`);
+  const existing = canUseDbRecord ? findThumbnailByAssetIdDb(asset.id) : null;
+
+  if (existing?.cacheKey === input.cacheKey) {
+    try {
+      await fs.promises.access(existing.filePath, fs.constants.F_OK);
+      await syncAssetDimensions({ asset });
+      return {
+        filePath: existing.filePath,
+        mimeType: input.format === "webp" ? "image/webp" : "image/jpeg",
+        cacheKey: input.cacheKey,
+        width: input.width,
+        height: input.height,
+        format: input.format
+      };
+    } catch {
+      // no-op
+    }
+  }
+
+  try {
+    await fs.promises.access(filePath, fs.constants.F_OK);
+    await syncAssetDimensions({ asset });
+    if (canUseDbRecord && existing?.cacheKey !== input.cacheKey) {
+      const updatedAt = new Date().toISOString();
+      updateAssetMetadataDb(asset.id, {
+        width: asset.width,
+        height: asset.height,
+        thumbnailKey: input.cacheKey,
+        updatedAt
+      });
+      upsertThumbnailDb({
+        id: existing?.id ?? makeId("thumb"),
+        assetId: asset.id,
+        cacheKey: input.cacheKey,
+        format: "jpeg",
+        width: DEFAULT_THUMBNAIL_WIDTH,
+        height: DEFAULT_THUMBNAIL_HEIGHT,
+        filePath,
+        status: "ready",
+        createdAt: existing?.createdAt ?? updatedAt,
+        updatedAt
+      });
+    }
+    return {
+      filePath,
+      mimeType: input.format === "webp" ? "image/webp" : "image/jpeg",
+      cacheKey: input.cacheKey,
+      width: input.width,
+      height: input.height,
+      format: input.format
+    };
+  } catch {
+    // no-op
+  }
+
+  return withGenerationSlot(async () => {
+    try {
+      await fs.promises.access(filePath, fs.constants.F_OK);
+      return {
+        filePath,
+        mimeType: input.format === "webp" ? "image/webp" : "image/jpeg",
+        cacheKey: input.cacheKey,
+        width: input.width,
+        height: input.height,
+        format: input.format
+      };
+    } catch {
+      // no-op
+    }
+
+    const { buffer } = await readOriginalBuffer(input.assetId);
+    await syncAssetDimensions({ asset, buffer });
+    let finalFormat: ThumbnailFormat = input.format;
+    let finalFilePath = filePath;
+    let finalCacheKey = input.cacheKey;
+    try {
+      const pipeline = sharp(buffer, { animated: true }).resize(input.width, input.height, {
+        fit: "cover",
+        position: "centre"
+      });
+      if (input.format === "webp") {
+        await pipeline.webp({ quality: 80 }).toFile(filePath);
+      } else {
+        await pipeline.jpeg({ quality: 82 }).toFile(filePath);
+      }
+    } catch (error) {
+      if (input.format !== "webp") {
+        throw error;
+      }
+      finalFormat = "jpeg";
+      finalCacheKey = buildCacheKey({
+        sourcePath: asset.sourcePath,
+        zipEntryPath: asset.zipEntryPath,
+        sourceMtime: asset.sourceMtime,
+        width: input.width,
+        height: input.height,
+        format: "jpeg"
+      });
+      finalFilePath = path.join(env.cacheDir, `${finalCacheKey}.jpg`);
+      await sharp(buffer, { animated: true })
+        .resize(input.width, input.height, {
+          fit: "cover",
+          position: "centre"
+        })
+        .jpeg({ quality: 82 })
+        .toFile(finalFilePath);
+    }
+
+    if (canUseDbRecord) {
+      const metadata = await sharp(buffer, { animated: true }).metadata();
+      const normalized = normalizeMetadataDimensions(metadata);
+      const updatedAt = new Date().toISOString();
+      updateAssetMetadataDb(asset.id, {
+        width: normalized.width,
+        height: normalized.height,
+        thumbnailKey: finalCacheKey,
+        updatedAt
+      });
+
+      upsertThumbnailDb({
+        id: existing?.id ?? makeId("thumb"),
+        assetId: asset.id,
+        cacheKey: finalCacheKey,
+        format: "jpeg",
+        width: DEFAULT_THUMBNAIL_WIDTH,
+        height: DEFAULT_THUMBNAIL_HEIGHT,
+        filePath: finalFilePath,
+        status: "ready",
+        createdAt: existing?.createdAt ?? updatedAt,
+        updatedAt
+      });
+    }
+
+    return {
+      filePath: finalFilePath,
+      mimeType: finalFormat === "webp" ? "image/webp" : "image/jpeg",
+      cacheKey: finalCacheKey,
+      width: input.width,
+      height: input.height,
+      format: finalFormat
+    };
+  });
+};
+
 export const ensureThumbnail = async (
   assetId: string,
   input?: {
@@ -85,8 +329,6 @@ export const ensureThumbnail = async (
 
   const { width, height } = resolveThumbnailSize(input);
   const format = resolveThumbnailFormat(input?.format);
-  const isDefaultSize = width === DEFAULT_THUMBNAIL_WIDTH && height === DEFAULT_THUMBNAIL_HEIGHT;
-  const canUseDbRecord = isDefaultSize && format === "jpeg";
   const cacheKey = buildCacheKey({
     sourcePath: asset.sourcePath,
     zipEntryPath: asset.zipEntryPath,
@@ -95,132 +337,24 @@ export const ensureThumbnail = async (
     height,
     format
   });
-  const fileExt = format === "webp" ? "webp" : "jpg";
-  const filePath = path.join(env.cacheDir, `${cacheKey}.${fileExt}`);
-  const existing = canUseDbRecord ? findThumbnailByAssetIdDb(asset.id) : null;
-
-  // Prefer on-disk cache hit and skip expensive source image decoding.
-  if (existing?.cacheKey === cacheKey) {
-    try {
-      await fs.promises.access(existing.filePath, fs.constants.F_OK);
-      return {
-        filePath: existing.filePath,
-        mimeType: format === "webp" ? "image/webp" : "image/jpeg",
-        cacheKey,
-        width,
-        height,
-        format
-      };
-    } catch {
-      // fall through and regenerate when cache entry is stale
-    }
+  const dedupeKey = cacheKey;
+  const inFlight = inFlightThumbnailTasks.get(dedupeKey);
+  if (inFlight) {
+    return inFlight;
   }
 
-  try {
-    await fs.promises.access(filePath, fs.constants.F_OK);
-    if (canUseDbRecord && existing?.cacheKey !== cacheKey) {
-      const updatedAt = new Date().toISOString();
-      updateAssetMetadataDb(asset.id, {
-        width: asset.width,
-        height: asset.height,
-        thumbnailKey: cacheKey,
-        updatedAt
-      });
-      upsertThumbnailDb({
-        id: existing?.id ?? makeId("thumb"),
-        assetId: asset.id,
-        cacheKey,
-        format: "jpeg",
-        width: DEFAULT_THUMBNAIL_WIDTH,
-        height: DEFAULT_THUMBNAIL_HEIGHT,
-        filePath,
-        status: "ready",
-        createdAt: existing?.createdAt ?? updatedAt,
-        updatedAt
-      });
-    }
-    return {
-      filePath,
-      mimeType: format === "webp" ? "image/webp" : "image/jpeg",
-      cacheKey,
-      width,
-      height,
-      format
-    };
-  } catch {
-    // fall through and generate thumbnail from source
-  }
-
-  const { buffer } = await readOriginalBuffer(assetId);
-  let finalFormat: ThumbnailFormat = format;
-  let finalFilePath = filePath;
-  let finalCacheKey = cacheKey;
-  try {
-    const pipeline = sharp(buffer, { animated: true }).resize(width, height, {
-      fit: "cover",
-      position: "centre"
-    });
-    if (format === "webp") {
-      await pipeline.webp({ quality: 80 }).toFile(filePath);
-    } else {
-      await pipeline.jpeg({ quality: 82 }).toFile(filePath);
-    }
-  } catch (error) {
-    if (format !== "webp") {
-      throw error;
-    }
-    // Fallback to jpeg when webp generation fails for rare image types.
-    finalFormat = "jpeg";
-    finalCacheKey = buildCacheKey({
-      sourcePath: asset.sourcePath,
-      zipEntryPath: asset.zipEntryPath,
-      sourceMtime: asset.sourceMtime,
-      width,
-      height,
-      format: "jpeg"
-    });
-    finalFilePath = path.join(env.cacheDir, `${finalCacheKey}.jpg`);
-    await sharp(buffer, { animated: true })
-      .resize(width, height, {
-        fit: "cover",
-        position: "centre"
-      })
-      .jpeg({ quality: 82 })
-      .toFile(finalFilePath);
-  }
-
-  if (canUseDbRecord) {
-    const metadata = await sharp(buffer, { animated: true }).metadata();
-    const updatedAt = new Date().toISOString();
-    updateAssetMetadataDb(asset.id, {
-      width: metadata.width ?? null,
-      height: metadata.height ?? null,
-      thumbnailKey: finalCacheKey,
-      updatedAt
-    });
-
-    upsertThumbnailDb({
-      id: existing?.id ?? makeId("thumb"),
-      assetId: asset.id,
-      cacheKey: finalCacheKey,
-      format: "jpeg",
-      width: DEFAULT_THUMBNAIL_WIDTH,
-      height: DEFAULT_THUMBNAIL_HEIGHT,
-      filePath: finalFilePath,
-      status: "ready",
-      createdAt: existing?.createdAt ?? updatedAt,
-      updatedAt
-    });
-  }
-
-  return {
-    filePath: finalFilePath,
-    mimeType: finalFormat === "webp" ? "image/webp" : "image/jpeg",
-    cacheKey: finalCacheKey,
+  const task = ensureThumbnailWithResolvedInput({
+    assetId,
     width,
     height,
-    format: finalFormat
-  };
+    format,
+    cacheKey
+  }).finally(() => {
+    inFlightThumbnailTasks.delete(dedupeKey);
+  });
+
+  inFlightThumbnailTasks.set(dedupeKey, task);
+  return task;
 };
 
 export const readOriginalImage = async (assetId: string) => {

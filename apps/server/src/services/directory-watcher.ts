@@ -1,5 +1,4 @@
 import chokidar, { FSWatcher } from "chokidar";
-import path from "node:path";
 
 import { listExistingLibraryRoots } from "./library-scanner.js";
 import { scanLibrary } from "./library-scanner.js";
@@ -21,7 +20,8 @@ type WatchCallback = (event: FileChangeEvent) => void;
 class DirectoryWatcherService {
   private watchers: Map<string, FSWatcher> = new Map();
   private callbacks: Set<WatchCallback> = new Set();
-  private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  private debounceTimersByRoot: Map<string, NodeJS.Timeout> = new Map();
+  private incrementalScanStates: Map<string, { running: boolean; pending: boolean }> = new Map();
   private readonly DEBOUNCE_MS = 2000;
 
   async startWatching(libraryRootId?: string): Promise<void> {
@@ -68,30 +68,28 @@ class DirectoryWatcherService {
       const watcher = chokidar.watch(root.path, watcherOptions);
 
       watcher
-        .on("add", (filePath) => this.handleFileEvent("add", filePath, root.id, root.path))
-        .on("change", (filePath) => this.handleFileEvent("change", filePath, root.id, root.path))
-        .on("unlink", (filePath) => this.handleFileEvent("unlink", filePath, root.id, root.path))
-        .on("addDir", (dirPath) => this.handleFileEvent("add", dirPath, root.id, root.path))
-        .on("unlinkDir", (dirPath) => this.handleFileEvent("unlink", dirPath, root.id, root.path));
+        .on("add", (filePath) => this.handleFileEvent("add", filePath, root.id))
+        .on("change", (filePath) => this.handleFileEvent("change", filePath, root.id))
+        .on("unlink", (filePath) => this.handleFileEvent("unlink", filePath, root.id))
+        .on("addDir", (dirPath) => this.handleFileEvent("add", dirPath, root.id))
+        .on("unlinkDir", (dirPath) => this.handleFileEvent("unlink", dirPath, root.id));
 
       this.watchers.set(root.id, watcher);
     }
   }
 
-  private handleFileEvent(type: WatchEventType, filePath: string, libraryRootId: string, rootPath: string): void {
-    const key = `${libraryRootId}:${filePath}`;
-
-    const existingTimer = this.debounceTimers.get(key);
+  private handleFileEvent(type: WatchEventType, filePath: string, libraryRootId: string): void {
+    const existingTimer = this.debounceTimersByRoot.get(libraryRootId);
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
 
     const timer = setTimeout(() => {
-      this.debounceTimers.delete(key);
-      this.triggerIncrementalScan(libraryRootId);
+      this.debounceTimersByRoot.delete(libraryRootId);
+      this.queueIncrementalScan(libraryRootId);
     }, this.DEBOUNCE_MS);
 
-    this.debounceTimers.set(key, timer);
+    this.debounceTimersByRoot.set(libraryRootId, timer);
 
     const event: FileChangeEvent = {
       type,
@@ -104,7 +102,26 @@ class DirectoryWatcherService {
     wsService.sendFileChange(event);
   }
 
-  private async triggerIncrementalScan(libraryRootId: string): Promise<void> {
+  private queueIncrementalScan(libraryRootId: string): void {
+    const state = this.incrementalScanStates.get(libraryRootId) ?? {
+      running: false,
+      pending: false
+    };
+
+    if (state.running) {
+      state.pending = true;
+      this.incrementalScanStates.set(libraryRootId, state);
+      return;
+    }
+
+    this.incrementalScanStates.set(libraryRootId, {
+      running: true,
+      pending: false
+    });
+    void this.runIncrementalScan(libraryRootId);
+  }
+
+  private async runIncrementalScan(libraryRootId: string): Promise<void> {
     try {
       const result = await scanLibrary({ libraryRootId });
       const event: FileChangeEvent = {
@@ -122,6 +139,25 @@ class DirectoryWatcherService {
       });
     } catch (error) {
       console.error(`[DirectoryWatcher] Incremental scan failed for ${libraryRootId}:`, error);
+    } finally {
+      const state = this.incrementalScanStates.get(libraryRootId);
+      if (!state) {
+        return;
+      }
+
+      if (state.pending) {
+        this.incrementalScanStates.set(libraryRootId, {
+          running: true,
+          pending: false
+        });
+        void this.runIncrementalScan(libraryRootId);
+        return;
+      }
+
+      this.incrementalScanStates.set(libraryRootId, {
+        running: false,
+        pending: false
+      });
     }
   }
 
@@ -132,6 +168,12 @@ class DirectoryWatcherService {
         watcher.close();
         this.watchers.delete(libraryRootId);
       }
+      const timer = this.debounceTimersByRoot.get(libraryRootId);
+      if (timer) {
+        clearTimeout(timer);
+      }
+      this.debounceTimersByRoot.delete(libraryRootId);
+      this.incrementalScanStates.delete(libraryRootId);
       return;
     }
 
@@ -140,10 +182,11 @@ class DirectoryWatcherService {
     }
     this.watchers.clear();
 
-    for (const timer of this.debounceTimers.values()) {
+    for (const timer of this.debounceTimersByRoot.values()) {
       clearTimeout(timer);
     }
-    this.debounceTimers.clear();
+    this.debounceTimersByRoot.clear();
+    this.incrementalScanStates.clear();
   }
 
   async restartWatching(): Promise<void> {

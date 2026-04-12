@@ -7,7 +7,7 @@ interface UseSystemConfigReturn {
   isLoading: boolean;
   error: string | null;
   fetchSystemConfig: () => Promise<void>;
-  updateSystemConfig: (updates: { enablePolling?: boolean; pollingInterval?: number }) => Promise<SystemConfigDTO | null>;
+  updateSystemConfig: (updates: { enablePolling?: boolean; pollingInterval?: number; preloadBefore?: number; preloadAfter?: number }) => Promise<SystemConfigDTO | null>;
 }
 
 export function useSystemConfig(): UseSystemConfigReturn {
@@ -28,7 +28,7 @@ export function useSystemConfig(): UseSystemConfigReturn {
     }
   }, []);
 
-  const updateSystemConfig = useCallback(async (updates: { enablePolling?: boolean; pollingInterval?: number }): Promise<SystemConfigDTO | null> => {
+  const updateSystemConfig = useCallback(async (updates: { enablePolling?: boolean; pollingInterval?: number; preloadBefore?: number; preloadAfter?: number }): Promise<SystemConfigDTO | null> => {
     setError(null);
     try {
       const result = await api.patch<SystemConfigDTO>('/system-config', updates);

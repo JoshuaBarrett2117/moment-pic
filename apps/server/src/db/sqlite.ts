@@ -31,6 +31,7 @@ const bootstrap = (db: Database.Database) => {
       source_type TEXT NOT NULL,
       source_path TEXT NOT NULL UNIQUE,
       source_mtime TEXT,
+      assets_fingerprint TEXT,
       cover_asset_id TEXT,
       asset_count INTEGER NOT NULL,
       scan_status TEXT NOT NULL,
@@ -73,14 +74,14 @@ const bootstrap = (db: Database.Database) => {
 
     CREATE TABLE IF NOT EXISTS system_config (
       id TEXT PRIMARY KEY DEFAULT 'system_config',
-      enable_polling INTEGER NOT NULL DEFAULT 0,
+      enable_polling INTEGER NOT NULL DEFAULT 1,
       polling_interval INTEGER NOT NULL DEFAULT 60000,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
     INSERT OR IGNORE INTO system_config (id, enable_polling, polling_interval, created_at, updated_at)
-    VALUES ('system_config', 0, 60000, datetime('now'), datetime('now'));
+    VALUES ('system_config', 1, 60000, datetime('now'), datetime('now'));
 
     CREATE INDEX IF NOT EXISTS idx_albums_library_root_id ON albums (library_root_id);
     CREATE INDEX IF NOT EXISTS idx_albums_name ON albums (name);
@@ -89,6 +90,25 @@ const bootstrap = (db: Database.Database) => {
     CREATE INDEX IF NOT EXISTS idx_assets_album_sort ON assets (album_id, sort_index);
     CREATE INDEX IF NOT EXISTS idx_assets_thumbnail_key ON assets (thumbnail_key);
   `);
+
+  try {
+    db.exec('ALTER TABLE system_config ADD COLUMN preload_before INTEGER NOT NULL DEFAULT 2');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE system_config ADD COLUMN preload_after INTEGER NOT NULL DEFAULT 3');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE albums ADD COLUMN assets_fingerprint TEXT');
+  } catch (e) {}
+
+  try {
+    const existingConfig = db.prepare("SELECT preload_before, preload_after FROM system_config WHERE id = 'system_config'").get() as { preload_before: number; preload_after: number } | undefined;
+    if (existingConfig) {
+      if (existingConfig.preload_before === 0 && existingConfig.preload_after === 0) {
+        db.prepare("UPDATE system_config SET preload_before = 2, preload_after = 3 WHERE id = 'system_config'").run();
+      }
+    }
+  } catch (e) {}
 };
 
 export const getDb = () => {

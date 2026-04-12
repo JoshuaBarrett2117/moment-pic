@@ -22,12 +22,14 @@ interface SettingsScreenProps {
   onBack: () => void;
 }
 
-const VIEWER_PRELOAD_RADIUS_KEY = 'moment_pic_viewer_preload_radius';
-const DEFAULT_VIEWER_PRELOAD_RADIUS = 10;
+const VIEWER_PRELOAD_BEFORE_KEY = 'moment_pic_viewer_preload_before';
+const VIEWER_PRELOAD_AFTER_KEY = 'moment_pic_viewer_preload_after';
+const DEFAULT_PRELOAD_BEFORE = 2;
+const DEFAULT_PRELOAD_AFTER = 3;
 
 const clampPreloadRadius = (value: number): number => {
   if (!Number.isFinite(value)) {
-    return DEFAULT_VIEWER_PRELOAD_RADIUS;
+    return 0;
   }
 
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -41,7 +43,8 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
   const [newPath, setNewPath] = useState('');
   const [newName, setNewName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [viewerPreloadRadius, setViewerPreloadRadius] = useState(DEFAULT_VIEWER_PRELOAD_RADIUS);
+  const [preloadBefore, setPreloadBefore] = useState(DEFAULT_PRELOAD_BEFORE);
+  const [preloadAfter, setPreloadAfter] = useState(DEFAULT_PRELOAD_AFTER);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingPath, setEditingPath] = useState('');
@@ -58,9 +61,16 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
   const isAnyScanning = scanningLibraryRootIds.size > 0;
 
   useEffect(() => {
-    const savedValue = window.localStorage.getItem(VIEWER_PRELOAD_RADIUS_KEY);
-    setViewerPreloadRadius(clampPreloadRadius(Number(savedValue ?? DEFAULT_VIEWER_PRELOAD_RADIUS)));
-  }, []);
+    if (systemConfig) {
+      setPreloadBefore(clampPreloadRadius(systemConfig.preloadBefore));
+      setPreloadAfter(clampPreloadRadius(systemConfig.preloadAfter));
+    } else {
+      const savedBefore = window.localStorage.getItem(VIEWER_PRELOAD_BEFORE_KEY);
+      const savedAfter = window.localStorage.getItem(VIEWER_PRELOAD_AFTER_KEY);
+      setPreloadBefore(clampPreloadRadius(Number(savedBefore ?? DEFAULT_PRELOAD_BEFORE)));
+      setPreloadAfter(clampPreloadRadius(Number(savedAfter ?? DEFAULT_PRELOAD_AFTER)));
+    }
+  }, [systemConfig]);
 
   const handleAddRoot = async () => {
     if (!newPath.trim()) {
@@ -106,10 +116,15 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
     setEditingPath('');
   };
 
-  const handleViewerPreloadRadiusChange = (value: string) => {
+  const handleViewerPreloadRadiusChange = (value: string, type: 'before' | 'after') => {
     const nextValue = clampPreloadRadius(Number(value));
-    setViewerPreloadRadius(nextValue);
-    window.localStorage.setItem(VIEWER_PRELOAD_RADIUS_KEY, String(nextValue));
+    if (type === 'before') {
+      setPreloadBefore(nextValue);
+      window.localStorage.setItem(VIEWER_PRELOAD_BEFORE_KEY, String(nextValue));
+    } else {
+      setPreloadAfter(nextValue);
+      window.localStorage.setItem(VIEWER_PRELOAD_AFTER_KEY, String(nextValue));
+    }
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -186,19 +201,51 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="font-bold text-on-surface">图片预加载张数</p>
-                      <p className="mt-1 text-sm text-outline">查看大图时，预先准备当前图片前后相邻的图片数量</p>
+                      <p className="mt-1 text-sm text-outline">查看大图时，预先加载当前图片前后相邻的图片数量</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={viewerPreloadRadius}
-                        onChange={(event) => handleViewerPreloadRadiusChange(event.target.value)}
-                        className="w-24 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary"
-                      />
-                      <span className="text-sm text-outline">张</span>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-outline">前</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={preloadBefore}
+                          onChange={(event) => handleViewerPreloadRadiusChange(event.target.value, 'before')}
+                          onBlur={async () => {
+                            if (systemConfig) {
+                              setIsSavingConfig(true);
+                              await updateSystemConfig({ preloadBefore });
+                              setIsSavingConfig(false);
+                            }
+                          }}
+                          disabled={isSavingConfig}
+                          className="w-20 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                        />
+                        <span className="text-sm text-outline">张</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-outline">后</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={preloadAfter}
+                          onChange={(event) => handleViewerPreloadRadiusChange(event.target.value, 'after')}
+                          onBlur={async () => {
+                            if (systemConfig) {
+                              setIsSavingConfig(true);
+                              await updateSystemConfig({ preloadAfter });
+                              setIsSavingConfig(false);
+                            }
+                          }}
+                          disabled={isSavingConfig}
+                          className="w-20 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                        />
+                        <span className="text-sm text-outline">张</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -363,7 +410,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={systemConfig?.enablePolling ?? false}
+                          checked={systemConfig?.enablePolling ?? true}
                           onChange={async (e) => {
                             setIsSavingConfig(true);
                             await updateSystemConfig({ enablePolling: e.target.checked });

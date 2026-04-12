@@ -23,6 +23,7 @@ const rowToAlbum = (row: Record<string, unknown>): AlbumRecord => ({
   sourceType: row.source_type === "zip" ? "zip" : "folder",
   sourcePath: String(row.source_path),
   sourceMtime: row.source_mtime ? String(row.source_mtime) : null,
+  assetsFingerprint: row.assets_fingerprint ? String(row.assets_fingerprint) : null,
   coverAssetId: row.cover_asset_id ? String(row.cover_asset_id) : null,
   assetCount: Number(row.asset_count),
   scanStatus: row.scan_status === "error" ? "error" : "ready",
@@ -160,8 +161,8 @@ export const clearLibraryDataDb = (libraryRootId: string) => {
 export const insertAlbumWithAssetsDb = (album: AlbumRecord, assets: AssetRecord[]) => {
   const db = getDb();
   const insertAlbum = db.prepare(`
-    INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, cover_asset_id, asset_count, scan_status, error_message, created_at, updated_at)
-    VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @createdAt, @updatedAt)
+    INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, assets_fingerprint, cover_asset_id, asset_count, scan_status, error_message, created_at, updated_at)
+    VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @assetsFingerprint, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @createdAt, @updatedAt)
   `);
   const insertAsset = db.prepare(`
     INSERT INTO assets (id, album_id, name, extension, source_type, source_path, relative_path, zip_entry_path, sort_index, width, height, size_bytes, source_mtime, thumbnail_key, created_at, updated_at)
@@ -189,8 +190,8 @@ export const applyLibraryRootScanDiffDb = (input: {
   const deleteAssetsByAlbumId = db.prepare("DELETE FROM assets WHERE album_id = ?");
   const deleteAlbumById = db.prepare("DELETE FROM albums WHERE id = ?");
   const insertAlbum = db.prepare(`
-    INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, cover_asset_id, asset_count, scan_status, error_message, created_at, updated_at)
-    VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @createdAt, @updatedAt)
+    INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, assets_fingerprint, cover_asset_id, asset_count, scan_status, error_message, created_at, updated_at)
+    VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @assetsFingerprint, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @createdAt, @updatedAt)
   `);
   const insertAsset = db.prepare(`
     INSERT INTO assets (id, album_id, name, extension, source_type, source_path, relative_path, zip_entry_path, sort_index, width, height, size_bytes, source_mtime, thumbnail_key, created_at, updated_at)
@@ -389,10 +390,29 @@ export const deleteAssetDb = (assetId: string) => {
   transaction();
 };
 
+export const updateAlbumScanMetadataDb = (
+  albumId: string,
+  input: {
+    sourceMtime: string | null;
+    assetsFingerprint: string | null;
+    updatedAt: string;
+  }
+) => {
+  const db = getDb();
+  db.prepare(
+    "UPDATE albums SET source_mtime = @sourceMtime, assets_fingerprint = @assetsFingerprint, updated_at = @updatedAt WHERE id = @albumId"
+  ).run({
+    albumId,
+    ...input
+  });
+};
+
 export type SystemConfigRecord = {
   id: string;
   enablePolling: boolean;
   pollingInterval: number;
+  preloadBefore: number;
+  preloadAfter: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -403,6 +423,8 @@ export const getSystemConfigDb = (): SystemConfigRecord => {
     id: string;
     enable_polling: number;
     polling_interval: number;
+    preload_before: number;
+    preload_after: number;
     created_at: string;
     updated_at: string;
   };
@@ -410,23 +432,27 @@ export const getSystemConfigDb = (): SystemConfigRecord => {
     id: row.id,
     enablePolling: row.enable_polling === 1,
     pollingInterval: row.polling_interval,
+    preloadBefore: row.preload_before,
+    preloadAfter: row.preload_after,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
 };
 
-export const updateSystemConfigDb = (updates: { enablePolling?: boolean; pollingInterval?: number }): SystemConfigRecord => {
+export const updateSystemConfigDb = (updates: { enablePolling?: boolean; pollingInterval?: number; preloadBefore?: number; preloadAfter?: number }): SystemConfigRecord => {
   const db = getDb();
   const existing = getSystemConfigDb();
-  
+
   const enablePolling = updates.enablePolling ?? existing.enablePolling;
   const pollingInterval = updates.pollingInterval ?? existing.pollingInterval;
-  
+  const preloadBefore = updates.preloadBefore ?? existing.preloadBefore;
+  const preloadAfter = updates.preloadAfter ?? existing.preloadAfter;
+
   db.prepare(`
-    UPDATE system_config 
-    SET enable_polling = ?, polling_interval = ?, updated_at = datetime('now')
+    UPDATE system_config
+    SET enable_polling = ?, polling_interval = ?, preload_before = ?, preload_after = ?, updated_at = datetime('now')
     WHERE id = 'system_config'
-  `).run(enablePolling ? 1 : 0, pollingInterval);
-  
+  `).run(enablePolling ? 1 : 0, pollingInterval, preloadBefore, preloadAfter);
+
   return getSystemConfigDb();
 };

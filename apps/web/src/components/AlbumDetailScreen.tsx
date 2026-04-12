@@ -1,5 +1,4 @@
-﻿import type { FC } from 'react';
-import { useEffect, useState, useCallback, useRef } from 'react';
+﻿import { type FC, useEffect, useState, useCallback, useRef } from 'react';
 import { ArrowLeft, Camera, Home, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2 } from 'lucide-react';
 import { Polaroid } from './Polaroid';
 import { PhotoSwipeGallery } from './PhotoSwipeGallery';
@@ -13,6 +12,7 @@ interface AlbumDetailScreenProps {
 }
 
 const PAGE_SIZE = 24;
+const RENDER_CHUNK_SIZE = 96;
 
 export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onAssetDeleted }) => {
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
@@ -21,6 +21,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   const [currentPage, setCurrentPage] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [visibleRenderCount, setVisibleRenderCount] = useState(RENDER_CHUNK_SIZE);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
 
@@ -61,6 +62,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     setLoadedItems([]);
     setCurrentPage(0);
     setTotalItems(0);
+    setVisibleRenderCount(RENDER_CHUNK_SIZE);
 
     if (albumId) {
       void loadPage(1, false);
@@ -76,6 +78,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   }, []);
 
   const hasMore = loadedItems.length < totalItems;
+  const renderedItems = loadedItems.slice(0, visibleRenderCount);
+  const hasMoreToRender = visibleRenderCount < loadedItems.length;
 
   const handleLoadMore = useCallback(async () => {
     if (isLoading || isLoadingMore || !hasMore) {
@@ -90,7 +94,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   }, [loadPage]);
 
   useEffect(() => {
-    if (!hasMore || isLoading || isLoadingMore) {
+    if ((!hasMore && !hasMoreToRender) || isLoading || isLoadingMore) {
       return;
     }
 
@@ -104,6 +108,10 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
       (entries) => {
         const first = entries[0];
         if (first?.isIntersecting) {
+          if (hasMoreToRender) {
+            setVisibleRenderCount((prev) => Math.min(prev + RENDER_CHUNK_SIZE, loadedItems.length));
+            return;
+          }
           void handleLoadMore();
         }
       },
@@ -119,7 +127,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     return () => {
       observer.disconnect();
     };
-  }, [hasMore, isLoading, isLoadingMore, handleLoadMore]);
+  }, [hasMore, hasMoreToRender, isLoading, isLoadingMore, handleLoadMore, loadedItems.length]);
 
   return (
     <div className="flex h-screen w-full bg-surface overflow-hidden">
@@ -193,7 +201,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                {loadedItems.map((asset, i) => (
+                {renderedItems.map((asset, i) => (
                   <div key={asset.id} className="group relative cursor-pointer hover:opacity-90 transition-opacity">
                     <button
                       onClick={async (e) => {
@@ -218,7 +226,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                 ))}
               </div>
 
-              {hasMore && <div ref={loadMoreTriggerRef} className="h-2 w-full" />}
+              {(hasMore || hasMoreToRender) && <div ref={loadMoreTriggerRef} className="h-2 w-full" />}
               {isLoadingMore && (
                 <div className="mt-8 flex justify-center text-outline">
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -236,7 +244,9 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
         </footer>
       </main>
 
-      <PhotoSwipeGallery items={loadedItems} isOpen={selectedImageIndex !== null} initialIndex={selectedImageIndex || 0} onClose={closeViewer} />
+      {selectedImageIndex !== null && (
+        <PhotoSwipeGallery items={loadedItems} isOpen initialIndex={selectedImageIndex} onClose={closeViewer} />
+      )}
 
       <nav className="fixed bottom-0 w-full z-50 flex justify-around items-center px-6 pb-6 pt-2 md:hidden bg-white/80 backdrop-blur-xl shadow-lg rounded-t-[3rem]">
         <button onClick={onBack} className="flex flex-col items-center text-outline hover:opacity-80 transition-opacity">

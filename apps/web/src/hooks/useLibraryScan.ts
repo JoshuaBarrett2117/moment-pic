@@ -20,14 +20,15 @@ interface UseLibraryScanReturn {
 }
 
 export function useLibraryScan(): UseLibraryScanReturn {
-  const [scanTasks, setScanTasks] = useState<Map<string, ScanTask>>(new Map());
-  const pollIntervalsRef = useRef<Map<string, number>>(new Map());
-  const isAnyScanning = Array.from(scanTasks.values()).some(
+  const [scanTasks, setScanTasks] = useState<Map<string, ScanTask>>(new Map<string, ScanTask>());
+  const pollIntervalsRef = useRef<Map<string, number>>(new Map<string, number>());
+  const scanTaskList = Array.from(scanTasks.values() as IterableIterator<ScanTask>);
+  const isAnyScanning = scanTaskList.some(
     (task) => task.status === 'running' || task.status === 'pending'
   );
 
   const scanningLibraryRootIds = new Set(
-    Array.from(scanTasks.values())
+    scanTaskList
       .filter(task => task.status === 'running' || task.status === 'pending')
       .map(task => task.libraryRootId ?? '')
       .filter(id => id !== '')
@@ -53,8 +54,8 @@ export function useLibraryScan(): UseLibraryScanReturn {
       try {
         const status = await api.get<ScanResultDTO>(`/scan/${taskId}`);
         
-        setScanTasks(prev => {
-          const next = new Map(prev);
+        setScanTasks((prev: Map<string, ScanTask>) => {
+          const next = new Map<string, ScanTask>(prev);
           const task = next.get(libraryRootId);
           if (task) {
             next.set(libraryRootId, {
@@ -96,8 +97,8 @@ export function useLibraryScan(): UseLibraryScanReturn {
       error: null
     };
 
-    setScanTasks(prev => {
-      const next = new Map(prev);
+    setScanTasks((prev: Map<string, ScanTask>) => {
+      const next = new Map<string, ScanTask>(prev);
       next.set(key, newTask);
       return next;
     });
@@ -105,8 +106,8 @@ export function useLibraryScan(): UseLibraryScanReturn {
     try {
       const result = await api.post<ScanResultDTO>('/scan', { libraryRootId });
       
-      setScanTasks(prev => {
-        const next = new Map(prev);
+      setScanTasks((prev: Map<string, ScanTask>) => {
+        const next = new Map<string, ScanTask>(prev);
         const task = next.get(key);
         if (task) {
           next.set(key, {
@@ -121,8 +122,8 @@ export function useLibraryScan(): UseLibraryScanReturn {
       startPolling(key, result.taskId);
       return result;
     } catch (err) {
-      setScanTasks(prev => {
-        const next = new Map(prev);
+      setScanTasks((prev: Map<string, ScanTask>) => {
+        const next = new Map<string, ScanTask>(prev);
         const task = next.get(key);
         if (task) {
           next.set(key, {
@@ -141,8 +142,8 @@ export function useLibraryScan(): UseLibraryScanReturn {
   const clearScanTask = useCallback((libraryRootId: string) => {
     const key = libraryRootId ?? 'all';
     clearPollInterval(key);
-    setScanTasks(prev => {
-      const next = new Map(prev);
+    setScanTasks((prev: Map<string, ScanTask>) => {
+      const next = new Map<string, ScanTask>(prev);
       next.delete(key);
       return next;
     });

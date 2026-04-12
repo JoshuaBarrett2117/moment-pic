@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Filter, Plus, ArrowRight, Loader2, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
+import { ThrottledImage } from './ThrottledImage';
 import { deleteAlbum } from '../hooks';
 import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO } from '../types/api';
 
@@ -69,8 +70,47 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   isScanning,
   onAlbumDeleted,
 }) => {
+  const RENDER_CHUNK_SIZE = 72;
+  const [visibleCount, setVisibleCount] = useState(RENDER_CHUNK_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const totalPages = pagination ? Math.ceil(pagination.total / pagination.pageSize) : 1;
   const currentPage = pagination?.page || 1;
+  const renderedAlbums = useMemo(() => albums.slice(0, visibleCount), [albums, visibleCount]);
+
+  useEffect(() => {
+    setVisibleCount(RENDER_CHUNK_SIZE);
+  }, [albums.length, currentPage]);
+
+  useEffect(() => {
+    if (!loadMoreRef.current) {
+      return;
+    }
+
+    if (visibleCount >= albums.length) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting) {
+          return;
+        }
+        setVisibleCount((prev) => Math.min(prev + RENDER_CHUNK_SIZE, albums.length));
+      },
+      {
+        root: null,
+        rootMargin: '240px 0px',
+        threshold: 0.01
+      }
+    );
+
+    observer.observe(loadMoreRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [albums.length, visibleCount]);
 
   const sortOptions = [
     { value: 'name', label: '名称' },
@@ -183,7 +223,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               <p className="text-sm text-outline/70">请在设置页面添加库目录并扫描</p>
             </div>
           ) : (
-            albums.map((album, idx) => {
+            renderedAlbums.map((album, idx) => {
               const colorScheme = tagColors[album.sourceType] || tagColors.folder;
               return (
                 <motion.div 
@@ -216,13 +256,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                       </div>
                       <div className="grid grid-cols-3 gap-1 rounded-lg overflow-hidden aspect-square">
                         {album.coverUrl ? (
-                          <img 
+                          <ThrottledImage
                             key="cover" 
                             className="col-span-3 w-full h-full object-cover" 
                             src={album.coverUrl} 
                             alt={album.name} 
-                            loading="lazy"
-                            decoding="async"
                           />
                         ) : (
                           Array.from({ length: 9 }).map((_, i) => (
@@ -246,6 +284,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             })
           )}
         </div>
+        {renderedAlbums.length < albums.length && (
+          <div ref={loadMoreRef} className="w-full py-6 text-center text-sm text-outline/70">
+            正在加载更多相册...
+          </div>
+        )}
 
         {pagination && totalPages > 1 && (
           <div className="mt-12 flex items-center justify-center gap-4">

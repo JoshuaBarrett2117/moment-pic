@@ -1,12 +1,25 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
-import { GalleryScreen } from './components/GalleryScreen';
-import { AlbumDetailScreen } from './components/AlbumDetailScreen';
-import { SettingsScreen } from './components/SettingsScreen';
 import { PaperGrain } from './components/PaperGrain';
 import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan } from './hooks';
+
+const GalleryScreen = lazy(() =>
+  import('./components/GalleryScreen').then((module) => ({
+    default: module.GalleryScreen
+  }))
+);
+const AlbumDetailScreen = lazy(() =>
+  import('./components/AlbumDetailScreen').then((module) => ({
+    default: module.AlbumDetailScreen
+  }))
+);
+const SettingsScreen = lazy(() =>
+  import('./components/SettingsScreen').then((module) => ({
+    default: module.SettingsScreen
+  }))
+);
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
@@ -75,14 +88,18 @@ export default function App() {
       return;
     }
 
+    if (wsConnected) {
+      return;
+    }
+
     const intervalId = window.setInterval(() => {
       loadAlbums();
-    }, 1500);
+    }, 3000);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [isAuthenticated, isAnyScanning, loadAlbums]);
+  }, [isAuthenticated, isAnyScanning, wsConnected, loadAlbums]);
 
   const navigate = (screen: Screen, dir: number = 1) => {
     setDirection(dir);
@@ -226,48 +243,72 @@ export default function App() {
             <LoginScreen onLogin={handleLogin} />
           )}
           {currentScreen === Screen.GALLERY && isAuthenticated && (
-            <GalleryScreen 
-              albums={albums?.items || []}
-              isLoading={isLoading}
-              pagination={albums?.pagination || null}
-              onNavigateToAlbum={handleNavigateToAlbum}
-              onProfileClick={handleProfileClick}
-              onRefresh={loadAlbums}
-              onPageChange={handlePageChange}
-              onSortByChange={handleSortByChange}
-              onSortOrderChange={handleSortOrderChange}
-              onPageSizeChange={handlePageSizeChange}
-              onSourceTypeChange={handleSourceTypeChange}
-              currentSortBy={filters.sortBy}
-              currentSortOrder={filters.sortOrder}
-              currentPageSize={filters.pageSize}
-              currentSourceType={filters.sourceType}
-              currentKeyword={filters.keyword}
-              activeTab={activeTab}
-              onSidebarNavigate={handleSidebarNavigate}
-              libraryRoots={libraryRoots}
-              currentLibraryRootId={filters.libraryRootId}
-              onLibraryRootChange={handleLibraryRootChange}
-              onKeywordChange={handleKeywordChange}
-              onScanAll={handleRefreshAll}
-              onScanOne={handleRefreshOne}
-              isAnyScanning={isAnyScanning}
-              isScanning={isScanning}
-              scanningLibraryRootId={scanningLibraryRootId}
-              onAlbumDeleted={loadAlbums}
-            />
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-outline">
+                  加载中...
+                </div>
+              }
+            >
+              <GalleryScreen 
+                albums={albums?.items || []}
+                isLoading={isLoading}
+                pagination={albums?.pagination || null}
+                onNavigateToAlbum={handleNavigateToAlbum}
+                onProfileClick={handleProfileClick}
+                onRefresh={loadAlbums}
+                onPageChange={handlePageChange}
+                onSortByChange={handleSortByChange}
+                onSortOrderChange={handleSortOrderChange}
+                onPageSizeChange={handlePageSizeChange}
+                onSourceTypeChange={handleSourceTypeChange}
+                currentSortBy={filters.sortBy}
+                currentSortOrder={filters.sortOrder}
+                currentPageSize={filters.pageSize}
+                currentSourceType={filters.sourceType}
+                currentKeyword={filters.keyword}
+                activeTab={activeTab}
+                onSidebarNavigate={handleSidebarNavigate}
+                libraryRoots={libraryRoots}
+                currentLibraryRootId={filters.libraryRootId}
+                onLibraryRootChange={handleLibraryRootChange}
+                onKeywordChange={handleKeywordChange}
+                onScanAll={handleRefreshAll}
+                onScanOne={handleRefreshOne}
+                isAnyScanning={isAnyScanning}
+                isScanning={isScanning}
+                scanningLibraryRootId={scanningLibraryRootId}
+                onAlbumDeleted={loadAlbums}
+              />
+            </Suspense>
           )}
           {currentScreen === Screen.ALBUM_DETAIL && (
-            <AlbumDetailScreen 
-              albumId={selectedAlbum || ''} 
-              onBack={handleBackToGallery}
-              onAssetDeleted={loadAlbums}
-            />
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-outline">
+                  加载中...
+                </div>
+              }
+            >
+              <AlbumDetailScreen 
+                albumId={selectedAlbum || ''} 
+                onBack={handleBackToGallery}
+                onAssetDeleted={loadAlbums}
+              />
+            </Suspense>
           )}
           {currentScreen === Screen.SETTINGS && (
-            <SettingsScreen 
-              onBack={handleBackToGallery}
-            />
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-outline">
+                  加载中...
+                </div>
+              }
+            >
+              <SettingsScreen 
+                onBack={handleBackToGallery}
+              />
+            </Suspense>
           )}
         </motion.div>
       </AnimatePresence>

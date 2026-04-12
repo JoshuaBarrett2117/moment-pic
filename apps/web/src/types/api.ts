@@ -94,6 +94,8 @@ export type SystemConfigDTO = {
   id: string;
   enablePolling: boolean;
   pollingInterval: number;
+  preloadBefore: number;
+  preloadAfter: number;
   createdAt: string;
   updatedAt: string;
 };

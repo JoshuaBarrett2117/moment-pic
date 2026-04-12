@@ -1,4 +1,4 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import yauzl from "yauzl";
@@ -29,6 +29,9 @@ const detectArchiveType = (filePath: string): ArchiveType | null => {
 
 type UnrarExtractor = Awaited<ReturnType<typeof createExtractorFromFile>>;
 type UnrarDataExtractor = Awaited<ReturnType<typeof createExtractorFromData>>;
+type ZipEntryName = string | Buffer;
+
+const ZIP_UTF8_FLAG = 0x800;
 
 const decode7zText = (buffer: Buffer): string => {
   if (process.platform === "win32") {
@@ -40,6 +43,41 @@ const decode7zText = (buffer: Buffer): string => {
   }
 
   return buffer.toString("utf8");
+};
+
+const decodeZipText = (buffer: Buffer, forceUtf8: boolean): string => {
+  if (forceUtf8) {
+    return buffer.toString("utf8");
+  }
+
+  const utf8 = buffer.toString("utf8");
+  if (process.platform !== "win32") {
+    return utf8;
+  }
+
+  try {
+    const gbk = new TextDecoder("gbk").decode(buffer);
+    const utf8ReplacementCount = (utf8.match(/\uFFFD/g) ?? []).length;
+    const gbkReplacementCount = (gbk.match(/\uFFFD/g) ?? []).length;
+    if (gbkReplacementCount < utf8ReplacementCount) {
+      return gbk;
+    }
+    if (gbkReplacementCount === utf8ReplacementCount && gbk.length >= utf8.length) {
+      return gbk;
+    }
+  } catch {
+    return utf8;
+  }
+
+  return utf8;
+};
+
+const toDecodedZipEntryPath = (entry: yauzl.Entry): string => {
+  const rawName = entry.fileName as ZipEntryName;
+  const nameBuffer = Buffer.isBuffer(rawName) ? rawName : Buffer.from(rawName, "utf8");
+  const isUtf8 = (entry.generalPurposeBitFlag & ZIP_UTF8_FLAG) === ZIP_UTF8_FLAG;
+  const decoded = decodeZipText(nameBuffer, isUtf8);
+  return toPosixPath(decoded);
 };
 
 let cached7zExecutables: string[] | null = null;
@@ -146,7 +184,7 @@ const normalizeArchiveEntryPath = (entryPath: string): string =>
 
 const openZip = async (zipPath: string): Promise<yauzl.ZipFile> =>
   new Promise((resolve, reject) => {
-    yauzl.open(zipPath, { lazyEntries: true }, (error, zipFile) => {
+    yauzl.open(zipPath, { lazyEntries: true, decodeStrings: false }, (error, zipFile) => {
       if (error || !zipFile) {
         reject(error ?? new Error(`cannot open ZIP archive: ${zipPath}`));
         return;
@@ -165,7 +203,7 @@ const collectZipImageEntries = async (zipPath: string): Promise<ArchiveImageEntr
     zipFile.readEntry();
 
     zipFile.on("entry", (entry) => {
-      const entryPath = toPosixPath(entry.fileName);
+      const entryPath = toDecodedZipEntryPath(entry);
 
       if (entryPath.endsWith("/")) {
         zipFile.readEntry();
@@ -365,7 +403,7 @@ const readZipBuffer = async (zipPath: string, entryPath: string): Promise<Buffer
     zipFile.readEntry();
 
     zipFile.on("entry", (entry) => {
-      const currentPath = toPosixPath(entry.fileName);
+      const currentPath = toDecodedZipEntryPath(entry);
       if (currentPath !== entryPath) {
         zipFile.readEntry();
         return;
@@ -383,7 +421,9 @@ const readZipBuffer = async (zipPath: string, entryPath: string): Promise<Buffer
         stream.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
         stream.on("end", () => {
           zipFile.close();
-          resolve(Buffer.concat(chunks));
+          const buffer = Buffer.concat(chunks);
+          const extractedJpeg = extractJpegFromPsd(buffer);
+          resolve(extractedJpeg);
         });
         stream.on("error", (streamError) => {
           zipFile.close();
@@ -406,6 +446,75 @@ const readZipBuffer = async (zipPath: string, entryPath: string): Promise<Buffer
   });
 };
 
+const PSD_MAGIC = Buffer.from([0x38, 0x42, 0x50, 0x53]);
+const JPEG_SOI = Buffer.from([0xff, 0xd8]);
+const JPEG_EOI = Buffer.from([0xff, 0xd9]);
+
+const extractJpegFromPsd = (buffer: Buffer): Buffer => {
+  if (buffer.length < 10) {
+    return buffer;
+  }
+
+  if (buffer.subarray(0, 4).equals(PSD_MAGIC)) {
+    const jpeg = findEmbeddedJpegInPsd(buffer);
+    if (jpeg) {
+      return jpeg;
+    }
+  }
+
+  if (buffer.subarray(0, 2).equals(JPEG_SOI)) {
+    const searchArea = buffer.subarray(4, 34);
+    const hasAdobeMarker = searchArea.includes(Buffer.from("Adobe")) ||
+                           searchArea.includes(Buffer.from("Photoshop"));
+    if (hasAdobeMarker) {
+      const jpeg = findEmbeddedJpegInPsd(buffer);
+      if (jpeg) {
+        return jpeg;
+      }
+    }
+  }
+
+  return buffer;
+};
+
+const findEmbeddedJpegInPsd = (buffer: Buffer): Buffer | null => {
+  const jpegEnd = Buffer.from([0xff, 0xd9]);
+  
+  const jpegMarkers = [
+    Buffer.from([0xff, 0xd8, 0xff, 0xe1]),
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+    Buffer.from([0xff, 0xd8, 0xff, 0xee]),
+    Buffer.from([0xff, 0xd8, 0xff, 0xdb]),
+  ];
+
+  for (const marker of jpegMarkers) {
+    const startIdx = buffer.indexOf(marker);
+    if (startIdx !== -1) {
+      const endIdx = buffer.lastIndexOf(jpegEnd);
+      if (endIdx > startIdx) {
+        const extracted = buffer.subarray(startIdx, endIdx + 2);
+        if (extracted.length > 100) {
+          return extracted;
+        }
+      }
+    }
+  }
+
+  const simpleStart = Buffer.from([0xff, 0xd8]);
+  const startIdx = buffer.indexOf(simpleStart);
+  if (startIdx !== -1 && startIdx < buffer.length - 10) {
+    const endIdx = buffer.lastIndexOf(jpegEnd);
+    if (endIdx > startIdx) {
+      const extracted = buffer.subarray(startIdx, endIdx + 2);
+      if (extracted.length > 100 && extracted.length < buffer.length) {
+        return extracted;
+      }
+    }
+  }
+
+  return null;
+};
+
 const readCbrBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
   const buffer = await fs.promises.readFile(archivePath);
 
@@ -420,7 +529,8 @@ const readCbrBuffer = async (archivePath: string, entryPath: string): Promise<Bu
 
   for (const file of extracted.files) {
     if (file.extraction) {
-      return Buffer.from(file.extraction);
+      const extractedBuffer = Buffer.from(file.extraction);
+      return extractJpegFromPsd(extractedBuffer);
     }
   }
 
@@ -436,7 +546,7 @@ const read7zBuffer = async (archivePath: string, entryPath: string): Promise<Buf
     archivePath,
     normalizeArchiveEntryPath(entryPath)
   ]);
-  return stdout;
+  return extractJpegFromPsd(stdout);
 };
 
 export const readArchiveEntryBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
@@ -460,9 +570,9 @@ export const readArchiveEntryBuffer = async (archivePath: string, entryPath: str
   throw new Error(`archive format reader is not implemented: ${archiveType}`);
 };
 
-export const isArchiveFile = async (filePath: string): Promise<boolean> => {
-  const stats = await fs.promises.stat(filePath);
-  return stats.isFile() && SUPPORTED_ARCHIVE_EXTENSIONS.has(normalizeExtension(filePath));
+export const isArchiveFile = async (filePath: string, stats?: fs.Stats): Promise<boolean> => {
+  const targetStats = stats ?? (await fs.promises.stat(filePath));
+  return targetStats.isFile() && SUPPORTED_ARCHIVE_EXTENSIONS.has(normalizeExtension(filePath));
 };
 
 export const isZipFile = isArchiveFile;

@@ -2,7 +2,7 @@
 FROM node:24-slim AS web-builder
 WORKDIR /app
 COPY apps/web/package.json apps/web/package-lock.json ./
-RUN npm install
+RUN npm ci
 COPY apps/web/vite.config.ts apps/web/index.html ./
 COPY apps/web/src ./src
 COPY apps/web/public ./public
@@ -17,12 +17,12 @@ COPY apps/server/package.json ./apps/server/package.json
 COPY apps/server/prisma ./apps/server/prisma
 COPY tsconfig.base.json ./
 COPY apps/server/tsconfig.json ./apps/server/tsconfig.json
-RUN npm install --workspace @moment-pic/server --include-workspace-root=false
+RUN npm ci --workspace @moment-pic/server --include-workspace-root=false
 COPY apps/server/src ./apps/server/src
 WORKDIR /app/apps/server
 RUN npx prisma generate && npx tsc -p tsconfig.json
 
-# 阶段 3: 运行镜像（最小化层数）
+# 阶段 3: 运行镜像（最小化体积）
 FROM node:24-slim
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libvips42 && rm -rf /var/lib/apt/lists/*

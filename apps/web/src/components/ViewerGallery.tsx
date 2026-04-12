@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Viewer from 'react-viewer';
 import type { AssetListItemDTO } from '../types/api';
 
@@ -16,10 +16,10 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   onClose,
   initialIndex = 0,
 }) => {
-  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  const [activeIndex, setActiveIndex] = useState(() => initialIndex);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && activeIndex !== initialIndex) {
       setActiveIndex(initialIndex);
     }
   }, [isOpen, initialIndex]);
@@ -33,11 +33,22 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     onClose();
   }, [onClose]);
 
-  const images = items.map((item) => ({
-    src: item.originalUrl,
-    alt: item.name,
-    downloadUrl: item.originalUrl,
-  }));
+  const images = useMemo(
+    () =>
+      items.map((item) => ({
+        src: item.originalUrl,
+        alt: item.name,
+        downloadUrl: item.originalUrl,
+      })),
+    [items]
+  );
+
+  const handleChange = useCallback(
+    (index: number) => {
+      setActiveIndex(index);
+    },
+    []
+  );
 
   if (!isOpen) {
     return null;
@@ -64,7 +75,6 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       zoomSpeed={0.25}
       className="viewer-react"
       zIndex={9999}
-      disableMouseScroll={false}
       drag
     />
   );

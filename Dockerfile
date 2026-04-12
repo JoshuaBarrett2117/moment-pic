@@ -3,7 +3,7 @@ FROM node:24-slim AS web-builder
 
 WORKDIR /app
 
-COPY apps/web/package.json ./
+COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm install
 
 COPY apps/web/vite.config.ts apps/web/index.html ./
@@ -32,8 +32,8 @@ RUN npm install --workspace @moment-pic/server --include-workspace-root=false
 COPY apps/server/src ./apps/server/src
 
 WORKDIR /app/apps/server
-RUN npx prisma generate
-RUN npx tsc -p tsconfig.json
+
+RUN npx prisma generate && npx tsc -p tsconfig.json
 
 # 阶段 3: 运行镜像
 FROM node:24-slim
@@ -50,6 +50,20 @@ COPY --from=builder /app/apps/server/dist ./apps/server/dist
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
 
 COPY --from=web-builder /app/dist ./apps/server/dist/public
+
+RUN rm -rf node_modules/.bin && \
+    find node_modules -type d -name "test" -exec rm -rf {} + 2>/dev/null || true && \
+    find node_modules -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
+    find node_modules -type d -name "example" -exec rm -rf {} + 2>/dev/null || true && \
+    find node_modules -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true && \
+    find node_modules -type d -name "docs" -exec rm -rf {} + 2>/dev/null || true && \
+    find node_modules -type d -name "__tests__" -exec rm -rf {} + 2>/dev/null || true && \
+    find node_modules -type f -name "*.md" -delete 2>/dev/null || true && \
+    find node_modules -type f -name "*.ts" -delete 2>/dev/null || true && \
+    find node_modules -type f -name "*.d.ts" -delete 2>/dev/null || true && \
+    find node_modules -type f -name "LICENSE*" -delete 2>/dev/null || true && \
+    find node_modules -type f -name "README*" -delete 2>/dev/null || true && \
+    find node_modules -type f -name ".npm*" -delete 2>/dev/null || true
 
 ENV HOST="0.0.0.0"
 ENV PORT="3210"

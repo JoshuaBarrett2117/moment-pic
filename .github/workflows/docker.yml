@@ -40,7 +40,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=test,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
             type=raw,value=${{ github.ref_name }},enable=${{ startsWith(github.ref, 'refs/heads/feature-') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

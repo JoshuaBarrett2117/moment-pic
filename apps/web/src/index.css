@@ -115,7 +115,7 @@
   }
 
   .viewer-react {
-    --viewer-toolbar-size: 0px;
+    --viewer-toolbar-size: 44px;
     --viewer-navbar-height: 0px;
   }
 
@@ -147,9 +147,12 @@
   }
 
   .viewer-react .react-viewer-footer,
-  .viewer-react .react-viewer-navbar,
-  .viewer-react .react-viewer-toolbar {
+  .viewer-react .react-viewer-navbar {
     display: none !important;
+  }
+
+  .viewer-react .react-viewer-toolbar {
+    display: flex !important;
   }
 
   .viewer-react .react-viewer-mask {

@@ -21,7 +21,9 @@
     "motion": "^12.23.24",
     "photoswipe": "^5.4.4",
     "react": "^19.0.0",
+    "react-cool-img": "^1.2.12",
     "react-dom": "^19.0.0",
+    "react-viewer": "^3.2.2",
     "vite": "^6.2.0"
   },
   "devDependencies": {

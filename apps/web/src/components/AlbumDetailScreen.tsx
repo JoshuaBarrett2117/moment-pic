@@ -1,7 +1,7 @@
-﻿import { type FC, useEffect, useState, useCallback, useRef } from 'react';
+import { type FC, useEffect, useState, useCallback, useRef } from 'react';
 import { ArrowLeft, Camera, Home, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2 } from 'lucide-react';
 import { Polaroid } from './Polaroid';
-import { PhotoSwipeGallery } from './PhotoSwipeGallery';
+import { ViewerGallery } from './ViewerGallery';
 import { useAlbumAssets, deleteAsset } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
@@ -245,7 +245,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
       </main>
 
       {selectedImageIndex !== null && (
-        <PhotoSwipeGallery items={loadedItems} isOpen initialIndex={selectedImageIndex} onClose={closeViewer} />
+        <ViewerGallery items={loadedItems} isOpen initialIndex={selectedImageIndex} onClose={closeViewer} />
       )}
 
       <nav className="fixed bottom-0 w-full z-50 flex justify-around items-center px-6 pb-6 pt-2 md:hidden bg-white/80 backdrop-blur-xl shadow-lg rounded-t-[3rem]">

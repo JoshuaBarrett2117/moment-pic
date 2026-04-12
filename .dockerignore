@@ -17,6 +17,3 @@ moment-pic-ui
 tsconfig.json
 !apps/server/tsconfig.json
 !tsconfig.base.json
-!apps/web/package.json
-!apps/server/package.json
-!package.json

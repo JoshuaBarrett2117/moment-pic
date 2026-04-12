@@ -1,5 +1,5 @@
 # 阶段 1: 构建前端
-FROM node:24-slim AS web-builder
+FROM node:22-slim AS web-builder
 WORKDIR /app
 
 COPY apps/web/package.json apps/web/package-lock.json ./
@@ -12,7 +12,7 @@ COPY apps/web/public ./public
 RUN npm run build
 
 # 阶段 2: 构建后端
-FROM node:24-slim AS builder
+FROM node:22-slim AS builder
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
@@ -30,7 +30,7 @@ WORKDIR /app/apps/server
 RUN npx prisma generate && npx tsc -p tsconfig.json
 
 # 阶段 3: 运行镜像（最小化体积）
-FROM node:24-slim
+FROM node:22-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends libvips42 && rm -rf /var/lib/apt/lists/*

@@ -8,7 +8,7 @@ import { path7za } from "7zip-bin";
 import { isSupportedImageExtension } from "../lib/image-formats.js";
 import { normalizeExtension, toPosixPath } from "../lib/paths.js";
 
-const SUPPORTED_ARCHIVE_EXTENSIONS = new Set(["zip", "cbz", "cbr", "7z"]);
+const SUPPORTED_ARCHIVE_EXTENSIONS = new Set(["zip", "cbz", "cbr", "rar", "7z"]);
 
 export type ArchiveImageEntry = {
   entryPath: string;
@@ -19,10 +19,10 @@ export type ArchiveImageEntry = {
 
 type ArchiveType = "zip" | "cbr" | "7z";
 
-const detectArchiveType = (filePath: string): ArchiveType | null => {
+export const detectArchiveType = (filePath: string): ArchiveType | null => {
   const ext = normalizeExtension(filePath).toLowerCase();
   if (ext === "zip" || ext === "cbz") return "zip";
-  if (ext === "cbr") return "cbr";
+  if (ext === "cbr" || ext === "rar") return "cbr";
   if (ext === "7z") return "7z";
   return null;
 };

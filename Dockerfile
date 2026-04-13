@@ -38,7 +38,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/server/package.json ./apps/server/package.json
 COPY --from=builder /app/apps/server/dist ./apps/server/dist
 COPY --from=builder /app/apps/server/prisma ./apps/server/prisma
-COPY --from=web-builder /app/dist ./apps/server/dist/public
+COPY --from=web-builder /app/apps/web/dist ./apps/server/dist/public
 RUN rm -rf node_modules/.bin \
     && find node_modules -type d \( -name "test" -o -name "tests" -o -name "example" -o -name "examples" -o -name "docs" -o -name "__tests__" \) -exec rm -rf {} + 2>/dev/null || true \
     && find node_modules -type f \( -name "*.md" -o -name "*.ts" -o -name "*.d.ts" -o -name "LICENSE*" -o -name "README*" -o -name ".npm*" \) -delete 2>/dev/null || true

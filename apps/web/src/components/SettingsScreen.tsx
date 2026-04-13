@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { WobblyButton } from './WobblyButton';
-import { useLibraryRoots, useLibraryScan, useSystemConfig } from '../hooks';
+import { useLibraryRoots, useLibraryScan, useSystemConfig, useMobile } from '../hooks';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -36,6 +36,7 @@ const clampPreloadRadius = (value: number): number => {
 };
 
 export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
+  const isMobile = useMobile();
   const { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot } = useLibraryRoots();
   const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan();
   const { systemConfig, fetchSystemConfig, updateSystemConfig } = useSystemConfig();

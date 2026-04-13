@@ -1,6 +1,7 @@
-import React from 'react';
-import { motion } from 'motion/react';
-import { Camera, Images, Settings, RefreshCw, Loader2, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Camera, Images, Settings, RefreshCw, Loader2, Clock, Menu, X } from 'lucide-react';
+import { useMobile } from '../hooks';
 import type { LibraryRootDTO } from '../types/api';
 
 interface SidebarProps {
@@ -34,17 +35,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onRecentClick,
   isRecentActive,
 }) => {
-  return (
-    <aside className="fixed left-0 top-0 h-full w-80 bg-surface-container-low p-8 flex flex-col z-40 rounded-r-[3rem] shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)] border-r border-outline/5">
-      <div className="mb-10 flex flex-col items-start gap-2">
+  const isMobile = useMobile();
+  const [isOpen, setIsOpen] = useState(false);
+
+  const sidebarContent = (
+    <div className="flex flex-col h-full">
+      <div className="mb-6 md:mb-10 flex flex-col items-start gap-2">
         <div className="flex items-center gap-3">
-          <span className="text-4xl font-bold text-on-primary-container font-script tracking-tight">Moment Pic</span>
-          <Camera className="text-on-primary-container w-8 h-8" />
+          <span className="text-2xl md:text-4xl font-bold text-on-primary-container font-script tracking-tight">Moment Pic</span>
+          <Camera className="text-on-primary-container w-6 md:w-8 h-6 md:h-8" />
         </div>
-        <p className="text-xs font-headline uppercase tracking-widest text-outline">The Curated Heirloom</p>
+        <p className="hidden md:block text-xs font-headline uppercase tracking-widest text-outline">The Curated Heirloom</p>
       </div>
 
-      <div className="mb-8 w-full">
+      <div className="hidden md:block mb-8 w-full">
         <div className="bg-tertiary-container sticky-note-mask p-5 -rotate-2 shadow-lg flex flex-col items-center justify-center border border-on-tertiary-container/10 rounded-2xl">
           <span className="text-3xl font-headline font-extrabold text-on-tertiary-container">{albumCount}</span>
           <span className="text-sm font-label uppercase tracking-tighter text-on-tertiary-container/70">Albums Collected</span>
@@ -64,9 +68,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {isAnyScanning ? '扫描中...' : '刷新全部'}
       </button>
 
-      <nav className="flex flex-col gap-3 w-full mb-10">
+      <nav className="flex flex-col gap-3 w-full mb-6 md:mb-10">
         <button 
-          onClick={() => onNavigate('gallery')}
+          onClick={() => { onNavigate('gallery'); isMobile && setIsOpen(false); }}
           className={`flex items-center gap-4 px-6 py-4 rounded-full transition-all duration-300 font-headline tracking-tight hover:scale-[1.02] ${
             activeTab === 'gallery' 
               ? 'bg-primary-container text-on-primary-container shadow-md font-bold' 
@@ -77,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>相册</span>
         </button>
         <button 
-          onClick={() => onNavigate('settings')}
+          onClick={() => { onNavigate('settings'); isMobile && setIsOpen(false); }}
           className={`flex items-center gap-4 px-6 py-4 rounded-full transition-all duration-300 font-headline tracking-tight hover:scale-[1.02] ${
             activeTab === 'settings' 
               ? 'bg-primary-container text-on-primary-container shadow-md font-bold' 
@@ -92,9 +96,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex flex-col gap-6 w-full">
       </div>
 
-      <div className="mt-auto pt-8 border-t border-outline/10 flex flex-col gap-4">
+      <div className="mt-auto pt-6 md:pt-8 border-t border-outline/10 flex flex-col gap-4 max-h-[40vh] overflow-y-auto">
         <button
-          onClick={() => onLibraryRootChange('')}
+          onClick={() => { onLibraryRootChange(''); isMobile && setIsOpen(false); }}
           className={`flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer transition-all ${
             currentLibraryRootId === '' && !isRecentActive
               ? 'bg-primary-container text-on-primary-container font-bold' 
@@ -106,7 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
-          onClick={onRecentClick}
+          onClick={() => { onRecentClick(); isMobile && setIsOpen(false); }}
           className={`flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer transition-all ${
             isRecentActive
               ? 'bg-primary-container text-on-primary-container font-bold' 
@@ -130,6 +134,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={(e) => {
                 e.stopPropagation();
                 onLibraryRootChange(root.id);
+                isMobile && setIsOpen(false);
               }}
               className="flex items-center gap-3 flex-1"
             >
@@ -154,10 +159,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         ))}
         
-        <div className="mt-4 p-3 bg-white/40 border border-outline/5 rounded-lg flex items-center justify-center text-[12px] font-medium text-outline/80">
+        <div className="mt-2 md:mt-4 p-3 bg-white/40 border border-outline/5 rounded-lg flex items-center justify-center text-[12px] font-medium text-outline/80">
           记录美好的瞬间
         </div>
       </div>
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <>
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed top-4 left-4 z-50 p-3 bg-surface-container-high rounded-full shadow-lg"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+        
+        <AnimatePresence>
+          {isOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsOpen(false)}
+                className="fixed inset-0 bg-black/50 z-40"
+              />
+              <motion.div
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed left-0 top-0 h-full w-80 max-w-[85vw] bg-surface-container-low p-6 z-50 shadow-xl"
+              >
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="absolute top-4 right-4 p-2"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+                {sidebarContent}
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </>
+    );
+  }
+
+  return (
+    <aside className="fixed left-0 top-0 h-full w-80 bg-surface-container-low p-8 flex flex-col z-40 rounded-r-[3rem] shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)] border-r border-outline/5">
+      {sidebarContent}
     </aside>
   );
 };

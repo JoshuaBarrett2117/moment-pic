@@ -67,10 +67,10 @@ const syncFiltersToUrl = (filters: GalleryFilters) => {
   if (filters.keyword) {
     params.set('keyword', filters.keyword);
   }
-  if (filters.sortBy !== 'name') {
+  if (filters.sortBy !== 'updatedAt') {
     params.set('sortBy', filters.sortBy);
   }
-  if (filters.sortOrder !== 'asc') {
+  if (filters.sortOrder !== 'desc') {
     params.set('sortOrder', filters.sortOrder);
   }
   if (filters.sourceType) {
@@ -95,8 +95,8 @@ const getInitialFilters = (): GalleryFilters => {
     page: urlFilters.page || 1,
     pageSize: urlFilters.pageSize || 24,
     keyword: urlFilters.keyword || '',
-    sortBy: urlFilters.sortBy || 'name',
-    sortOrder: urlFilters.sortOrder || 'asc',
+    sortBy: urlFilters.sortBy || 'updatedAt',
+    sortOrder: urlFilters.sortOrder || 'desc',
     sourceType: urlFilters.sourceType || '',
     libraryRootId: urlFilters.libraryRootId || '',
   };

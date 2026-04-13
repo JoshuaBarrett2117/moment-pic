@@ -261,8 +261,8 @@ export const listAlbumsDb = (
     updatedAt: "updated_at",
     assetCount: "asset_count"
   };
-  const sortBy = input?.sortBy ?? "name";
-  const sortOrder = input?.sortOrder ?? "asc";
+  const sortBy = input?.sortBy ?? "updatedAt";
+  const sortOrder = input?.sortOrder ?? "desc";
   const orderBy = `${orderByMap[sortBy]} ${sortOrder.toUpperCase()}, name ASC`;
 
   const items = db.prepare(`SELECT * FROM albums ${where} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset`).all(params).map((row: unknown) => rowToAlbum(row as Record<string, unknown>));

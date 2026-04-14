@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { WobblyButton } from './WobblyButton';
+import { useToast } from './Toast';
 import { useLibraryRoots, useLibraryScan, useSystemConfig, useMobile } from '../hooks';
 
 interface SettingsScreenProps {
@@ -40,6 +41,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
   const { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot } = useLibraryRoots();
   const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan();
   const { systemConfig, fetchSystemConfig, updateSystemConfig } = useSystemConfig();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'basic' | 'advanced'>('basic');
   const [newPath, setNewPath] = useState('');
   const [newName, setNewName] = useState('');
@@ -83,17 +85,22 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
     if (result) {
       setNewPath('');
       setNewName('');
+      toast('库目录添加成功', 'success');
+    } else {
+      toast('添加失败，请检查路径是否正确', 'error');
     }
     setIsAdding(false);
   };
 
   const handleScan = async (libraryRootId?: string) => {
+    toast(libraryRootId ? '正在扫描该图库...' : '正在扫描全部图库...', 'info');
     await scan(libraryRootId);
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('确定要删除这个库目录吗？')) {
       await deleteLibraryRoot(id);
+      toast('库目录已删除', 'success');
     }
   };
 
@@ -115,6 +122,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
     setEditingId(null);
     setEditingName('');
     setEditingPath('');
+    toast('修改已保存', 'success');
   };
 
   const handleViewerPreloadRadiusChange = (value: string, type: 'before' | 'after') => {

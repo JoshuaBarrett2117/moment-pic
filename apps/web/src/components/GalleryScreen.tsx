@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Plus, ArrowRight, Loader2, ChevronLeft, ChevronRight, Trash2, Search, X } from 'lucide-react';
+import { Plus, ArrowRight, Loader2, ChevronLeft, ChevronRight, Trash2, Search, X, Images } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { ThrottledImage } from './ThrottledImage';
 import { deleteAlbum, useMobile } from '../hooks';
@@ -150,6 +150,24 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
   const pageSizeOptions = [12, 24, 48, 96];
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.05 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 30, scale: 0.95 },
+    show: { 
+      opacity: 1, 
+      y: 0, 
+      scale: 1, 
+      transition: { type: 'spring', stiffness: 260, damping: 20 } 
+    }
+  };
+
   return (
     <div className="flex h-screen w-full overflow-hidden">
       <Sidebar 
@@ -279,26 +297,57 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
         </div>
 
-        <div className="grid gap-4 md:gap-6 w-full" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? 140 : 160}px, 1fr))` }}>
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="grid gap-4 md:gap-6 w-full" 
+          style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? 140 : 160}px, 1fr))` }}
+        >
           {isLoading && albums.length === 0 ? (
-            <div className="col-span-full flex items-center justify-center py-20">
-              <Loader2 className="w-12 h-12 animate-spin text-outline" />
-            </div>
+            Array.from({ length: isMobile ? 8 : 16 }).map((_, i) => (
+              <div key={i} className="relative bg-surface-container-highest rounded-xl p-3 shadow-md animate-pulse">
+                <div className="absolute top-2 right-2 px-4 py-1 rounded-full bg-outline/10 w-16 h-5" />
+                <div className="aspect-square rounded-lg bg-outline/10 mb-5" />
+                <div className="px-2 pb-2">
+                  <div className="h-5 bg-outline/10 rounded w-3/4 mb-3" />
+                  <div className="h-4 bg-outline/10 rounded w-1/2" />
+                </div>
+              </div>
+            ))
           ) : albums.length === 0 ? (
-            <div className="col-span-full flex flex-col items-center justify-center py-20 gap-4">
-              <p className="text-xl text-outline">暂无相册</p>
-              <p className="text-sm text-outline/70">请在设置页面添加库目录并扫描</p>
-            </div>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2 }}
+              className="col-span-full flex flex-col items-center justify-center py-24 md:py-32 gap-6"
+            >
+              <div className="relative">
+                <Images className="w-24 h-24 text-outline/20 stroke-[1]" />
+                <motion.div 
+                  animate={{ rotate: [0, 15, -5, 0] }} 
+                  transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                  className="absolute -bottom-2 -right-2 bg-primary-container text-on-primary-container p-2.5 rounded-2xl shadow-lg -rotate-12"
+                >
+                  <Search className="w-6 h-6" />
+                </motion.div>
+              </div>
+              <div className="text-center space-y-2">
+                <p className="text-2xl font-bold text-on-surface font-headline tracking-tight">这里还是一片空白</p>
+                <p className="text-sm text-outline/80">在左侧边栏找到“设置”，导入你的第一个瞬间图库吧</p>
+              </div>
+            </motion.div>
           ) : (
             renderedAlbums.map((album, idx) => {
               const colorScheme = tagColors[album.sourceType] || tagColors.folder;
               return (
                 <motion.div 
                   key={album.id}
-                  whileHover={{ scale: 1.03, rotate: idx % 2 === 0 ? 1 : -1 }}
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.03, rotate: idx % 2 === 0 ? 1 : -1, zIndex: 10 }}
                   className="group cursor-pointer"
                 >
-                  <div className="relative bg-surface-container-highest rounded-xl p-3 shadow-lg transition-all duration-500">
+                  <div className="relative bg-surface-container-highest rounded-xl p-3 shadow-lg transition-all duration-300">
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
@@ -309,7 +358,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                           }
                         }
                       }}
-                      className="absolute top-2 right-2 z-20 p-2 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
+                      className="absolute top-2 right-2 z-20 p-2 rounded-full bg-red-400 text-white opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:scale-110 transition-all shadow-md"
                       title="删除图集"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -338,10 +387,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                         )}
                       </div>
                       <div className="mt-4 px-2 pb-2">
-                        <h3 className="text-base font-bold text-on-surface font-headline truncate">{album.name}</h3>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-xs font-medium text-outline">{album.assetCount} images</span>
-                          <ArrowRight className="text-outline/30 group-hover:text-primary w-4 h-4 transition-colors" />
+                        <h3 className="text-base font-bold text-on-surface font-headline truncate leading-tight mb-1" title={album.name}>{album.name}</h3>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-outline tracking-wider uppercase">{album.assetCount} ITEMS</span>
+                          <ArrowRight className="text-outline/30 group-hover:text-primary w-4 h-4 transition-colors group-hover:translate-x-1" />
                         </div>
                       </div>
                     </div>
@@ -350,7 +399,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               );
             })
           )}
-        </div>
+        </motion.div>
         {renderedAlbums.length < albums.length && (
           <div ref={loadMoreRef} className="w-full py-6 text-center text-sm text-outline/70">
             正在加载更多相册...

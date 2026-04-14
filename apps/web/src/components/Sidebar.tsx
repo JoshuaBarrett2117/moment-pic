@@ -171,9 +171,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <>
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed top-4 left-4 z-50 p-3 bg-surface-container-high rounded-full shadow-lg"
+          className="fixed top-4 md:top-6 left-4 md:left-6 z-50 p-2.5 md:p-3 bg-surface-container-high/80 backdrop-blur-md rounded-full shadow-lg hover:bg-surface-container-high transition-colors pointer-events-auto"
         >
-          <Menu className="w-6 h-6" />
+          <Menu className="w-5 h-5 md:w-6 md:h-6 text-on-surface text-opacity-80" />
         </button>
         
         <AnimatePresence>
@@ -195,9 +195,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="absolute top-4 right-4 p-2"
+                  className="absolute top-6 right-4 p-2 text-outline hover:text-on-surface transition-colors"
                 >
-                  <X className="w-6 h-6" />
+                  <X className="w-5 h-5 md:w-6 md:h-6" />
                 </button>
                 {sidebarContent}
               </motion.div>

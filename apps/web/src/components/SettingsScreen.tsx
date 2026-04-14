@@ -137,14 +137,14 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden">
-      <aside className="w-80 bg-surface-container-low p-8 flex flex-col border-r border-outline/5">
-        <div className="mb-10 flex items-center gap-3">
-          <Database className="text-on-primary-container w-8 h-8" />
-          <h1 className="text-2xl font-bold text-on-primary-container font-script">设置</h1>
+    <div className="flex flex-col md:flex-row h-screen w-full bg-background overflow-hidden">
+      <aside className="w-full md:w-80 bg-surface-container-low p-3 md:p-8 flex flex-row md:flex-col border-b md:border-b-0 md:border-r border-outline/5 overflow-x-auto shrink-0 z-20 items-center md:items-stretch scrollbar-hide">
+        <div className="md:mb-10 mr-6 md:mr-0 flex items-center gap-2 md:gap-3 shrink-0">
+          <Database className="text-on-primary-container w-6 h-6 md:w-8 md:h-8" />
+          <h1 className="text-xl md:text-2xl font-bold text-on-primary-container font-script">设置</h1>
         </div>
 
-        <nav className="flex flex-col gap-4">
+        <nav className="flex flex-row md:flex-col gap-2 md:gap-4 shrink-0">
           <button
             onClick={onBack}
             className="flex items-center gap-3 text-outline hover:text-on-primary-container font-headline font-semibold px-4 py-2 rounded-lg hover:bg-primary-container/10 transition-all"
@@ -177,11 +177,11 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
         </nav>
       </aside>
 
-      <main className="flex-1 p-12 overflow-y-auto custom-scrollbar">
+      <main className="flex-1 p-4 md:p-12 overflow-y-auto custom-scrollbar">
         {activeTab === 'basic' && (
           <>
-            <header className="mb-12">
-              <h2 className="text-4xl font-headline font-black text-on-surface">基础设置</h2>
+            <header className="mb-6 md:mb-12">
+              <h2 className="text-2xl md:text-4xl font-headline font-black text-on-surface">基础设置</h2>
               <p className="text-outline mt-2">配置图片库目录，并管理查看器相关设置</p>
             </header>
 
@@ -198,8 +198,8 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
                   <Images className="h-6 w-6" />
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <p className="font-bold text-on-surface">图片预加载张数</p>
                       <p className="mt-1 text-sm text-outline">查看大图时，预先加载当前图片前后相邻的图片数量</p>
@@ -253,7 +253,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
               </div>
             </div>
 
-            <div className="bg-surface-container-highest rounded-2xl p-6 mb-8">
+            <div className="bg-surface-container-highest rounded-2xl p-4 md:p-6 mb-8">
               <h3 className="text-lg font-bold text-on-surface mb-4">添加库目录</h3>
               <div className="flex flex-col gap-4">
                 <div>
@@ -283,8 +283,8 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
               </div>
             </div>
 
-            <div className="bg-surface-container-highest rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-4">
+            <div className="bg-surface-container-highest rounded-2xl p-4 md:p-6 mb-8">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
                 <h3 className="text-lg font-bold text-on-surface">库目录列表</h3>
                 <button
                   onClick={() => handleScan()}
@@ -305,10 +305,10 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
               ) : (
                 <div className="space-y-4">
                   {libraryRoots.map((root) => (
-                    <div key={root.id} className="flex items-center justify-between p-4 bg-surface-container-high rounded-xl">
-                      <div className="flex items-center gap-4">
-                        <Folder className="w-10 h-10 text-primary" />
-                        <div className="flex-1">
+                    <div key={root.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-surface-container-high rounded-xl gap-4">
+                      <div className="flex items-start md:items-center gap-4 min-w-0">
+                        <Folder className="w-8 h-8 md:w-10 md:h-10 text-primary shrink-0" />
+                        <div className="flex-1 min-w-0">
                           {editingId === root.id ? (
                             <div className="space-y-2">
                               <input
@@ -390,20 +390,20 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
 
         {activeTab === 'advanced' && (
           <>
-            <header className="mb-12">
-              <h2 className="text-4xl font-headline font-black text-on-surface">高级设置</h2>
-              <p className="text-outline mt-2">配置目录监控和轮询相关的系统级参数</p>
+            <header className="mb-6 md:mb-12">
+              <h2 className="text-2xl md:text-4xl font-headline font-black text-on-surface">高级设置</h2>
+              <p className="text-outline mt-2 text-sm md:text-base">配置目录监控和轮询相关的系统级参数</p>
             </header>
 
             <div className="bg-surface-container-highest rounded-2xl p-6 mb-8">
               <h3 className="text-lg font-bold text-on-surface mb-4">目录监控</h3>
               <div className="space-y-6">
                 <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container shrink-0">
                     <Clock className="h-6 w-6" />
                   </div>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                       <div>
                         <p className="font-bold text-on-surface">启用轮询模式</p>
                         <p className="mt-1 text-sm text-outline">适用于网络驱动器（如 NAS）或无法使用系统通知的场景</p>
@@ -428,11 +428,11 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
 
                 {systemConfig?.enablePolling && (
                   <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container shrink-0">
                       <Settings className="h-6 w-6" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                           <p className="font-bold text-on-surface">轮询间隔</p>
                           <p className="mt-1 text-sm text-outline">每次检查文件变化的时间间隔</p>

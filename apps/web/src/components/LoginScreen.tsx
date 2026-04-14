@@ -50,8 +50,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
   };
 
   return (
-    <div className="flex min-h-screen w-full">
-      <section className="w-full max-w-[520px] bg-surface-container-low p-12 flex flex-col justify-between relative z-10">
+    <div className="flex flex-col md:flex-row min-h-screen w-full">
+      <section className="w-full md:max-w-[520px] bg-surface-container-low p-6 sm:p-8 md:p-12 flex flex-col justify-between relative z-10 min-h-screen md:min-h-0">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
             <Camera className="text-4xl text-on-primary-container w-10 h-10 fill-on-primary-container" />
@@ -60,8 +60,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
           <p className="text-sm font-medium text-outline pl-12 font-label">Local Gallery Manager</p>
         </div>
 
-        <div className="flex flex-col gap-8 relative">
-          <div className="sticky-note absolute -top-16 -right-4 px-6 py-3 rotate-6 z-20">
+        <div className="flex flex-col gap-8 relative mt-16 md:mt-0">
+          <div className="sticky-note absolute -top-16 -right-2 md:-right-4 px-6 py-3 rotate-6 z-20">
             <span className="text-on-primary-container font-bold text-lg font-body">欢迎回来</span>
           </div>
 
@@ -130,12 +130,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
           </div>
         </div>
 
-        <div className="text-xs text-outline font-label text-center">
+        <div className="text-xs text-outline font-label text-center mt-12 md:mt-0">
           © 2024 Moment Pic. Hand-crafted for your memories.
         </div>
       </section>
 
-      <section className="flex-1 bg-background relative overflow-hidden flex items-center justify-center">
+      <section className="hidden md:flex flex-1 bg-background relative overflow-hidden items-center justify-center">
         <div className="absolute inset-0 z-0 opacity-40">
           <div className="absolute top-10 left-10 text-6xl text-primary-fixed-dim">☁️</div>
           <div className="absolute bottom-20 right-20 text-6xl text-secondary-container">✨</div>

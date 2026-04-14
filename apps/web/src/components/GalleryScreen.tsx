@@ -243,7 +243,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 </select>
               </div>
 
-              <div className="relative flex-1 min-w-[200px] max-w-[300px]">
+              <div className="relative flex-1 w-full md:w-auto min-w-[150px] md:min-w-[200px] max-w-full md:max-w-[300px]">
                 <input 
                   className="w-full bg-surface-container-high border-2 border-outline/30 rounded-full py-2 pl-10 pr-10 focus:ring-2 focus:ring-primary-container focus:border-transparent outline-none text-sm placeholder:text-outline/50" 
                   placeholder="Search moment"
@@ -279,7 +279,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
         </div>
 
-        <div className="grid gap-4 md:gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+        <div className="grid gap-4 md:gap-6 w-full" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? 140 : 160}px, 1fr))` }}>
           {isLoading && albums.length === 0 ? (
             <div className="col-span-full flex items-center justify-center py-20">
               <Loader2 className="w-12 h-12 animate-spin text-outline" />

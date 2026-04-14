@@ -207,7 +207,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           </header>
         )}
 
-        <section ref={scrollContainerRef} className="flex-1 overflow-y-auto md:px-12 px-4 md:py-8 py-4 custom-scrollbar scroll-smooth">
+        <section ref={scrollContainerRef} className="flex-1 overflow-y-auto md:px-12 px-4 md:py-8 pt-4 pb-24 md:pb-8 custom-scrollbar scroll-smooth">
           {isLoading && loadedItems.length === 0 ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-12 h-12 animate-spin text-outline" />

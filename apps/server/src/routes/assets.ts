@@ -4,7 +4,12 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
 import { deleteAsset, getAssetDetail } from "../services/album-service.js";
-import { ensureThumbnail, readOriginalImage } from "../services/thumbnail-service.js";
+import {
+  AssetNotFoundError,
+  ensureThumbnail,
+  OriginalAssetSourceMissingError,
+  readOriginalImage
+} from "../services/thumbnail-service.js";
 
 export const assetRoutes: FastifyPluginAsync = async (app) => {
   const THUMBNAIL_REQUEST_MAX_ACTIVE = 24;
@@ -71,15 +76,24 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   const normalizeHeader = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
+  const sendAssetNotFound = (reply: any) =>
+    reply.status(404).send({
+      code: 4002,
+      message: "asset not found"
+    });
+
+  const sendOriginalSourceMissing = (reply: any) =>
+    reply.status(404).send({
+      code: 4005,
+      message: "original asset source not found"
+    });
+
   app.get("/api/v1/assets/:assetId", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
     const asset = await getAssetDetail(assetId);
 
     if (!asset) {
-      return reply.status(404).send({
-        code: 4002,
-        message: "asset not found"
-      });
+      return sendAssetNotFound(reply);
     }
 
     return ok(asset);
@@ -131,17 +145,26 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         reply.header("Cache-Control", "private, max-age=86400, must-revalidate");
         reply.type(thumbnail.mimeType);
         return reply.send(fs.createReadStream(thumbnail.filePath));
-      } catch {
+      } catch (error) {
+        if (error instanceof AssetNotFoundError) {
+          return sendAssetNotFound(reply);
+        }
+        if (error instanceof OriginalAssetSourceMissingError) {
+          return sendOriginalSourceMissing(reply);
+        }
         try {
           const { asset, buffer } = await readOriginalImage(assetId);
           const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
           reply.type(mimeType);
           return reply.send(buffer);
-        } catch {
-          return reply.status(404).send({
-            code: 4002,
-            message: "asset not found"
-          });
+        } catch (fallbackError) {
+          if (fallbackError instanceof AssetNotFoundError) {
+            return sendAssetNotFound(reply);
+          }
+          if (fallbackError instanceof OriginalAssetSourceMissingError) {
+            return sendOriginalSourceMissing(reply);
+          }
+          throw fallbackError;
         }
       }
     } finally {
@@ -158,11 +181,14 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
       reply.header("Content-Disposition", `inline; filename="${encodeURIComponent(asset.name)}"`);
       reply.type(mimeType);
       return reply.send(buffer);
-    } catch {
-      return reply.status(404).send({
-        code: 4002,
-        message: "asset not found"
-      });
+    } catch (error) {
+      if (error instanceof AssetNotFoundError) {
+        return sendAssetNotFound(reply);
+      }
+      if (error instanceof OriginalAssetSourceMissingError) {
+        return sendOriginalSourceMissing(reply);
+      }
+      throw error;
     }
   });
 
@@ -171,10 +197,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     const success = await deleteAsset(assetId);
 
     if (!success) {
-      return reply.status(404).send({
-        code: 4002,
-        message: "asset not found"
-      });
+      return sendAssetNotFound(reply);
     }
 
     return ok({ success: true });

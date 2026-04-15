@@ -13,6 +13,20 @@ const DEFAULT_THUMBNAIL_HEIGHT = 360;
 const MIN_THUMBNAIL_SIZE = 80;
 const MAX_THUMBNAIL_SIZE = 720;
 type ThumbnailFormat = "webp" | "jpeg";
+export class AssetNotFoundError extends Error {
+  constructor(assetId: string) {
+    super(`asset not found: ${assetId}`);
+    this.name = "AssetNotFoundError";
+  }
+}
+
+export class OriginalAssetSourceMissingError extends Error {
+  constructor(assetId: string, sourcePath: string) {
+    super(`original asset source missing: ${assetId} -> ${sourcePath}`);
+    this.name = "OriginalAssetSourceMissingError";
+  }
+}
+
 const THUMBNAIL_GENERATION_CONCURRENCY = 6;
 const inFlightThumbnailTasks = new Map<string, Promise<{
   filePath: string;
@@ -137,20 +151,35 @@ const readOriginalBuffer = async (assetId: string) => {
   const asset = findAssetByIdDb(assetId);
 
   if (!asset) {
-    throw new Error("asset not found");
+    throw new AssetNotFoundError(assetId);
   }
 
   if (asset.sourceType === "folder") {
-    return {
-      asset,
-      buffer: await fs.promises.readFile(asset.sourcePath)
-    };
+    try {
+      return {
+        asset,
+        buffer: await fs.promises.readFile(asset.sourcePath)
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new OriginalAssetSourceMissingError(asset.id, asset.sourcePath);
+      }
+      throw error;
+    }
   }
 
-  return {
-    asset,
-    buffer: await readArchiveEntryBuffer(asset.sourcePath, asset.zipEntryPath ?? "")
-  };
+  try {
+    return {
+      asset,
+      buffer: await readArchiveEntryBuffer(asset.sourcePath, asset.zipEntryPath ?? "")
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("not found") || message.includes("ENOENT")) {
+      throw new OriginalAssetSourceMissingError(asset.id, asset.sourcePath);
+    }
+    throw error;
+  }
 };
 
 const ensureThumbnailWithResolvedInput = async (input: {
@@ -162,7 +191,7 @@ const ensureThumbnailWithResolvedInput = async (input: {
 }) => {
   const asset = findAssetByIdDb(input.assetId);
   if (!asset) {
-    throw new Error("asset not found");
+    throw new AssetNotFoundError(input.assetId);
   }
 
   const isDefaultSize = input.width === DEFAULT_THUMBNAIL_WIDTH && input.height === DEFAULT_THUMBNAIL_HEIGHT;
@@ -324,7 +353,7 @@ export const ensureThumbnail = async (
   await ensureCacheDir();
   const asset = findAssetByIdDb(assetId);
   if (!asset) {
-    throw new Error("asset not found");
+    throw new AssetNotFoundError(assetId);
   }
 
   const { width, height } = resolveThumbnailSize(input);

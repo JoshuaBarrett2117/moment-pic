@@ -1,4 +1,5 @@
-import { type FC, useEffect, useState, useCallback, useRef } from 'react';
+import { type FC, useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { motion } from 'motion/react';
 import { ArrowLeft, Camera, Home, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2, Menu } from 'lucide-react';
 import { Polaroid } from './Polaroid';
 import { ViewerGallery } from './ViewerGallery';
@@ -207,10 +208,16 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           </header>
         )}
 
-        <section ref={scrollContainerRef} className="flex-1 overflow-y-auto md:px-12 px-4 md:py-8 py-4 custom-scrollbar scroll-smooth">
+        <section ref={scrollContainerRef} className="flex-1 overflow-y-auto md:px-12 px-4 md:py-8 pt-4 pb-24 md:pb-8 custom-scrollbar scroll-smooth">
           {isLoading && loadedItems.length === 0 ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader2 className="w-12 h-12 animate-spin text-outline" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="polaroid">
+                    <div className="aspect-square rounded-sm bg-outline/10 mb-4" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : error && loadedItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 gap-4">
@@ -221,9 +228,18 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              <motion.div
+                initial="hidden"
+                animate="show"
+                variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } }}
+                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
+              >
                 {renderedItems.map((asset, i) => (
-                  <div key={asset.id} className="group relative cursor-pointer hover:opacity-90 transition-opacity">
+                  <motion.div
+                    key={asset.id}
+                    variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } }}
+                    className="group relative cursor-pointer"
+                  >
                     <button
                       onClick={async (e) => {
                         e.stopPropagation();
@@ -235,7 +251,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                           }
                         }
                       }}
-                      className="absolute top-2 right-2 z-20 p-2 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
+                      className="absolute top-2 right-2 z-20 p-2 rounded-full bg-red-400 text-white opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:scale-110 transition-all shadow-md"
                       title="删除图片"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -243,9 +259,9 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                     <div onClick={() => handleImageClick(i)}>
                       <Polaroid src={asset.thumbnailUrl} caption="" rotation={(i % 5 - 2) * 1} className="w-full" />
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
-              </div>
+              </motion.div>
 
               {(hasMore || hasMoreToRender) && <div ref={loadMoreTriggerRef} className="h-2 w-full" />}
               {isLoadingMore && (

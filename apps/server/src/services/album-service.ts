@@ -58,8 +58,8 @@ const buildAlbumListCacheKey = (
     libraryRootId: input?.libraryRootId ?? "",
     sourceType: input?.sourceType ?? "",
     keyword: input?.keyword?.trim() ?? "",
-    sortBy: input?.sortBy ?? "name",
-    sortOrder: input?.sortOrder ?? "asc"
+    sortBy: input?.sortBy ?? "updatedAt",
+    sortOrder: input?.sortOrder ?? "desc"
   });
 
 export const clearAlbumListCache = () => {

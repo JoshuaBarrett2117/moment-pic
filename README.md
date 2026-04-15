@@ -6,7 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=flat&logo=typescript)](https://www.typescriptlang.org/)
 [![Prisma](https://img.shields.io/badge/Prisma-5-gray?style=flat)](https://www.prisma.io/)
 
-轻量级本地图片库管理与浏览工具，支持目录相册、ZIP/CBZ 压缩包解析、缩略图生成与实时预览。
+轻量级本地图片库管理与浏览工具，支持目录相册、ZIP/CBZ/RAR 压缩包解析、缩略图生成与实时预览。
 
 ## 限制
 

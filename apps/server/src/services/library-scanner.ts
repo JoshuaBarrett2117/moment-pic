@@ -300,7 +300,7 @@ const iterateAlbumsForRoot = async function* (
 };
 
 const toAssetRecord = (albumId: string, timestamp: string, asset: ScannedAlbum["assets"][number]): AssetRecord => ({
-  id: makeId("ast"),
+  id: buildStableAssetId(asset),
   albumId,
   name: asset.name,
   extension: asset.extension,
@@ -337,6 +337,19 @@ const buildAssetsFingerprint = (assets: ScannedAlbum["assets"]): string =>
         .join("\n")
     )
     .digest("hex");
+
+export const buildStableAssetId = (asset: {
+  sourceType: SourceType;
+  sourcePath: string;
+  zipEntryPath: string | null;
+}): string => {
+  const hash = crypto
+    .createHash("sha1")
+    .update([asset.sourceType, asset.sourcePath, asset.zipEntryPath ?? ""].join("|"))
+    .digest("hex");
+
+  return `ast_${hash.slice(0, 32)}`;
+};
 
 const shouldReplaceAlbum = (
   existingAlbum: AlbumRecord,

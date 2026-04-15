@@ -1,8 +1,9 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import yauzl from "yauzl";
-import { createExtractorFromFile, createExtractorFromData } from "node-unrar-js";
+import { createExtractorFromFile } from "node-unrar-js";
 import { path7za } from "7zip-bin";
 
 import { isSupportedImageExtension } from "../lib/image-formats.js";
@@ -27,9 +28,8 @@ export const detectArchiveType = (filePath: string): ArchiveType | null => {
   return null;
 };
 
-type UnrarExtractor = Awaited<ReturnType<typeof createExtractorFromFile>>;
-type UnrarDataExtractor = Awaited<ReturnType<typeof createExtractorFromData>>;
 type ZipEntryName = string | Buffer;
+type UnrarExtractor = Awaited<ReturnType<typeof createExtractorFromFile>>;
 
 const ZIP_UTF8_FLAG = 0x800;
 
@@ -238,16 +238,16 @@ const collectZipImageEntries = async (zipPath: string): Promise<ArchiveImageEntr
   });
 };
 
-const collectCbrImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
-  const buffer = await fs.promises.readFile(archivePath);
-
-  let unrar: UnrarExtractor | UnrarDataExtractor;
+const openUnrarFileExtractor = async (archivePath: string): Promise<UnrarExtractor> => {
   try {
-    unrar = await createExtractorFromFile({ filepath: archivePath });
+    return await createExtractorFromFile({ filepath: archivePath });
   } catch {
-    unrar = await createExtractorFromData({ data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) });
+    throw new Error(`cannot open RAR archive: ${archivePath}`);
   }
+};
 
+const collectCbrImageEntriesWithUnrar = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
+  const unrar = await openUnrarFileExtractor(archivePath);
   const fileHeaders = [...unrar.getFileList().fileHeaders];
 
   const entries: ArchiveImageEntry[] = [];
@@ -258,7 +258,6 @@ const collectCbrImageEntries = async (archivePath: string): Promise<ArchiveImage
     }
 
     const entryPath = toPosixPath(header.name);
-
     if (entryPath.endsWith("/")) {
       continue;
     }
@@ -277,6 +276,10 @@ const collectCbrImageEntries = async (archivePath: string): Promise<ArchiveImage
   }
 
   return entries;
+};
+
+const collectCbrImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
+  return collectCbrImageEntriesWithUnrar(archivePath);
 };
 
 const collect7zImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
@@ -379,19 +382,7 @@ export const listRootImageEntries = async (archivePath: string): Promise<Archive
     return rootImages;
   }
 
-  const topFolders = Array.from(
-    new Set(
-      entries
-        .filter((entry) => entry.entryPath.includes("/"))
-        .map((entry) => entry.entryPath.split("/")[0])
-    )
-  );
-
-  if (topFolders.length === 1) {
-    return entries.filter((entry) => entry.entryPath.startsWith(`${topFolders[0]}/`));
-  }
-
-  return [];
+  return entries;
 };
 
 const readZipBuffer = async (zipPath: string, entryPath: string): Promise<Buffer> => {
@@ -516,25 +507,21 @@ const findEmbeddedJpegInPsd = (buffer: Buffer): Buffer | null => {
 };
 
 const readCbrBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
-  const buffer = await fs.promises.readFile(archivePath);
-
-  let unrar: UnrarExtractor | UnrarDataExtractor;
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-unrar-"));
   try {
-    unrar = await createExtractorFromFile({ filepath: archivePath });
-  } catch {
-    unrar = await createExtractorFromData({ data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) });
-  }
+    const unrar = await createExtractorFromFile({ filepath: archivePath, targetPath: tempDir });
+    const extracted = await unrar.extract({ files: [entryPath] });
 
-  const extracted = await unrar.extract({ files: [entryPath] });
-
-  for (const file of extracted.files) {
-    if (file.extraction) {
-      const extractedBuffer = Buffer.from(file.extraction);
+    for (const file of extracted.files) {
+      const extractedPath = path.join(tempDir, file.fileHeader.name);
+      const extractedBuffer = await fs.promises.readFile(extractedPath);
       return extractJpegFromPsd(extractedBuffer);
     }
-  }
 
-  throw new Error(`CBR entry not found: ${entryPath}`);
+    throw new Error(`CBR entry not found: ${entryPath}`);
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
 };
 
 const read7zBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {

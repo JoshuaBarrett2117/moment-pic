@@ -132,19 +132,9 @@ export default function App() {
   const { albums, isLoading, error, fetchAlbums } = useAlbums();
   const { recentAlbums, isLoading: isRecentLoading, fetchRecentAlbums } = useRecentAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
-  const { isScanning, scan, scanningLibraryRootIds, isAnyScanning } = useLibraryScan();
-  const scanningLibraryRootId = scanningLibraryRootIds.size > 0 ? Array.from(scanningLibraryRootIds)[0] : null;
-
-  const { isConnected: wsConnected, lastScanComplete } = useWebSocket(
-    undefined,
-    (event) => {
-      console.log('[App] Scan complete from WS:', event);
-      loadAlbums();
-    }
-  );
 
   const loadAlbums = useCallback(() => {
-    fetchAlbums({
+    return fetchAlbums({
       page: filters.page,
       pageSize: filters.pageSize,
       keyword: filters.keyword || undefined,
@@ -154,6 +144,50 @@ export default function App() {
       libraryRootId: filters.libraryRootId || undefined,
     });
   }, [fetchAlbums, filters.page, filters.pageSize, filters.keyword, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId]);
+
+  const refreshCurrentGallery = useCallback(async () => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    await fetchLibraryRoots();
+    if (isRecentActive) {
+      await fetchRecentAlbums({ limit: 50 });
+      return;
+    }
+
+    await loadAlbums();
+  }, [fetchLibraryRoots, fetchRecentAlbums, isAuthenticated, isRecentActive, loadAlbums]);
+
+  const { isScanning, scan, scanningLibraryRootIds, isAnyScanning } = useLibraryScan({
+    onScanComplete: refreshCurrentGallery
+  });
+  const scanningLibraryRootId = scanningLibraryRootIds.size > 0 ? Array.from(scanningLibraryRootIds)[0] : null;
+
+  const { isConnected: wsConnected } = useWebSocket(
+    (event) => {
+      if (event.type !== 'unlink') {
+        return;
+      }
+
+      if (!isAuthenticated) {
+        return;
+      }
+
+      if (currentScreen === Screen.GALLERY) {
+        void refreshCurrentGallery();
+        return;
+      }
+
+      if (currentScreen === Screen.SETTINGS) {
+        void fetchLibraryRoots();
+      }
+    },
+    (event) => {
+      console.log('[App] Scan complete from WS:', event);
+      void refreshCurrentGallery();
+    }
+  );
 
   useEffect(() => {
     const verifyAuth = async () => {
@@ -428,6 +462,7 @@ export default function App() {
             >
               <SettingsScreen 
                 onBack={handleBackToGallery}
+                onScanComplete={refreshCurrentGallery}
               />
             </Suspense>
           )}

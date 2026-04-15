@@ -418,7 +418,6 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          transform: translateY(-30px);
           transition: transform 0.3s;
         }
         .viewer-image {

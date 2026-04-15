@@ -19,9 +19,15 @@ interface UseLibraryScanReturn {
   clearScanTask: (libraryRootId: string) => void;
 }
 
-export function useLibraryScan(): UseLibraryScanReturn {
+type UseLibraryScanOptions = {
+  onScanComplete?: () => void | Promise<void>;
+};
+
+export function useLibraryScan(options: UseLibraryScanOptions = {}): UseLibraryScanReturn {
   const [scanTasks, setScanTasks] = useState<Map<string, ScanTask>>(new Map<string, ScanTask>());
   const pollIntervalsRef = useRef<Map<string, number>>(new Map<string, number>());
+  const onScanCompleteRef = useRef(options.onScanComplete);
+  onScanCompleteRef.current = options.onScanComplete;
   const scanTaskList = Array.from(scanTasks.values() as IterableIterator<ScanTask>);
   const isAnyScanning = scanTaskList.some(
     (task) => task.status === 'running' || task.status === 'pending'
@@ -70,6 +76,9 @@ export function useLibraryScan(): UseLibraryScanReturn {
 
         if (status.status === 'completed' || status.status === 'failed') {
           clearPollInterval(libraryRootId);
+        }
+        if (status.status === 'completed') {
+          void onScanCompleteRef.current?.();
         }
       } catch {
         clearPollInterval(libraryRootId);

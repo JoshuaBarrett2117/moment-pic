@@ -21,6 +21,7 @@ import { useLibraryRoots, useLibraryScan, useSystemConfig, useMobile } from '../
 
 interface SettingsScreenProps {
   onBack: () => void;
+  onScanComplete?: () => void | Promise<void>;
 }
 
 const VIEWER_PRELOAD_BEFORE_KEY = 'moment_pic_viewer_preload_before';
@@ -36,10 +37,12 @@ const clampPreloadRadius = (value: number): number => {
   return Math.max(0, Math.min(100, Math.round(value)));
 };
 
-export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack }) => {
+export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete }) => {
   const isMobile = useMobile();
   const { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot } = useLibraryRoots();
-  const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan();
+  const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan({
+    onScanComplete
+  });
   const { systemConfig, fetchSystemConfig, updateSystemConfig } = useSystemConfig();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'basic' | 'advanced'>('basic');

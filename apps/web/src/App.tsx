@@ -119,6 +119,7 @@ const SettingsScreen = lazy(() =>
 );
 
 export default function App() {
+  const initialFilters = getInitialFilters();
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
   const [direction, setDirection] = useState(1);
@@ -126,34 +127,78 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isRecentActive, setIsRecentActive] = useState(false);
   const [scrollPosition, setScrollPosition] = useState(0);
-  
-  const [filters, setFilters] = useState<GalleryFilters>(getInitialFilters);
+  const [filters, setFilters] = useState<GalleryFilters>(initialFilters);
+  const [debouncedKeyword, setDebouncedKeyword] = useState(initialFilters.keyword);
 
   const { albums, isLoading, error, fetchAlbums } = useAlbums();
   const { recentAlbums, isLoading: isRecentLoading, fetchRecentAlbums } = useRecentAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
-  const { isScanning, scan, scanningLibraryRootIds, isAnyScanning } = useLibraryScan();
-  const scanningLibraryRootId = scanningLibraryRootIds.size > 0 ? Array.from(scanningLibraryRootIds)[0] : null;
-
-  const { isConnected: wsConnected, lastScanComplete } = useWebSocket(
-    undefined,
-    (event) => {
-      console.log('[App] Scan complete from WS:', event);
-      loadAlbums();
-    }
-  );
 
   const loadAlbums = useCallback(() => {
-    fetchAlbums({
+    return fetchAlbums({
       page: filters.page,
       pageSize: filters.pageSize,
-      keyword: filters.keyword || undefined,
+      keyword: debouncedKeyword || undefined,
       sortBy: filters.sortBy,
       sortOrder: filters.sortOrder,
       sourceType: filters.sourceType || undefined,
       libraryRootId: filters.libraryRootId || undefined,
     });
-  }, [fetchAlbums, filters.page, filters.pageSize, filters.keyword, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId]);
+  }, [fetchAlbums, filters.page, filters.pageSize, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId, debouncedKeyword]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedKeyword(filters.keyword);
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [filters]);
+
+  const refreshCurrentGallery = useCallback(async () => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    await fetchLibraryRoots();
+    if (isRecentActive) {
+      await fetchRecentAlbums({ limit: 50 });
+      return;
+    }
+
+    await loadAlbums();
+  }, [fetchLibraryRoots, fetchRecentAlbums, isAuthenticated, isRecentActive, loadAlbums]);
+
+  const { isScanning, scan, scanningLibraryRootIds, isAnyScanning } = useLibraryScan({
+    onScanComplete: refreshCurrentGallery
+  });
+  const scanningLibraryRootId = scanningLibraryRootIds.size > 0 ? Array.from(scanningLibraryRootIds)[0] : null;
+
+  const { isConnected: wsConnected } = useWebSocket(
+    (event) => {
+      if (event.type !== 'unlink') {
+        return;
+      }
+
+      if (!isAuthenticated) {
+        return;
+      }
+
+      if (currentScreen === Screen.GALLERY) {
+        void refreshCurrentGallery();
+        return;
+      }
+
+      if (currentScreen === Screen.SETTINGS) {
+        void fetchLibraryRoots();
+      }
+    },
+    (event) => {
+      console.log('[App] Scan complete from WS:', event);
+      void refreshCurrentGallery();
+    }
+  );
 
   useEffect(() => {
     const verifyAuth = async () => {
@@ -184,7 +229,7 @@ export default function App() {
     if (isAuthenticated && currentScreen === Screen.GALLERY) {
       loadAlbums();
     }
-  }, [isAuthenticated, currentScreen, filters.page, filters.pageSize, filters.keyword, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId]);
+  }, [isAuthenticated, currentScreen, loadAlbums]);
 
   useEffect(() => {
     if (currentScreen === Screen.GALLERY && isAuthenticated) {
@@ -264,6 +309,7 @@ export default function App() {
     if (tab === 'gallery') {
       const nextFilters = { ...filters, libraryRootId: '', page: 1 };
       setFilters(nextFilters);
+      setScrollPosition(0);
       fetchAlbums({
         page: nextFilters.page,
         pageSize: nextFilters.pageSize,
@@ -282,37 +328,45 @@ export default function App() {
   const handleRecentClick = () => {
     setIsRecentActive(true);
     setFilters(prev => ({ ...prev, libraryRootId: '', page: 1 }));
+    setScrollPosition(0);
     fetchRecentAlbums({ limit: 50 });
     navigate(Screen.GALLERY, 1);
   };
 
   const handlePageChange = (page: number) => {
     setFilters(prev => ({ ...prev, page }));
+    setScrollPosition(0);
   };
 
   const handleSortByChange = (sortBy: 'name' | 'updatedAt' | 'assetCount') => {
     setFilters(prev => ({ ...prev, sortBy, page: 1 }));
+    setScrollPosition(0);
   };
 
   const handleSortOrderChange = (sortOrder: 'asc' | 'desc') => {
     setFilters(prev => ({ ...prev, sortOrder }));
+    setScrollPosition(0);
   };
 
   const handlePageSizeChange = (pageSize: number) => {
     setFilters(prev => ({ ...prev, pageSize, page: 1 }));
+    setScrollPosition(0);
   };
 
   const handleKeywordChange = (keyword: string) => {
     setFilters(prev => ({ ...prev, keyword, page: 1 }));
+    setScrollPosition(0);
   };
 
   const handleSourceTypeChange = (sourceType: '' | 'folder' | 'zip') => {
     setFilters(prev => ({ ...prev, sourceType, page: 1 }));
+    setScrollPosition(0);
   };
 
   const handleLibraryRootChange = (libraryRootId: string) => {
     setIsRecentActive(false);
     setFilters(prev => ({ ...prev, libraryRootId, page: 1 }));
+    setScrollPosition(0);
   };
 
   const handleRefreshAll = async () => {
@@ -339,7 +393,7 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-background">
+    <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
       <PaperGrain />
       
       <AnimatePresence initial={false} custom={direction} mode="sync">
@@ -363,7 +417,7 @@ export default function App() {
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-outline">
-                  加载中...
+                  正在加载图库...
                 </div>
               }
             >
@@ -407,7 +461,7 @@ export default function App() {
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-outline">
-                  加载中...
+                  正在加载相册详情...
                 </div>
               }
             >
@@ -422,12 +476,13 @@ export default function App() {
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center text-outline">
-                  加载中...
+                  正在加载设置...
                 </div>
               }
             >
               <SettingsScreen 
                 onBack={handleBackToGallery}
+                onScanComplete={refreshCurrentGallery}
               />
             </Suspense>
           )}

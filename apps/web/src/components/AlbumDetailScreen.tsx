@@ -1,9 +1,10 @@
-import { type FC, useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { type FC, useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Camera, Home, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2, Menu } from 'lucide-react';
+import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2 } from 'lucide-react';
 import { Polaroid } from './Polaroid';
+import { useToast } from './Toast';
 import { ViewerGallery } from './ViewerGallery';
-import { useAlbumAssets, deleteAsset, useMobile } from '../hooks';
+import { useAlbumAssets, deleteAsset, useMobile, useSystemConfig } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
 interface AlbumDetailScreenProps {
@@ -14,11 +15,18 @@ interface AlbumDetailScreenProps {
 
 const PAGE_SIZE = 24;
 const RENDER_CHUNK_SIZE = 96;
+const DEFAULT_PRELOAD_BEFORE = 2;
+const DEFAULT_PRELOAD_AFTER = 3;
+const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
+const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
 
 export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onAssetDeleted }) => {
   const isMobile = useMobile();
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
+  const { systemConfig, fetchSystemConfig } = useSystemConfig();
+  const { toast } = useToast();
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [pendingDeleteAsset, setPendingDeleteAsset] = useState<AssetListItemDTO | null>(null);
   const [loadedItems, setLoadedItems] = useState<AssetListItemDTO[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
@@ -71,56 +79,38 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     }
   }, [albumId, loadPage]);
 
-  const handleImageClick = useCallback((index: number) => {
-    setSelectedImageIndex(index);
-  }, []);
-
-  const closeViewer = useCallback(() => {
-    setSelectedImageIndex(null);
-  }, []);
-
-  const hasMore = loadedItems.length < totalItems;
-  const renderedItems = loadedItems.slice(0, visibleRenderCount);
-  const hasMoreToRender = visibleRenderCount < loadedItems.length;
-
-  const handleLoadMore = useCallback(async () => {
-    if (isLoading || isLoadingMore || !hasMore) {
-      return;
-    }
-
-    await loadPage(currentPage + 1, true);
-  }, [currentPage, hasMore, isLoading, isLoadingMore, loadPage]);
-
-  const handleReloadFirstPage = useCallback(async () => {
-    await loadPage(1, false);
-  }, [loadPage]);
+  useEffect(() => {
+    void fetchSystemConfig();
+  }, [fetchSystemConfig]);
 
   useEffect(() => {
-    if ((!hasMore && !hasMoreToRender) || isLoading || isLoadingMore) {
-      return;
-    }
-
     const root = scrollContainerRef.current;
     const target = loadMoreTriggerRef.current;
-    if (!root || !target) {
+    const hasMore = loadedItems.length < totalItems;
+    const hasMoreToRender = visibleRenderCount < loadedItems.length;
+
+    if ((!hasMore && !hasMoreToRender) || isLoading || isLoadingMore || !root || !target) {
       return;
     }
 
     const observer = new IntersectionObserver(
       (entries) => {
         const first = entries[0];
-        if (first?.isIntersecting) {
-          if (hasMoreToRender) {
-            setVisibleRenderCount((prev) => Math.min(prev + RENDER_CHUNK_SIZE, loadedItems.length));
-            return;
-          }
-          void handleLoadMore();
+        if (!first?.isIntersecting) {
+          return;
         }
+
+        if (hasMoreToRender) {
+          setVisibleRenderCount((prev) => Math.min(prev + RENDER_CHUNK_SIZE, loadedItems.length));
+          return;
+        }
+
+        void loadPage(currentPage + 1, true);
       },
       {
         root,
         rootMargin: '0px 0px 240px 0px',
-        threshold: 0.1
+        threshold: 0.1,
       }
     );
 
@@ -129,100 +119,112 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     return () => {
       observer.disconnect();
     };
-  }, [hasMore, hasMoreToRender, isLoading, isLoadingMore, handleLoadMore, loadedItems.length]);
+  }, [currentPage, isLoading, isLoadingMore, loadedItems, totalItems, visibleRenderCount, loadPage]);
+
+  const preloadBefore = systemConfig?.preloadBefore ?? DEFAULT_PRELOAD_BEFORE;
+  const preloadAfter = systemConfig?.preloadAfter ?? DEFAULT_PRELOAD_AFTER;
+  const albumDetailItemMinWidth = isMobile
+    ? (systemConfig?.albumDetailItemMinWidthMobile ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE)
+    : (systemConfig?.albumDetailItemMinWidthDesktop ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP);
+  const renderedItems = loadedItems.slice(0, visibleRenderCount);
+  const hasMore = loadedItems.length < totalItems;
+  const hasMoreToRender = visibleRenderCount < loadedItems.length;
+
+  const handleReloadFirstPage = useCallback(async () => {
+    await loadPage(1, false);
+  }, [loadPage]);
 
   return (
-    <div className="flex h-screen w-full bg-surface overflow-hidden">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface">
       {!isMobile && (
-        <aside className="w-[280px] bg-surface-container-low h-full flex flex-col px-6 pt-10 pb-8 z-10 relative overflow-y-auto custom-scrollbar">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 bg-primary-container rounded-xl flex items-center justify-center -rotate-3 shadow-sm">
-              <Camera className="w-5 h-5 text-on-primary-container" />
+        <aside className="relative z-10 flex h-full w-[280px] flex-col overflow-y-auto bg-surface-container-low px-6 pt-10 pb-8 custom-scrollbar">
+          <div className="mb-10 flex items-center gap-3">
+            <div className="-rotate-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-container shadow-sm">
+              <Camera className="h-5 w-5 text-on-primary-container" />
             </div>
-            <h1 className="text-xl font-headline font-extrabold tracking-tight text-primary">Moment Pic</h1>
+            <h1 className="font-headline text-xl font-extrabold tracking-tight text-primary">Moment Pic</h1>
           </div>
 
           <div className="mb-8 flex">
             <button
               onClick={onBack}
-              className="bg-secondary-container text-on-secondary-container px-4 py-1.5 rounded-sm text-xs font-medium rotate-1 shadow-sm wobbly-mask flex items-center gap-1 hover:brightness-95 transition-all"
+              className="wobbly-mask flex items-center gap-1 rounded-sm bg-secondary-container px-4 py-1.5 text-xs font-medium text-on-secondary-container shadow-sm transition-all hover:brightness-95"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="h-4 w-4" />
               返回首页
             </button>
           </div>
 
-          <div className="flex flex-col items-center gap-16 mt-4">
-            <Heart className="w-10 h-10 text-primary opacity-40 rotate-12 fill-primary" />
-            <Sparkles className="w-8 h-8 text-primary opacity-30 -rotate-8 self-start ml-8" />
-            <Leaf className="w-6 h-6 text-primary opacity-40 rotate-6 self-end mr-8" />
+          <div className="mt-4 flex flex-col items-center gap-16">
+            <Heart className="h-10 w-10 rotate-12 fill-primary text-primary opacity-40" />
+            <Sparkles className="ml-8 h-8 w-8 -rotate-8 self-start text-primary opacity-30" />
+            <Leaf className="mr-8 h-6 w-6 rotate-6 self-end text-primary opacity-40" />
           </div>
 
-          <div className="mt-auto opacity-20 text-primary self-center">
-            <PenTool className="w-12 h-12 -rotate-12" />
+          <div className="mt-auto self-center text-primary opacity-20">
+            <PenTool className="-rotate-12 h-12 w-12" />
           </div>
 
-          <div className="mt-auto bg-tertiary-container p-6 rounded-2xl -rotate-2 shadow-sm relative wobbly-mask">
-            <Paperclip className="absolute -top-3 right-4 text-outline rotate-12 w-5 h-5" />
+          <div className="wobbly-mask relative mt-auto -rotate-2 rounded-2xl bg-tertiary-container p-6 shadow-sm">
+            <Paperclip className="absolute -top-3 right-4 h-5 w-5 rotate-12 text-outline" />
             {assets?.album ? (
               <>
-                <p className="text-sm font-medium text-on-tertiary-container leading-relaxed">
-                  共 {assets.album.assetCount} 张图片
-                </p>
-                <p className="text-[10px] mt-2 text-on-tertiary-container/60">
-                  已加载 {loadedItems.length} 张
-                </p>
-                <p className="text-[10px] mt-1 text-on-tertiary-container/60">
+                <p className="text-sm font-medium leading-relaxed text-on-tertiary-container">共 {assets.album.assetCount} 张图片</p>
+                <p className="mt-2 text-[10px] text-on-tertiary-container/60">已加载 {loadedItems.length} 张</p>
+                <p className="mt-1 text-[10px] text-on-tertiary-container/60">
                   更新于 {new Date(assets.album.updatedAt || Date.now()).toLocaleDateString('zh-CN')}
                 </p>
               </>
             ) : (
-              <p className="text-sm font-medium text-on-tertiary-container leading-relaxed">加载中...</p>
+              <p className="text-sm font-medium leading-relaxed text-on-tertiary-container">加载中...</p>
             )}
           </div>
         </aside>
       )}
 
-      <main className={`flex-1 flex flex-col h-full bg-surface relative ${isMobile ? 'w-full' : ''}`}>
+      <main className={`relative flex h-full flex-1 flex-col bg-surface ${isMobile ? 'w-full' : ''}`}>
         {isMobile && (
-          <header className="h-16 flex items-center justify-between px-4 pt-4 bg-surface/80 backdrop-blur-sm border-b border-outline/10">
-            <button
-              onClick={onBack}
-              className="flex items-center gap-1 text-outline hover:text-on-surface transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
+          <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-surface/92 px-4 pt-4 backdrop-blur-md">
+            <button onClick={onBack} className="flex min-h-11 items-center gap-1.5 text-outline transition-colors hover:text-on-surface">
+              <ArrowLeft className="h-5 w-5" />
               <span className="text-sm">返回</span>
             </button>
-            <h2 className="text-lg font-headline font-bold text-on-surface tracking-tight truncate max-w-[200px]">
+            <h2 className="max-w-[200px] truncate font-headline text-lg font-bold tracking-tight text-on-surface">
               {assets?.album?.name || albumId}
             </h2>
             <div className="w-16" />
           </header>
         )}
-        
+
         {!isMobile && (
-          <header className="h-32 flex flex-col justify-center px-12 pt-8">
-            <h2 className="text-4xl font-headline font-extrabold text-on-surface tracking-tight">
-              {assets?.album?.name || albumId} - 相册详情
+          <header className="flex h-32 flex-col justify-center px-12 pt-8">
+            <h2 className="font-headline text-4xl font-extrabold tracking-tight text-on-surface">
+              {assets?.album?.name || albumId} · 相册详情
             </h2>
           </header>
         )}
 
-        <section ref={scrollContainerRef} className="flex-1 overflow-y-auto md:px-12 px-4 md:py-8 pt-4 pb-24 md:pb-8 custom-scrollbar scroll-smooth">
+        <section
+          ref={scrollContainerRef}
+          className="custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth md:px-12 md:py-8 md:pb-8"
+        >
           {isLoading && loadedItems.length === 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            <div
+              className="grid gap-4"
+              style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${albumDetailItemMinWidth}px, 1fr))` }}
+            >
               {Array.from({ length: 12 }).map((_, i) => (
                 <div key={i} className="animate-pulse">
                   <div className="polaroid">
-                    <div className="aspect-square rounded-sm bg-outline/10 mb-4" />
+                    <div className="mb-4 aspect-square rounded-sm bg-outline/10" />
                   </div>
                 </div>
               ))}
             </div>
           ) : error && loadedItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 gap-4">
+            <div className="flex h-64 flex-col items-center justify-center gap-4">
               <p className="text-error">{error}</p>
-              <button onClick={handleReloadFirstPage} className="px-4 py-2 bg-primary-container text-on-primary-container rounded-lg">
+              <button onClick={handleReloadFirstPage} className="rounded-lg bg-primary-container px-4 py-2 text-on-primary-container">
                 重试
               </button>
             </div>
@@ -232,32 +234,30 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                 initial="hidden"
                 animate="show"
                 variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } }}
-                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
+                className="grid gap-4"
+                style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${albumDetailItemMinWidth}px, 1fr))` }}
               >
-                {renderedItems.map((asset, i) => (
+                {renderedItems.map((asset, index) => (
                   <motion.div
                     key={asset.id}
-                    variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } }}
+                    variants={{
+                      hidden: { opacity: 0, y: 20 },
+                      show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } },
+                    }}
                     className="group relative cursor-pointer"
                   >
                     <button
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`确定要删除图片 \"${asset.name}\" 吗？`)) {
-                          const success = await deleteAsset(asset.id);
-                          if (success) {
-                            onAssetDeleted?.();
-                            await loadPage(1, false);
-                          }
-                        }
+                        setPendingDeleteAsset(asset);
                       }}
-                      className="absolute top-2 right-2 z-20 p-2 rounded-full bg-red-400 text-white opacity-0 group-hover:opacity-100 hover:bg-red-500 hover:scale-110 transition-all shadow-md"
+                      className="absolute right-2 top-2 z-20 rounded-full bg-red-400 p-2.5 text-white opacity-100 shadow-md transition-all hover:scale-105 hover:bg-red-500 md:opacity-0 md:group-hover:opacity-100"
                       title="删除图片"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
-                    <div onClick={() => handleImageClick(i)}>
-                      <Polaroid src={asset.thumbnailUrl} caption="" rotation={(i % 5 - 2) * 1} className="w-full" />
+                    <div onClick={() => setSelectedImageIndex(index)}>
+                      <Polaroid src={asset.thumbnailUrl} caption="" rotation={(index % 5 - 2) * 1} className="w-full" />
                     </div>
                   </motion.div>
                 ))}
@@ -266,33 +266,80 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
               {(hasMore || hasMoreToRender) && <div ref={loadMoreTriggerRef} className="h-2 w-full" />}
               {isLoadingMore && (
                 <div className="mt-8 flex justify-center text-outline">
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                 </div>
               )}
             </>
           )}
         </section>
 
-        <footer className="hidden md:flex h-20 px-12 border-t-2 border-outline/5 flex items-center justify-between bg-surface/50 backdrop-blur-sm z-10">
+        <footer className="z-10 hidden h-20 items-center justify-between border-t-2 border-outline/5 bg-surface/50 px-12 backdrop-blur-sm md:flex">
           <div className="flex items-center gap-3 text-outline-variant/80">
-            <Paperclip className="w-4 h-4" />
+            <Paperclip className="h-4 w-4" />
             <code className="text-xs font-medium tracking-tight">/Volume1/pb1/{albumId}/moments/</code>
           </div>
         </footer>
       </main>
 
       {selectedImageIndex !== null && (
-        <ViewerGallery items={loadedItems} isOpen initialIndex={selectedImageIndex} onClose={closeViewer} />
+        <ViewerGallery
+          items={loadedItems}
+          isOpen
+          initialIndex={selectedImageIndex}
+          onClose={() => setSelectedImageIndex(null)}
+          preloadBefore={preloadBefore}
+          preloadAfter={preloadAfter}
+        />
       )}
 
-      <nav className="fixed bottom-0 w-full z-50 flex justify-around items-center px-6 pb-6 pt-2 md:hidden bg-white/80 backdrop-blur-xl shadow-lg rounded-t-[3rem]">
-        <button onClick={onBack} className="flex flex-col items-center text-outline hover:opacity-80 transition-opacity">
-          <Home className="w-6 h-6" />
-          <span className="text-[10px] uppercase tracking-widest">Home</span>
-        </button>
-        <button onClick={onBack} className="flex flex-col items-center text-outline hover:opacity-80 transition-opacity">
-          <ArrowLeft className="w-6 h-6" />
-          <span className="text-[10px] uppercase tracking-widest">Back</span>
+      {pendingDeleteAsset && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-outline/10 bg-surface p-6 shadow-2xl">
+            <h3 className="font-headline text-xl font-black text-on-surface">确认删除图片</h3>
+            <p className="mt-3 text-sm leading-6 text-outline">
+              删除后该图片会从当前相册中移除
+              <span className="font-semibold text-on-surface">{pendingDeleteAsset.name}</span>
+              ，请确认继续。
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setPendingDeleteAsset(null)}
+                className="rounded-full px-4 py-2 text-sm font-semibold text-outline transition-colors hover:bg-surface-container-high"
+              >
+                取消
+              </button>
+              <button
+                onClick={async () => {
+                  const targetAsset = pendingDeleteAsset;
+                  setPendingDeleteAsset(null);
+                  const success = await deleteAsset(targetAsset.id);
+
+                  if (success) {
+                    toast('图片已删除', 'success');
+                    onAssetDeleted?.();
+                    await loadPage(1, false);
+                    return;
+                  }
+
+                  toast('删除图片失败，请稍后重试', 'error');
+                }}
+                className="rounded-full bg-error px-4 py-2 text-sm font-semibold text-white transition-all hover:brightness-95"
+              >
+                删除图片
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between rounded-t-[2rem] border-t border-white/60 bg-white/85 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.1rem)] shadow-[0_-12px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl md:hidden">
+        <div className="text-left text-[11px] leading-4 text-outline/80">
+          <p>共 {assets?.album?.assetCount ?? loadedItems.length} 张图片</p>
+          <p>已加载 {loadedItems.length} 张</p>
+        </div>
+        <button onClick={onBack} className="flex min-h-12 min-w-16 flex-col items-center justify-center text-outline transition-opacity hover:opacity-80">
+          <ArrowLeft className="h-6 w-6" />
+          <span className="text-[10px] tracking-widest">返回相册</span>
         </button>
       </nav>
     </div>

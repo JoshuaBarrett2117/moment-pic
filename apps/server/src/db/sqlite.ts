@@ -76,6 +76,10 @@ const bootstrap = (db: Database.Database) => {
       id TEXT PRIMARY KEY DEFAULT 'system_config',
       enable_polling INTEGER NOT NULL DEFAULT 1,
       polling_interval INTEGER NOT NULL DEFAULT 60000,
+      album_list_item_min_width_mobile INTEGER NOT NULL DEFAULT 160,
+      album_list_item_min_width_desktop INTEGER NOT NULL DEFAULT 300,
+      album_detail_item_min_width_mobile INTEGER NOT NULL DEFAULT 160,
+      album_detail_item_min_width_desktop INTEGER NOT NULL DEFAULT 300,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -85,9 +89,6 @@ const bootstrap = (db: Database.Database) => {
       album_id TEXT NOT NULL,
       viewed_at TEXT NOT NULL
     );
-
-    INSERT OR IGNORE INTO system_config (id, enable_polling, polling_interval, created_at, updated_at)
-    VALUES ('system_config', 1, 60000, datetime('now'), datetime('now'));
 
     CREATE INDEX IF NOT EXISTS idx_albums_library_root_id ON albums (library_root_id);
     CREATE INDEX IF NOT EXISTS idx_albums_name ON albums (name);
@@ -106,14 +107,45 @@ const bootstrap = (db: Database.Database) => {
     db.exec('ALTER TABLE system_config ADD COLUMN preload_after INTEGER NOT NULL DEFAULT 3');
   } catch (e) {}
   try {
+    db.exec('ALTER TABLE system_config ADD COLUMN album_list_item_min_width_mobile INTEGER NOT NULL DEFAULT 160');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE system_config ADD COLUMN album_list_item_min_width_desktop INTEGER NOT NULL DEFAULT 300');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE system_config ADD COLUMN album_detail_item_min_width_mobile INTEGER NOT NULL DEFAULT 160');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE system_config ADD COLUMN album_detail_item_min_width_desktop INTEGER NOT NULL DEFAULT 300');
+  } catch (e) {}
+  try {
     db.exec('ALTER TABLE albums ADD COLUMN assets_fingerprint TEXT');
   } catch (e) {}
 
   try {
-    const existingConfig = db.prepare("SELECT preload_before, preload_after FROM system_config WHERE id = 'system_config'").get() as { preload_before: number; preload_after: number } | undefined;
+    db.exec(`
+      INSERT OR IGNORE INTO system_config (id, enable_polling, polling_interval, album_list_item_min_width_mobile, album_list_item_min_width_desktop, album_detail_item_min_width_mobile, album_detail_item_min_width_desktop, created_at, updated_at)
+      VALUES ('system_config', 1, 60000, 160, 300, 160, 300, datetime('now'), datetime('now'));
+    `);
+  } catch (e) {}
+
+  try {
+    const existingConfig = db.prepare("SELECT preload_before, preload_after, album_list_item_min_width, album_detail_item_min_width, album_list_item_min_width_mobile, album_list_item_min_width_desktop, album_detail_item_min_width_mobile, album_detail_item_min_width_desktop FROM system_config WHERE id = 'system_config'").get() as { preload_before: number; preload_after: number; album_list_item_min_width: number; album_detail_item_min_width: number; album_list_item_min_width_mobile: number; album_list_item_min_width_desktop: number; album_detail_item_min_width_mobile: number; album_detail_item_min_width_desktop: number } | undefined;
     if (existingConfig) {
       if (existingConfig.preload_before === 0 && existingConfig.preload_after === 0) {
         db.prepare("UPDATE system_config SET preload_before = 2, preload_after = 3 WHERE id = 'system_config'").run();
+      }
+      if (existingConfig.album_list_item_min_width_mobile === 160 && existingConfig.album_list_item_min_width_desktop === 300 && typeof existingConfig.album_list_item_min_width === 'number') {
+        db.prepare("UPDATE system_config SET album_list_item_min_width_mobile = 160, album_list_item_min_width_desktop = ? WHERE id = 'system_config'").run(existingConfig.album_list_item_min_width);
+      }
+      if (existingConfig.album_detail_item_min_width_mobile === 160 && existingConfig.album_detail_item_min_width_desktop === 300 && typeof existingConfig.album_detail_item_min_width === 'number') {
+        db.prepare("UPDATE system_config SET album_detail_item_min_width_mobile = 160, album_detail_item_min_width_desktop = ? WHERE id = 'system_config'").run(existingConfig.album_detail_item_min_width);
+      }
+      if (existingConfig.album_list_item_min_width_mobile === existingConfig.album_list_item_min_width_desktop && existingConfig.album_list_item_min_width_mobile !== 160) {
+        db.prepare("UPDATE system_config SET album_list_item_min_width_mobile = 160 WHERE id = 'system_config'").run();
+      }
+      if (existingConfig.album_detail_item_min_width_mobile === existingConfig.album_detail_item_min_width_desktop && existingConfig.album_detail_item_min_width_mobile !== 160) {
+        db.prepare("UPDATE system_config SET album_detail_item_min_width_mobile = 160 WHERE id = 'system_config'").run();
       }
     }
   } catch (e) {}

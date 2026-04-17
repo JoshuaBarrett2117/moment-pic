@@ -7,7 +7,6 @@ import type { LibraryRootDTO } from '../types/api';
 interface SidebarProps {
   activeTab: 'gallery' | 'settings';
   onNavigate: (tab: 'gallery' | 'settings') => void;
-  onProfileClick: () => void;
   libraryRoots: LibraryRootDTO[];
   currentLibraryRootId: string;
   onLibraryRootChange: (id: string) => void;
@@ -20,10 +19,9 @@ interface SidebarProps {
   isRecentActive: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ 
-  activeTab, 
-  onNavigate, 
-  onProfileClick,
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  onNavigate,
   libraryRoots,
   currentLibraryRootId,
   onLibraryRootChange,
@@ -39,94 +37,90 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isOpen, setIsOpen] = useState(false);
 
   const sidebarContent = (
-    <div className="flex flex-col h-full">
-      <div className="mb-6 md:mb-10 flex flex-col items-start gap-2">
+    <div className="flex h-full flex-col">
+      <div className="mb-6 flex flex-col items-start gap-2 md:mb-10">
         <div className="flex items-center gap-3">
-          <span className="text-2xl md:text-4xl font-bold text-on-primary-container font-script tracking-tight">Moment Pic</span>
-          <Camera className="text-on-primary-container w-6 md:w-8 h-6 md:h-8" />
+          <span className="font-script text-2xl font-bold tracking-tight text-on-primary-container md:text-4xl">Moment Pic</span>
+          <Camera className="h-6 w-6 text-on-primary-container md:h-8 md:w-8" />
         </div>
-        <p className="hidden md:block text-xs font-headline uppercase tracking-widest text-outline">The Curated Heirloom</p>
+        <p className="hidden font-headline text-xs tracking-[0.24em] text-outline md:block">记录每一次温柔瞬间</p>
       </div>
 
-      <div className="hidden md:block mb-8 w-full">
-        <div className="bg-tertiary-container sticky-note-mask p-5 -rotate-2 shadow-lg flex flex-col items-center justify-center border border-on-tertiary-container/10 rounded-2xl">
-          <span className="text-3xl font-headline font-extrabold text-on-tertiary-container">{albumCount}</span>
-          <span className="text-sm font-label uppercase tracking-tighter text-on-tertiary-container/70">Albums Collected</span>
+      <div className="mb-8 hidden w-full md:block">
+        <div className="sticky-note-mask flex flex-col items-center justify-center rounded-2xl border border-on-tertiary-container/10 bg-tertiary-container p-5 shadow-lg">
+          <span className="font-headline text-3xl font-extrabold text-on-tertiary-container">{albumCount}</span>
+          <span className="font-label text-sm tracking-wide text-on-tertiary-container/70">当前已收录相册</span>
         </div>
       </div>
 
-      <button
-        onClick={() => {
-          if (confirm('确定要扫描全部图库吗？')) {
-            onScanAll();
-          }
-        }}
-        disabled={isAnyScanning}
-        className="mb-4 flex items-center justify-center gap-2 px-4 py-3 bg-primary-container text-on-primary-container rounded-full font-bold hover:brightness-95 transition-all disabled:opacity-50"
-      >
-        {isAnyScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className={`w-4 h-4 ${isAnyScanning ? 'animate-spin' : ''}`} />}
-        {isAnyScanning ? '扫描中...' : '刷新全部'}
-      </button>
-
-      <nav className="flex flex-col gap-3 w-full mb-6 md:mb-10">
-        <button 
-          onClick={() => { onNavigate('gallery'); isMobile && setIsOpen(false); }}
-          className={`flex items-center gap-4 px-6 py-4 rounded-full transition-all duration-300 font-headline tracking-tight hover:scale-[1.02] ${
-            activeTab === 'gallery' 
-              ? 'bg-primary-container text-on-primary-container shadow-md font-bold' 
-              : 'text-outline hover:bg-primary-container/20 font-semibold'
+      <nav className="mb-6 flex w-full flex-col gap-3 md:mb-10">
+        <button
+          onClick={() => {
+            onNavigate('gallery');
+            if (isMobile) setIsOpen(false);
+          }}
+          className={`flex items-center gap-4 rounded-full px-6 py-4 font-headline tracking-tight transition-all duration-300 hover:scale-[1.02] ${
+            activeTab === 'gallery'
+              ? 'bg-primary-container font-bold text-on-primary-container shadow-md'
+              : 'font-semibold text-outline hover:bg-primary-container/20'
           }`}
         >
-          <Images className="w-6 h-6" />
+          <Images className="h-6 w-6" />
           <span>相册</span>
         </button>
-        <button 
-          onClick={() => { onNavigate('settings'); isMobile && setIsOpen(false); }}
-          className={`flex items-center gap-4 px-6 py-4 rounded-full transition-all duration-300 font-headline tracking-tight hover:scale-[1.02] ${
-            activeTab === 'settings' 
-              ? 'bg-primary-container text-on-primary-container shadow-md font-bold' 
-              : 'text-outline hover:bg-primary-container/20 font-semibold'
+        <button
+          onClick={() => {
+            onNavigate('settings');
+            if (isMobile) setIsOpen(false);
+          }}
+          className={`flex items-center gap-4 rounded-full px-6 py-4 font-headline tracking-tight transition-all duration-300 hover:scale-[1.02] ${
+            activeTab === 'settings'
+              ? 'bg-primary-container font-bold text-on-primary-container shadow-md'
+              : 'font-semibold text-outline hover:bg-primary-container/20'
           }`}
         >
-          <Settings className="w-6 h-6" />
+          <Settings className="h-6 w-6" />
           <span>设置</span>
         </button>
       </nav>
 
-      <div className="flex flex-col gap-6 w-full">
-      </div>
-
-      <div className="mt-auto pt-6 md:pt-8 border-t border-outline/10 flex flex-col gap-4 max-h-[40vh] overflow-y-auto">
+      <div className="mt-auto flex max-h-[40vh] flex-col gap-4 overflow-y-auto border-t border-outline/10 pt-6 md:pt-8">
         <button
-          onClick={() => { onLibraryRootChange(''); isMobile && setIsOpen(false); }}
-          className={`flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer transition-all ${
+          onClick={() => {
+            onLibraryRootChange('');
+            if (isMobile) setIsOpen(false);
+          }}
+          className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             currentLibraryRootId === '' && !isRecentActive
-              ? 'bg-primary-container text-on-primary-container font-bold' 
+              ? 'bg-primary-container font-bold text-on-primary-container'
               : 'hover:bg-primary-container/10'
           }`}
         >
-          <Images className="w-5 h-5" />
+          <Images className="h-5 w-5" />
           <span className="text-sm font-semibold">全部图片</span>
         </button>
 
         <button
-          onClick={() => { onRecentClick(); isMobile && setIsOpen(false); }}
-          className={`flex items-center gap-3 px-4 py-2 rounded-xl cursor-pointer transition-all ${
+          onClick={() => {
+            onRecentClick();
+            if (isMobile) setIsOpen(false);
+          }}
+          className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             isRecentActive
-              ? 'bg-primary-container text-on-primary-container font-bold' 
+              ? 'bg-primary-container font-bold text-on-primary-container'
               : 'hover:bg-primary-container/10'
           }`}
         >
-          <Clock className="w-5 h-5" />
-          <span className="text-sm font-semibold">近期查看</span>
+          <Clock className="h-5 w-5" />
+          <span className="text-sm font-semibold">近期浏览</span>
         </button>
-        
+
         {libraryRoots.map((root) => (
           <div
             key={root.id}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer transition-all ${
-              currentLibraryRootId === root.id 
-                ? 'bg-primary-container text-on-primary-container font-bold' 
+            className={`flex min-h-11 items-center gap-2 rounded-xl px-4 py-3 transition-all ${
+              currentLibraryRootId === root.id
+                ? 'bg-primary-container font-bold text-on-primary-container'
                 : 'hover:bg-primary-container/10'
             }`}
           >
@@ -134,12 +128,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={(e) => {
                 e.stopPropagation();
                 onLibraryRootChange(root.id);
-                isMobile && setIsOpen(false);
+                if (isMobile) setIsOpen(false);
               }}
-              className="flex items-center gap-3 flex-1"
+              className="flex flex-1 items-center gap-3"
             >
-              <Images className="w-5 h-5" />
-              <span className="text-sm font-semibold truncate">{root.name}</span>
+              <Images className="h-5 w-5" />
+              <span className="truncate text-sm font-semibold">{root.name}</span>
             </button>
             <button
               onClick={(e) => {
@@ -147,19 +141,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onScanOne(root.id);
               }}
               disabled={isScanning(root.id)}
-              className="p-1.5 rounded-lg hover:bg-white/20 disabled:opacity-50"
-              title="刷新此图库"
+              className="rounded-lg p-2 disabled:opacity-50 hover:bg-white/20"
+              title="扫描此图库"
             >
-              {isScanning(root.id) ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
+              {isScanning(root.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </button>
           </div>
         ))}
-        
-        <div className="mt-2 md:mt-4 p-3 bg-white/40 border border-outline/5 rounded-lg flex items-center justify-center text-[12px] font-medium text-outline/80">
+
+        <button
+          onClick={() => {
+            onScanAll();
+            if (isMobile) setIsOpen(false);
+          }}
+          disabled={isAnyScanning}
+          className="mt-2 flex items-center justify-center gap-2 rounded-2xl border border-outline/15 bg-white/50 px-4 py-3 text-sm font-semibold text-outline transition-all hover:bg-primary-container/15 hover:text-on-primary-container disabled:opacity-50"
+        >
+          {isAnyScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {isAnyScanning ? '正在扫描图库...' : '扫描全部图库'}
+        </button>
+
+        <div className="flex items-center justify-center rounded-lg border border-outline/5 bg-white/40 p-3 text-[12px] font-medium text-outline/80">
           记录美好的瞬间
         </div>
       </div>
@@ -171,11 +173,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <>
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed top-4 md:top-6 left-4 md:left-6 z-50 p-2.5 md:p-3 bg-surface-container-high/80 backdrop-blur-md rounded-full shadow-lg hover:bg-surface-container-high transition-colors pointer-events-auto"
+          className="pointer-events-auto fixed left-4 top-4 z-50 rounded-full bg-surface-container-high/85 p-3 shadow-lg transition-colors hover:bg-surface-container-high md:left-6 md:top-6"
+          title="打开侧边栏"
         >
-          <Menu className="w-5 h-5 md:w-6 md:h-6 text-on-surface text-opacity-80" />
+          <Menu className="h-5 w-5 text-on-surface text-opacity-80 md:h-6 md:w-6" />
         </button>
-        
+
         <AnimatePresence>
           {isOpen && (
             <>
@@ -184,20 +187,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsOpen(false)}
-                className="fixed inset-0 bg-black/50 z-40"
+                className="fixed inset-0 z-40 bg-black/50"
               />
               <motion.div
                 initial={{ x: '-100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '-100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed left-0 top-0 h-full w-80 max-w-[85vw] bg-surface-container-low p-6 z-50 shadow-xl"
+                className="fixed left-0 top-0 z-50 h-full w-80 max-w-[88vw] bg-surface-container-low px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] shadow-xl"
               >
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="absolute top-6 right-4 p-2 text-outline hover:text-on-surface transition-colors"
+                  className="absolute right-4 top-6 p-2 text-outline transition-colors hover:text-on-surface"
+                  title="关闭侧边栏"
                 >
-                  <X className="w-5 h-5 md:w-6 md:h-6" />
+                  <X className="h-5 w-5 md:h-6 md:w-6" />
                 </button>
                 {sidebarContent}
               </motion.div>
@@ -209,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-80 bg-surface-container-low p-8 flex flex-col z-40 rounded-r-[3rem] shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)] border-r border-outline/5">
+    <aside className="fixed left-0 top-0 z-40 flex h-full w-80 flex-col rounded-r-[3rem] border-r border-outline/5 bg-surface-container-low p-8 shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)]">
       {sidebarContent}
     </aside>
   );

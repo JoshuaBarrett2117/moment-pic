@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+﻿import type { FC } from 'react';
 import { useEffect, useState } from 'react';
 import {
   AlertCircle,
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { WobblyButton } from './WobblyButton';
 import { useToast } from './Toast';
-import { useLibraryRoots, useLibraryScan, useSystemConfig, useMobile } from '../hooks';
+import { useLibraryRoots, useLibraryScan, useSystemConfig } from '../hooks';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -28,6 +28,10 @@ const VIEWER_PRELOAD_BEFORE_KEY = 'moment_pic_viewer_preload_before';
 const VIEWER_PRELOAD_AFTER_KEY = 'moment_pic_viewer_preload_after';
 const DEFAULT_PRELOAD_BEFORE = 2;
 const DEFAULT_PRELOAD_AFTER = 3;
+const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE = 160;
+const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP = 300;
+const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
+const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
 
 const clampPreloadRadius = (value: number): number => {
   if (!Number.isFinite(value)) {
@@ -37,8 +41,15 @@ const clampPreloadRadius = (value: number): number => {
   return Math.max(0, Math.min(100, Math.round(value)));
 };
 
+const clampGridWidth = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE;
+  }
+
+  return Math.max(180, Math.min(600, Math.round(value)));
+};
+
 export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete }) => {
-  const isMobile = useMobile();
   const { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot } = useLibraryRoots();
   const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan({
     onScanComplete
@@ -51,10 +62,15 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
   const [isAdding, setIsAdding] = useState(false);
   const [preloadBefore, setPreloadBefore] = useState(DEFAULT_PRELOAD_BEFORE);
   const [preloadAfter, setPreloadAfter] = useState(DEFAULT_PRELOAD_AFTER);
+  const [albumListItemMinWidthMobile, setAlbumListItemMinWidthMobile] = useState(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE);
+  const [albumListItemMinWidthDesktop, setAlbumListItemMinWidthDesktop] = useState(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
+  const [albumDetailItemMinWidthMobile, setAlbumDetailItemMinWidthMobile] = useState(DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE);
+  const [albumDetailItemMinWidthDesktop, setAlbumDetailItemMinWidthDesktop] = useState(DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingPath, setEditingPath] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   useEffect(() => {
     void fetchLibraryRoots();
@@ -70,13 +86,50 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
     if (systemConfig) {
       setPreloadBefore(clampPreloadRadius(systemConfig.preloadBefore));
       setPreloadAfter(clampPreloadRadius(systemConfig.preloadAfter));
+      setAlbumListItemMinWidthMobile(clampGridWidth(systemConfig.albumListItemMinWidthMobile));
+      setAlbumListItemMinWidthDesktop(clampGridWidth(systemConfig.albumListItemMinWidthDesktop));
+      setAlbumDetailItemMinWidthMobile(clampGridWidth(systemConfig.albumDetailItemMinWidthMobile));
+      setAlbumDetailItemMinWidthDesktop(clampGridWidth(systemConfig.albumDetailItemMinWidthDesktop));
     } else {
       const savedBefore = window.localStorage.getItem(VIEWER_PRELOAD_BEFORE_KEY);
       const savedAfter = window.localStorage.getItem(VIEWER_PRELOAD_AFTER_KEY);
       setPreloadBefore(clampPreloadRadius(Number(savedBefore ?? DEFAULT_PRELOAD_BEFORE)));
       setPreloadAfter(clampPreloadRadius(Number(savedAfter ?? DEFAULT_PRELOAD_AFTER)));
+      setAlbumListItemMinWidthMobile(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE);
+      setAlbumListItemMinWidthDesktop(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
+      setAlbumDetailItemMinWidthMobile(DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE);
+      setAlbumDetailItemMinWidthDesktop(DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP);
     }
   }, [systemConfig]);
+
+  useEffect(() => {
+    if (saveStatus !== 'saved') {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSaveStatus('idle');
+    }, 2000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [saveStatus]);
+
+  const saveConfig = async (updates: Parameters<typeof updateSystemConfig>[0]) => {
+    setIsSavingConfig(true);
+    setSaveStatus('saving');
+    const result = await updateSystemConfig(updates);
+    setIsSavingConfig(false);
+
+    if (result) {
+      setSaveStatus('saved');
+      return true;
+    }
+
+    setSaveStatus('error');
+    return false;
+  };
 
   const handleAddRoot = async () => {
     if (!newPath.trim()) {
@@ -102,8 +155,13 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
 
   const handleDelete = async (id: string) => {
     if (confirm('确定要删除这个库目录吗？')) {
-      await deleteLibraryRoot(id);
-      toast('库目录已删除', 'success');
+      const success = await deleteLibraryRoot(id);
+      if (success) {
+        toast('库目录已删除', 'success');
+        return;
+      }
+
+      toast('删除失败，请稍后重试', 'error');
     }
   };
 
@@ -121,7 +179,12 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
 
   const handleEditSave = async () => {
     if (!editingId) return;
-    await updateLibraryRoot(editingId, { name: editingName, path: editingPath });
+    const result = await updateLibraryRoot(editingId, { name: editingName, path: editingPath });
+    if (!result) {
+      toast('修改保存失败，请检查路径后重试', 'error');
+      return;
+    }
+
     setEditingId(null);
     setEditingName('');
     setEditingPath('');
@@ -139,6 +202,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
     }
   };
 
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) {
       return '从未扫描';
@@ -148,7 +212,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-full bg-background overflow-hidden">
+    <div className="flex flex-col md:flex-row h-[100dvh] w-full bg-background overflow-hidden">
       <aside className="w-full md:w-80 bg-surface-container-low p-3 md:p-8 flex flex-row md:flex-col border-b md:border-b-0 md:border-r border-outline/5 overflow-x-auto shrink-0 z-20 items-center md:items-stretch scrollbar-hide">
         <div className="md:mb-10 mr-6 md:mr-0 flex items-center gap-2 md:gap-3 shrink-0">
           <Database className="text-on-primary-container w-6 h-6 md:w-8 md:h-8" />
@@ -188,12 +252,18 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
         </nav>
       </aside>
 
-      <main className="flex-1 p-4 md:p-12 overflow-y-auto custom-scrollbar">
+      <main className="flex-1 p-4 md:p-12 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] overflow-y-auto custom-scrollbar">
         {activeTab === 'basic' && (
           <>
             <header className="mb-6 md:mb-12">
               <h2 className="text-2xl md:text-4xl font-headline font-black text-on-surface">基础设置</h2>
               <p className="text-outline mt-2">配置图片库目录，并管理查看器相关设置</p>
+              <p className="mt-3 text-sm text-outline/80">
+                {saveStatus === 'saving' && '正在保存设置...'}
+                {saveStatus === 'saved' && '设置已自动保存'}
+                {saveStatus === 'error' && '设置保存失败，请稍后重试'}
+                {saveStatus === 'idle' && '数值项会在失焦后自动保存'}
+              </p>
             </header>
 
             {error && (
@@ -227,9 +297,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
                           onChange={(event) => handleViewerPreloadRadiusChange(event.target.value, 'before')}
                           onBlur={async () => {
                             if (systemConfig) {
-                              setIsSavingConfig(true);
-                              await updateSystemConfig({ preloadBefore });
-                              setIsSavingConfig(false);
+                              await saveConfig({ preloadBefore });
                             }
                           }}
                           disabled={isSavingConfig}
@@ -248,9 +316,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
                           onChange={(event) => handleViewerPreloadRadiusChange(event.target.value, 'after')}
                           onBlur={async () => {
                             if (systemConfig) {
-                              setIsSavingConfig(true);
-                              await updateSystemConfig({ preloadAfter });
-                              setIsSavingConfig(false);
+                              await saveConfig({ preloadAfter });
                             }
                           }}
                           disabled={isSavingConfig}
@@ -404,6 +470,12 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
             <header className="mb-6 md:mb-12">
               <h2 className="text-2xl md:text-4xl font-headline font-black text-on-surface">高级设置</h2>
               <p className="text-outline mt-2 text-sm md:text-base">配置目录监控和轮询相关的系统级参数</p>
+              <p className="mt-3 text-sm text-outline/80">
+                {saveStatus === 'saving' && '正在保存设置...'}
+                {saveStatus === 'saved' && '设置已自动保存'}
+                {saveStatus === 'error' && '设置保存失败，请稍后重试'}
+                {saveStatus === 'idle' && '开关会立即生效，数值会自动保存'}
+              </p>
             </header>
 
             <div className="bg-surface-container-highest rounded-2xl p-6 mb-8">
@@ -424,9 +496,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
                           type="checkbox"
                           checked={systemConfig?.enablePolling ?? true}
                           onChange={async (e) => {
-                            setIsSavingConfig(true);
-                            await updateSystemConfig({ enablePolling: e.target.checked });
-                            setIsSavingConfig(false);
+                            await saveConfig({ enablePolling: e.target.checked });
                           }}
                           disabled={isSavingConfig}
                           className="sr-only peer"
@@ -458,9 +528,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
                             onChange={async (e) => {
                               const value = Number(e.target.value);
                               if (value >= 5000 && value <= 600000) {
-                                setIsSavingConfig(true);
-                                await updateSystemConfig({ pollingInterval: value });
-                                setIsSavingConfig(false);
+                                await saveConfig({ pollingInterval: value });
                               }
                             }}
                             disabled={isSavingConfig}
@@ -475,6 +543,136 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
                     </div>
                   </div>
                 )}
+
+                <div className="space-y-4">
+                  <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container shrink-0">
+                      <Images className="h-6 w-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col gap-4">
+                        <div>
+                          <p className="font-bold text-on-surface">相册页卡片宽度</p>
+                          <p className="text-sm text-outline">分别控制移动端和桌面端的图集卡片最小宽度</p>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="flex items-center justify-between gap-3 rounded-xl bg-surface p-3">
+                            <div>
+                              <p className="text-sm font-semibold text-on-surface">移动端</p>
+                              <p className="text-xs text-outline">手机和平板窄屏</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="180"
+                                max="600"
+                                step="10"
+                                value={albumListItemMinWidthMobile}
+                                onChange={(event) => setAlbumListItemMinWidthMobile(clampGridWidth(Number(event.target.value)))}
+                                onBlur={async () => {
+                                  if (systemConfig) {
+                                    await saveConfig({ albumListItemMinWidthMobile });
+                                  }
+                                }}
+                                disabled={isSavingConfig}
+                                className="w-24 rounded-xl border-2 border-outline/20 bg-surface-container-highest px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                              />
+                              <span className="text-sm text-outline">px</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 rounded-xl bg-surface p-3">
+                            <div>
+                              <p className="text-sm font-semibold text-on-surface">桌面端</p>
+                              <p className="text-xs text-outline">大屏和桌面浏览器</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="180"
+                                max="600"
+                                step="10"
+                                value={albumListItemMinWidthDesktop}
+                                onChange={(event) => setAlbumListItemMinWidthDesktop(clampGridWidth(Number(event.target.value)))}
+                                onBlur={async () => {
+                                  if (systemConfig) {
+                                    await saveConfig({ albumListItemMinWidthDesktop });
+                                  }
+                                }}
+                                disabled={isSavingConfig}
+                                className="w-24 rounded-xl border-2 border-outline/20 bg-surface-container-highest px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                              />
+                              <span className="text-sm text-outline">px</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container shrink-0">
+                      <Images className="h-6 w-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col gap-4">
+                        <div>
+                          <p className="font-bold text-on-surface">相册详情页卡片宽度</p>
+                          <p className="text-sm text-outline">分别控制移动端和桌面端的图片卡片最小宽度</p>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="flex items-center justify-between gap-3 rounded-xl bg-surface p-3">
+                            <div>
+                              <p className="text-sm font-semibold text-on-surface">移动端</p>
+                              <p className="text-xs text-outline">手机和平板窄屏</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="180"
+                                max="600"
+                                step="10"
+                                value={albumDetailItemMinWidthMobile}
+                                onChange={(event) => setAlbumDetailItemMinWidthMobile(clampGridWidth(Number(event.target.value)))}
+                                onBlur={async () => {
+                                  if (systemConfig) {
+                                    await saveConfig({ albumDetailItemMinWidthMobile });
+                                  }
+                                }}
+                                disabled={isSavingConfig}
+                                className="w-24 rounded-xl border-2 border-outline/20 bg-surface-container-highest px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                              />
+                              <span className="text-sm text-outline">px</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 rounded-xl bg-surface p-3">
+                            <div>
+                              <p className="text-sm font-semibold text-on-surface">桌面端</p>
+                              <p className="text-xs text-outline">大屏和桌面浏览器</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="180"
+                                max="600"
+                                step="10"
+                                value={albumDetailItemMinWidthDesktop}
+                                onChange={(event) => setAlbumDetailItemMinWidthDesktop(clampGridWidth(Number(event.target.value)))}
+                                onBlur={async () => {
+                                  if (systemConfig) {
+                                    await saveConfig({ albumDetailItemMinWidthDesktop });
+                                  }
+                                }}
+                                disabled={isSavingConfig}
+                                className="w-24 rounded-xl border-2 border-outline/20 bg-surface-container-highest px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                              />
+                              <span className="text-sm text-outline">px</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </>
@@ -483,3 +681,4 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
     </div>
   );
 };
+

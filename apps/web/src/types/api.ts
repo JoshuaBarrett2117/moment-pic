@@ -100,6 +100,10 @@ export type SystemConfigDTO = {
   pollingInterval: number;
   preloadBefore: number;
   preloadAfter: number;
+  albumListItemMinWidthMobile: number;
+  albumListItemMinWidthDesktop: number;
+  albumDetailItemMinWidthMobile: number;
+  albumDetailItemMinWidthDesktop: number;
   createdAt: string;
   updatedAt: string;
 };

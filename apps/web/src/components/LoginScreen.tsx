@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
 import { Camera, PersonStanding, Lock, Info, ArrowRight, AlertCircle } from 'lucide-react';
 import { WobblyButton } from './WobblyButton';
 import { Polaroid } from './Polaroid';
-import { useMobile } from '../hooks';
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -11,7 +9,6 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }) => {
-  const isMobile = useMobile();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,7 +29,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
       });
 
       const data = await response.json();
-      
+
       if (data.code === 0) {
         onLogin();
       } else {
@@ -50,43 +47,43 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen w-full">
-      <section className="w-full md:max-w-[520px] bg-surface-container-low p-6 sm:p-8 md:p-12 flex flex-col justify-between relative z-10 min-h-screen md:min-h-0">
+    <div className="flex min-h-screen w-full flex-col md:flex-row">
+      <section className="relative z-10 flex min-h-screen w-full flex-col justify-between bg-surface-container-low p-6 sm:p-8 md:min-h-0 md:max-w-[520px] md:p-12">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
-            <Camera className="text-4xl text-on-primary-container w-10 h-10 fill-on-primary-container" />
-            <h1 className="text-3xl font-black text-on-primary-container tracking-tighter font-headline">Moment Pic</h1>
+            <Camera className="h-10 w-10 fill-on-primary-container text-on-primary-container" />
+            <h1 className="font-headline text-3xl font-black tracking-tighter text-on-primary-container">Moment Pic</h1>
           </div>
-          <p className="text-sm font-medium text-outline pl-12 font-label">Local Gallery Manager</p>
+          <p className="pl-12 font-label text-sm font-medium text-outline">本地瞬间图库</p>
         </div>
 
-        <div className="flex flex-col gap-8 relative mt-16 md:mt-0">
-          <div className="sticky-note absolute -top-16 -right-2 md:-right-4 px-6 py-3 rotate-6 z-20">
-            <span className="text-on-primary-container font-bold text-lg font-body">欢迎回来</span>
+        <div className="relative mt-16 flex flex-col gap-8 md:mt-0">
+          <div className="sticky-note absolute -right-2 -top-16 z-20 rotate-6 px-6 py-3 md:-right-4">
+            <span className="font-body text-lg font-bold text-on-primary-container">欢迎回来</span>
           </div>
 
-          <div className="bg-white/40 backdrop-blur-sm p-10 rounded-xl ambient-shadow border border-outline-variant/30">
+          <div className="ambient-shadow rounded-xl border border-outline-variant/30 bg-white/40 p-10 backdrop-blur-sm">
             {error && (
-              <div className="mb-6 p-4 bg-error-container text-on-error-container rounded-lg flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <div className="mb-6 flex items-center gap-2 rounded-lg bg-error-container p-4 text-on-error-container">
+                <AlertCircle className="h-5 w-5 flex-shrink-0" />
                 <span className="text-sm">{error}</span>
               </div>
             )}
 
             <div className="mb-10">
-              <h2 className="text-4xl font-black text-on-primary-container font-headline mb-2">登录</h2>
-              <p className="text-outline font-label">进入你的瞬间图库</p>
+              <h2 className="mb-2 font-headline text-4xl font-black text-on-primary-container">登录</h2>
+              <p className="font-label text-outline">进入你的瞬间图库</p>
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
               <div className="flex flex-col gap-2">
-                <label className="text-on-primary-container font-bold text-sm ml-4 font-label">账号</label>
-                <div className="wobbly-border flex items-center px-6 py-3 bg-white/60">
-                  <PersonStanding className="mr-3 text-outline w-5 h-5" />
-                  <input 
-                    className="bg-transparent border-none focus:ring-0 w-full placeholder:text-outline-variant text-on-primary-container outline-none" 
-                    placeholder="请输入账号（默认 admin）" 
-                    type="text" 
+                <label className="ml-4 font-label text-sm font-bold text-on-primary-container">账号</label>
+                <div className="wobbly-border flex items-center bg-white/60 px-6 py-3">
+                  <PersonStanding className="mr-3 h-5 w-5 text-outline" />
+                  <input
+                    className="w-full border-none bg-transparent text-on-primary-container outline-none placeholder:text-outline-variant focus:ring-0"
+                    placeholder="请输入账号（默认 admin）"
+                    type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     disabled={isLoading}
@@ -95,13 +92,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-on-primary-container font-bold text-sm ml-4 font-label">密码</label>
-                <div className="wobbly-border flex items-center px-6 py-3 bg-white/60">
-                  <Lock className="mr-3 text-outline w-5 h-5" />
-                  <input 
-                    className="bg-transparent border-none focus:ring-0 w-full placeholder:text-outline-variant text-on-primary-container outline-none" 
-                    placeholder="请输入密码" 
-                    type="password" 
+                <label className="ml-4 font-label text-sm font-bold text-on-primary-container">密码</label>
+                <div className="wobbly-border flex items-center bg-white/60 px-6 py-3">
+                  <Lock className="mr-3 h-5 w-5 text-outline" />
+                  <input
+                    className="w-full border-none bg-transparent text-on-primary-container outline-none placeholder:text-outline-variant focus:ring-0"
+                    placeholder="请输入密码"
+                    type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
@@ -109,64 +106,62 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
                 </div>
               </div>
 
-              <div className="flex justify-between items-center px-2">
-                <label className="flex items-center gap-2 cursor-pointer group">
-                  <input className="w-5 h-5 rounded-md border-2 border-outline text-secondary focus:ring-secondary-container" type="checkbox" />
-                  <span className="text-sm text-outline group-hover:text-on-primary-container transition-colors">记住我（24小时）</span>
-                </label>
-                <a className="text-sm text-outline hover:text-on-primary-container font-medium underline underline-offset-4 decoration-primary-fixed-dim" href="#">忘记密码？</a>
+              <div className="rounded-2xl bg-surface-container-high px-4 py-3 text-sm leading-relaxed text-outline">
+                当前版本仅支持账号密码登录。
+                <br />
+                默认账号为 <code>admin</code>，密码由部署环境配置。
               </div>
 
               <WobblyButton type="submit" className="mt-4" disabled={isLoading}>
                 <span>{isLoading ? '登录中...' : '登录'}</span>
-                <ArrowRight className="w-5 h-5" />
+                <ArrowRight className="h-5 w-5" />
               </WobblyButton>
             </form>
           </div>
 
           <div className="flex items-center gap-3 px-4">
-            <Info className="text-outline w-4 h-4" />
-            <p className="text-xs text-outline font-medium">默认账号：admin，密码由部署环境配置</p>
+            <Info className="h-4 w-4 text-outline" />
+            <p className="text-xs font-medium text-outline">
+              登录后会直接进入图库首页，配置与浏览状态会自动保留。
+            </p>
           </div>
         </div>
 
-        <div className="text-xs text-outline font-label text-center mt-12 md:mt-0">
-          © 2024 Moment Pic. Hand-crafted for your memories.
-        </div>
+        <div className="mt-12 text-center font-label text-xs text-outline md:mt-0">© 2024 Moment Pic · 为你的回忆而设计</div>
       </section>
 
-      <section className="hidden md:flex flex-1 bg-background relative overflow-hidden items-center justify-center">
+      <section className="relative hidden flex-1 items-center justify-center overflow-hidden bg-background md:flex">
         <div className="absolute inset-0 z-0 opacity-40">
-          <div className="absolute top-10 left-10 text-6xl text-primary-fixed-dim">☁️</div>
-          <div className="absolute bottom-20 right-20 text-6xl text-secondary-container">✨</div>
-          <div className="absolute top-1/2 right-10 text-4xl text-tertiary-container -rotate-12">❤️</div>
+          <div className="absolute left-10 top-10 text-6xl text-primary-fixed-dim">☁︎</div>
+          <div className="absolute bottom-20 right-20 text-6xl text-secondary-container">✦</div>
+          <div className="absolute right-10 top-1/2 -rotate-12 text-4xl text-tertiary-container">✳︎</div>
         </div>
 
-        <div className="relative w-full h-full p-20 flex items-center justify-center">
-          <Polaroid 
-            src="https://picsum.photos/seed/home/400/400" 
+        <div className="relative flex h-full w-full items-center justify-center p-20">
+          <Polaroid
+            src="https://picsum.photos/seed/home/400/400"
             rotation={-6}
-            className="absolute top-[15%] left-[20%] w-64"
+            className="absolute left-[20%] top-[15%] w-64"
           />
-          <Polaroid 
-            src="https://picsum.photos/seed/flowers/400/400" 
+          <Polaroid
+            src="https://picsum.photos/seed/flowers/400/400"
             rotation={12}
             className="absolute bottom-[20%] left-[15%] w-56"
           />
-          <Polaroid 
-            src="https://picsum.photos/seed/camera/400/400" 
+          <Polaroid
+            src="https://picsum.photos/seed/camera/400/400"
             rotation={3}
-            className="absolute top-[25%] right-[15%] w-72"
+            className="absolute right-[15%] top-[25%] w-72"
           />
-          <Polaroid 
-            src="https://picsum.photos/seed/lake/600/600" 
+          <Polaroid
+            src="https://picsum.photos/seed/lake/600/600"
             rotation={-1}
             caption="The Best Moment"
             date="Captured 2024.08.15"
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 shadow-2xl z-30"
+            className="absolute left-1/2 top-1/2 z-30 w-80 -translate-x-1/2 -translate-y-1/2 shadow-2xl"
           />
 
-          <div className="absolute bottom-10 right-32 z-40 bg-tertiary-fixed px-4 py-2 text-sm font-bold text-on-tertiary-container rounded-lg -rotate-12 wobbly-border">
+          <div className="wobbly-border absolute bottom-10 right-32 z-40 -rotate-12 rounded-lg bg-tertiary-fixed px-4 py-2 text-sm font-bold text-on-tertiary-container">
             Collection #01
           </div>
         </div>

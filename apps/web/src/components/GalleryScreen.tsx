@@ -161,9 +161,9 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   };
 
   const sortOptions = [
-    { value: 'name', label: '鍚嶇О' },
-    { value: 'updatedAt', label: '鏇存柊鏃堕棿' },
-    { value: 'assetCount', label: '鍥剧墖鏁伴噺' },
+    { value: 'name', label: '名称' },
+    { value: 'updatedAt', label: '更新时间' },
+    { value: 'assetCount', label: '图片数量' },
   ];
 
   const pageSizeOptions = [12, 24, 48, 96];
@@ -207,13 +207,14 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         ref={mainRef}
         className="relative h-full flex-1 overflow-y-auto bg-surface px-4 pt-12 pb-[calc(env(safe-area-inset-bottom)+6.5rem)] custom-scrollbar md:ml-80 md:px-12 md:pt-16 md:pb-24"
       >
-        <header className="sticky top-0 z-20 -mx-4 mb-4 flex w-auto items-center justify-between bg-surface/92 px-4 py-3 backdrop-blur-md md:mx-0 md:mb-8 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none">
+        <header className="relative z-10 -mx-4 mb-4 flex w-auto items-center justify-between bg-surface/92 px-4 py-3 md:mx-0 md:mb-8 md:bg-transparent md:px-0 md:py-0">
           <div className="flex flex-col gap-1">
             <h1 className="font-script text-2xl font-bold leading-tight tracking-tighter text-on-surface md:text-6xl">
-              鐬棿鍥惧簱
+              瞬间图库
             </h1>
             <p className="hidden font-body text-base text-outline/70 md:block md:text-xl">
-              鏇存噦浣犵殑锛屼篃鏇存噦浣犲浣曟暣鐞嗗洖蹇?            </p>
+              更懂你的，也更懂你如何整理回忆
+            </p>
           </div>
           <button
             onClick={onProfileClick}
@@ -242,7 +243,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               <div className="relative mb-3 w-full">
                 <input
                   className="w-full rounded-full border-2 border-outline/30 bg-surface-container-high py-2 pl-10 pr-10 text-sm outline-none placeholder:text-outline/50 focus:border-transparent focus:ring-2 focus:ring-primary-container"
-                  placeholder="鎼滅储鐩稿唽鍚嶇О"
+                  placeholder="搜索相册名称"
                   type="text"
                   value={currentKeyword}
                   onChange={(e) => onKeywordChange(e.target.value)}
@@ -261,20 +262,20 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
               <div className="flex flex-wrap items-center gap-2 md:gap-4">
                 <div className="flex items-center gap-2">
-                  <span className="hidden text-sm text-outline sm:inline">鏉ユ簮:</span>
+                  <span className="hidden text-sm text-outline sm:inline">来源:</span>
                   <select
                     value={currentSourceType}
                     onChange={(e) => onSourceTypeChange(e.target.value as 'folder' | 'zip' | '')}
                     className="cursor-pointer rounded-lg bg-surface-container-high px-2 py-2 text-sm outline-none md:px-3"
                   >
-                    <option value="">鍏ㄩ儴</option>
-                    <option value="folder">Folder</option>
-                    <option value="zip">Zip</option>
+                    <option value="">全部</option>
+                    <option value="folder">文件夹</option>
+                    <option value="zip">压缩包</option>
                   </select>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="hidden text-sm text-outline sm:inline">鎺掑簭:</span>
+                  <span className="hidden text-sm text-outline sm:inline">排序:</span>
                   <select
                     value={currentSortBy}
                     onChange={(e) => onSortByChange(e.target.value as 'name' | 'updatedAt' | 'assetCount')}
@@ -292,11 +293,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                   onClick={() => onSortOrderChange(currentSortOrder === 'asc' ? 'desc' : 'asc')}
                   className="flex items-center gap-1 rounded-lg bg-surface-container-high px-3 py-2 text-sm transition-colors hover:bg-primary-container/20"
                 >
-                  {currentSortOrder === 'asc' ? '姝ｅ簭' : '鍊掑簭'}
+                  {currentSortOrder === 'asc' ? '正序' : '倒序'}
                 </button>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-outline">姣忛〉:</span>
+                  <span className="text-sm text-outline">每页:</span>
                   <select
                     value={currentPageSize}
                     onChange={(e) => onPageSizeChange(Number(e.target.value))}
@@ -322,7 +323,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                   className="ml-auto flex items-center gap-1 px-2 py-2 text-sm text-outline transition-colors hover:text-on-surface"
                 >
                   <X className="h-4 w-4" />
-                  娓呯┖绛涢€?                </button>
+                  清空筛选
+                </button>
               </div>
             </div>
           </div>
@@ -330,10 +332,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
         {isLoading && albums.length > 0 && (
           <div className="mb-4 flex items-center justify-between rounded-2xl border border-outline/10 bg-surface-container-high px-4 py-3 text-sm text-outline shadow-sm md:mb-6">
-            <span>姝ｅ湪鏇存柊绛涢€夌粨鏋?..</span>
+            <span>正在更新筛选结果...</span>
             <span className="inline-flex items-center gap-2">
               <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary" />
-              璇风◢鍊?            </span>
+              请稍候
+            </span>
           </div>
         )}
 
@@ -411,7 +414,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                           idx % 2 === 0 ? '-right-2 rotate-12' : '-left-3 -rotate-12'
                         } ${colorScheme.bg} ${colorScheme.text}`}
                       >
-                        {album.sourceType === 'folder' ? 'Folder' : 'Zip'}
+                        {album.sourceType === 'folder' ? '文件夹' : '压缩包'}
                       </div>
                       <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-xl">
                         {album.coverUrl ? (
@@ -448,7 +451,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
         {renderedAlbums.length < albums.length && (
           <div ref={loadMoreRef} className="w-full py-6 text-center text-sm text-outline/70">
-            姝ｅ湪鍔犺浇鏇村鐩稿唽...
+            正在加载更多相册...
           </div>
         )}
 
@@ -503,25 +506,26 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             </button>
 
             <span className="ml-2 text-xs text-outline md:ml-4 md:text-sm">
-              鍏?{pagination.total} 椤?/ {totalPages} 椤?            </span>
+              共 {pagination.total} 页 / {totalPages} 页
+            </span>
           </div>
         )}
 
         {pendingDeleteAlbum && (
           <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 px-4">
             <div className="w-full max-w-md rounded-3xl border border-outline/10 bg-surface p-6 shadow-2xl">
-              <h3 className="font-headline text-xl font-black text-on-surface">纭鍒犻櫎鍥鹃泦</h3>
+              <h3 className="font-headline text-xl font-black text-on-surface">确认删除相册</h3>
               <p className="mt-3 text-sm leading-6 text-outline">
-                鍒犻櫎鍚庡皢鏃犳硶鍦ㄥ浘搴撲腑缁х画娴忚
+                删除后将无法在图库中继续浏览
                 <span className="font-semibold text-on-surface">{pendingDeleteAlbum.name}</span>
-                , please confirm this action.
+                ，请确认此操作。
               </p>
               <div className="mt-6 flex justify-end gap-3">
                 <button
                   onClick={() => setPendingDeleteAlbum(null)}
                   className="rounded-full px-4 py-2 text-sm font-semibold text-outline transition-colors hover:bg-surface-container-high"
                 >
-                  鍙栨秷
+                  取消
                 </button>
                 <button
                   onClick={async () => {
@@ -535,11 +539,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                       return;
                     }
 
-                    toast('鍒犻櫎鍥鹃泦澶辫触锛岃绋嶅悗閲嶈瘯', 'error');
+                    toast('删除相册失败，请稍后重试', 'error');
                   }}
                   className="rounded-full bg-error px-4 py-2 text-sm font-semibold text-white transition-all hover:brightness-95"
                 >
-                  鍒犻櫎鍥鹃泦
+                  删除相册
                 </button>
               </div>
             </div>

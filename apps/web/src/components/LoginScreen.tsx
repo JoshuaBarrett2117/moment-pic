@@ -121,9 +121,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
 
           <div className="flex items-center gap-3 px-4">
             <Info className="h-4 w-4 text-outline" />
-            <p className="text-xs font-medium text-outline">
-              登录后会直接进入图库首页，配置与浏览状态会自动保留。
-            </p>
+            <p className="text-xs font-medium text-outline">登录后会直接进入图库首页，配置与浏览状态会自动保留。</p>
           </div>
         </div>
 
@@ -132,9 +130,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
 
       <section className="relative hidden flex-1 items-center justify-center overflow-hidden bg-background md:flex">
         <div className="absolute inset-0 z-0 opacity-40">
-          <div className="absolute left-10 top-10 text-6xl text-primary-fixed-dim">☁︎</div>
-          <div className="absolute bottom-20 right-20 text-6xl text-secondary-container">✦</div>
-          <div className="absolute right-10 top-1/2 -rotate-12 text-4xl text-tertiary-container">✳︎</div>
+          <div className="absolute left-10 top-10 text-6xl text-primary-fixed-dim">✦·</div>
+          <div className="absolute bottom-20 right-20 text-6xl text-secondary-container">✿</div>
+          <div className="absolute right-10 top-1/2 -rotate-12 text-4xl text-tertiary-container">✦·</div>
         </div>
 
         <div className="relative flex h-full w-full items-center justify-center p-20">

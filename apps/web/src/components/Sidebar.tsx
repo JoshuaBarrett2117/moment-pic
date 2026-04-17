@@ -112,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
         >
           <Clock className="h-5 w-5" />
-          <span className="text-sm font-semibold">近期查看</span>
+          <span className="text-sm font-semibold">近期浏览</span>
         </button>
 
         {libraryRoots.map((root) => (

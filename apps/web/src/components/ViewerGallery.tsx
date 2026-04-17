@@ -96,17 +96,21 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     };
   }, [activeIndex, images, isOpen, preloadAfter, preloadBefore]);
 
+  const resetView = useCallback(() => {
+    setScale(1);
+    setRotation(0);
+    setPosition({ x: 0, y: 0 });
+    setIsImageLoading(true);
+  }, []);
+
   const goToPrev = useCallback(() => {
     if (images.length === 0) {
       return;
     }
 
     setActiveIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
-    setScale(1);
-    setRotation(0);
-    setPosition({ x: 0, y: 0 });
-    setIsImageLoading(true);
-  }, [images.length]);
+    resetView();
+  }, [images.length, resetView]);
 
   const goToNext = useCallback(() => {
     if (images.length === 0) {
@@ -114,11 +118,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     }
 
     setActiveIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
-    setScale(1);
-    setRotation(0);
-    setPosition({ x: 0, y: 0 });
-    setIsImageLoading(true);
-  }, [images.length]);
+    resetView();
+  }, [images.length, resetView]);
 
   const handleClose = useCallback(() => {
     setActiveIndex(0);
@@ -444,7 +445,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           width: auto;
           height: auto;
           object-fit: contain;
-          transition: transform 0.15s ease-out;
+          transition: transform 0.15s ease-out, opacity 0.15s ease-out;
         }
         .viewer-loading {
           position: absolute;
@@ -452,7 +453,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: rgba(0, 0, 0, 0.5);
+          background: rgba(0, 0, 0, 0.72);
         }
         .viewer-loading-spinner {
           width: 48px;
@@ -471,21 +472,11 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
         <X size={isMobile ? 28 : 24} />
       </button>
 
-      <button
-        className="viewer-nav-btn prev"
-        onClick={goToPrev}
-        title="上一张"
-        style={{ width: navBtnSize, height: navBtnSize }}
-      >
+      <button className="viewer-nav-btn prev" onClick={goToPrev} title="上一张" style={{ width: navBtnSize, height: navBtnSize }}>
         <ChevronLeft size={isMobile ? 44 : 36} />
       </button>
 
-      <button
-        className="viewer-nav-btn next"
-        onClick={goToNext}
-        title="下一张"
-        style={{ width: navBtnSize, height: navBtnSize }}
-      >
+      <button className="viewer-nav-btn next" onClick={goToNext} title="下一张" style={{ width: navBtnSize, height: navBtnSize }}>
         <ChevronRight size={isMobile ? 44 : 36} />
       </button>
 
@@ -508,10 +499,12 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           </div>
         )}
         <img
+          key={currentImage.src}
           src={currentImage.src}
           alt={currentImage.alt}
           className="viewer-image"
           style={{
+            opacity: isImageLoading ? 0 : 1,
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
           }}
           onLoad={() => setIsImageLoading(false)}
@@ -526,7 +519,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
 
       {isMobile && showControls && (
         <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
-          左右滑动切换，点按图片显示或隐藏工具栏
+          左右滑动切换，点击图片显示或隐藏工具栏
         </div>
       )}
 
@@ -547,7 +540,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
 
       {!isMobile && showControls && (
         <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+7.5rem)] left-1/2 z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
-          Esc 关闭 · ← → 切换 · 滚轮缩放
+          Esc 关闭 · ←/→ 切换 · 滚轮缩放
         </div>
       )}
     </div>

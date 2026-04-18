@@ -1,5 +1,4 @@
-import type { FC } from 'react';
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+﻿import { type FC, type MouseEvent, type TouchEvent, type TouchList, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize2, X } from 'lucide-react';
 import { useMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
@@ -8,6 +7,7 @@ interface ViewerGalleryProps {
   items: AssetListItemDTO[];
   isOpen: boolean;
   onClose: () => void;
+  onRequestNextAlbum?: () => void;
   initialIndex?: number;
   preloadBefore?: number;
   preloadAfter?: number;
@@ -17,11 +17,13 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   items,
   isOpen,
   onClose,
+  onRequestNextAlbum,
   initialIndex = 0,
   preloadBefore = 0,
   preloadAfter = 0,
 }) => {
   const isMobile = useMobile();
+  const useTouchInteractions = isMobile;
   const safeItems = items ?? [];
 
   const images = useMemo(() => {
@@ -45,23 +47,29 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [showControls, setShowControls] = useState(false);
   const [isImageLoading, setIsImageLoading] = useState(true);
+  const [showEndPrompt, setShowEndPrompt] = useState(false);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
   const lastTouchDistance = useRef<number>(0);
   const isZooming = useRef<boolean>(false);
   const preloadedImagesRef = useRef<HTMLImageElement[]>([]);
 
+  const resetView = useCallback(() => {
+    setScale(1);
+    setRotation(0);
+    setPosition({ x: 0, y: 0 });
+    setIsImageLoading(true);
+  }, []);
+
   useEffect(() => {
     if (isOpen && images.length > 0) {
       const validIndex = Math.min(initialIndex, Math.max(0, images.length - 1));
       setActiveIndex(validIndex);
-      setScale(1);
-      setRotation(0);
-      setPosition({ x: 0, y: 0 });
-      setIsImageLoading(true);
+      resetView();
       setShowControls(true);
+      setShowEndPrompt(false);
     }
-  }, [isOpen, initialIndex, images.length]);
+  }, [isOpen, initialIndex, images.length, resetView]);
 
   useEffect(() => {
     if (!isOpen || images.length === 0) {
@@ -96,13 +104,6 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     };
   }, [activeIndex, images, isOpen, preloadAfter, preloadBefore]);
 
-  const resetView = useCallback(() => {
-    setScale(1);
-    setRotation(0);
-    setPosition({ x: 0, y: 0 });
-    setIsImageLoading(true);
-  }, []);
-
   const goToPrev = useCallback(() => {
     if (images.length === 0) {
       return;
@@ -117,21 +118,36 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       return;
     }
 
-    setActiveIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+    if (activeIndex >= images.length - 1) {
+      setShowEndPrompt(true);
+      return;
+    }
+
+    setActiveIndex((prev) => prev + 1);
     resetView();
-  }, [images.length, resetView]);
+  }, [activeIndex, images.length, resetView]);
 
   const handleClose = useCallback(() => {
     setActiveIndex(0);
     setScale(1);
     setRotation(0);
     setPosition({ x: 0, y: 0 });
+    setShowEndPrompt(false);
     onClose();
   }, [onClose]);
 
+  const handleEnterNextAlbum = useCallback(() => {
+    setShowEndPrompt(false);
+    onRequestNextAlbum?.();
+  }, [onRequestNextAlbum]);
+
+  const handleDismissPrompt = useCallback(() => {
+    setShowEndPrompt(false);
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isOpen || images.length === 0) {
+      if (!isOpen || images.length === 0 || showEndPrompt) {
         return;
       }
 
@@ -167,10 +183,10 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('wheel', handleWheel);
     };
-  }, [goToNext, goToPrev, handleClose, images.length, isMobile, isOpen]);
+  }, [goToNext, goToPrev, handleClose, images.length, isMobile, isOpen, showEndPrompt]);
 
   useEffect(() => {
-    if (!isMobile || !isOpen) {
+    if (!useTouchInteractions || !isOpen) {
       return;
     }
 
@@ -178,10 +194,10 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isMobile, isOpen]);
+  }, [isOpen, useTouchInteractions]);
 
   useEffect(() => {
-    if (!isMobile || !isOpen) {
+    if (!useTouchInteractions || !isOpen) {
       return;
     }
 
@@ -192,7 +208,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     return () => {
       clearTimeout(timer);
     };
-  }, [activeIndex, isMobile, isOpen]);
+  }, [activeIndex, isOpen, useTouchInteractions]);
 
   const handleZoomIn = useCallback(() => {
     setScale((prev) => Math.min(prev * 1.2, 6));
@@ -210,35 +226,30 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     setScale(1);
     setRotation(0);
     setPosition({ x: 0, y: 0 });
+    setIsImageLoading(true);
   }, []);
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (scale > 1) {
-        setIsDragging(true);
-        setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-      }
-    },
-    [position, scale]
-  );
+  const handleMouseDown = useCallback((e: MouseEvent) => {
+    if (scale > 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+    }
+  }, [position, scale]);
 
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (isDragging && scale > 1) {
-        setPosition({
-          x: e.clientX - dragStart.x,
-          y: e.clientY - dragStart.y,
-        });
-      }
-    },
-    [dragStart, isDragging, scale]
-  );
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (isDragging && scale > 1) {
+      setPosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      });
+    }
+  }, [dragStart, isDragging, scale]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
   }, []);
 
-  const getTouchDistance = (touches: React.TouchList) => {
+  const getTouchDistance = (touches: TouchList) => {
     if (touches.length < 2) {
       return 0;
     }
@@ -248,7 +259,11 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     return Math.sqrt(dx * dx + dy * dy);
   };
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((e: TouchEvent) => {
+    if (showEndPrompt) {
+      return;
+    }
+
     if (e.touches.length === 1) {
       touchStartX.current = e.touches[0].clientX;
       touchStartY.current = e.touches[0].clientY;
@@ -257,52 +272,64 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       isZooming.current = true;
       lastTouchDistance.current = getTouchDistance(e.touches);
     }
-  }, []);
+  }, [showEndPrompt]);
 
-  const handleTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      if (e.touches.length === 2) {
-        e.preventDefault();
+  const handleTouchMove = useCallback((e: TouchEvent) => {
+    if (showEndPrompt) {
+      return;
+    }
+
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      isZooming.current = true;
+      const distance = getTouchDistance(e.touches);
+      if (lastTouchDistance.current > 0) {
+        const scaleChange = distance / lastTouchDistance.current;
+        setScale((prev) => Math.min(Math.max(prev * scaleChange, 0.1), 6));
+      }
+      lastTouchDistance.current = distance;
+    } else if (e.touches.length === 1) {
+      const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current);
+      const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current);
+
+      if (deltaY > deltaX && scale <= 1) {
         isZooming.current = true;
-        const distance = getTouchDistance(e.touches);
-        if (lastTouchDistance.current > 0) {
-          const scaleChange = distance / lastTouchDistance.current;
-          setScale((prev) => Math.min(Math.max(prev * scaleChange, 0.1), 6));
-        }
-        lastTouchDistance.current = distance;
-      } else if (e.touches.length === 1) {
-        const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current);
-        const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current);
-
-        if (deltaY > deltaX && scale <= 1) {
-          isZooming.current = true;
-        }
       }
-    },
-    [scale]
-  );
+    }
+  }, [scale, showEndPrompt]);
 
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      lastTouchDistance.current = 0;
+  const handleTouchEnd = useCallback((e: TouchEvent) => {
+    if (showEndPrompt) {
+      return;
+    }
 
-      if (e.touches.length > 0 || isZooming.current || !e.changedTouches?.[0]) {
-        return;
+    lastTouchDistance.current = 0;
+
+    if (e.touches.length > 0 || isZooming.current || !e.changedTouches?.[0]) {
+      return;
+    }
+
+    const touchTarget = e.target as HTMLElement | null;
+    if (touchTarget?.closest('button')) {
+      return;
+    }
+
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    const minSwipeDistance = useTouchInteractions ? 60 : 50;
+
+    if (Math.abs(deltaX) > minSwipeDistance) {
+      if (deltaX > 0) {
+        goToPrev();
+      } else {
+        goToNext();
       }
+      return;
+    }
 
-      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-      const minSwipeDistance = isMobile ? 60 : 50;
-
-      if (Math.abs(deltaX) > minSwipeDistance) {
-        if (deltaX > 0) {
-          goToPrev();
-        } else {
-          goToNext();
-        }
-      }
-    },
-    [goToNext, goToPrev, isMobile]
-  );
+    if (useTouchInteractions) {
+      setShowControls((prev) => !prev);
+    }
+  }, [goToNext, goToPrev, showEndPrompt, useTouchInteractions]);
 
   if (!isOpen || images.length === 0) {
     return null;
@@ -323,8 +350,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      onMouseEnter={() => !isMobile && setShowControls(true)}
-      onMouseLeave={() => !isMobile && setShowControls(false)}
+      onMouseEnter={() => !useTouchInteractions && !showEndPrompt && setShowControls(true)}
+      onMouseLeave={() => !useTouchInteractions && !showEndPrompt && setShowControls(false)}
     >
       <style>{`
         .viewer-btn {
@@ -445,7 +472,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           width: auto;
           height: auto;
           object-fit: contain;
-          transition: transform 0.15s ease-out, opacity 0.15s ease-out;
+          transition: transform 0.15s ease-out;
         }
         .viewer-loading {
           position: absolute;
@@ -453,7 +480,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           display: flex;
           align-items: center;
           justify-content: center;
-          background: rgba(0, 0, 0, 0.72);
+          background: rgba(0, 0, 0, 0.5);
         }
         .viewer-loading-spinner {
           width: 48px;
@@ -482,11 +509,6 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
 
       <div
         className="viewer-image-container"
-        onClick={() => {
-          if (isMobile) {
-            setShowControls((prev) => !prev);
-          }
-        }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -499,12 +521,10 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           </div>
         )}
         <img
-          key={currentImage.src}
           src={currentImage.src}
           alt={currentImage.alt}
           className="viewer-image"
           style={{
-            opacity: isImageLoading ? 0 : 1,
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
           }}
           onLoad={() => setIsImageLoading(false)}
@@ -517,9 +537,9 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
         {activeIndex + 1} / {images.length}
       </div>
 
-      {isMobile && showControls && (
+      {useTouchInteractions && showControls && (
         <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
-          左右滑动切换，点击图片显示或隐藏工具栏
+          左右滑动切换，点按图片显示或隐藏工具栏
         </div>
       )}
 
@@ -538,9 +558,43 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
         </button>
       </div>
 
-      {!isMobile && showControls && (
+      {!useTouchInteractions && showControls && (
         <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+7.5rem)] left-1/2 z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
-          Esc 关闭 · ←/→ 切换 · 滚轮缩放
+          Esc 关闭 · ←→ 切换 · 滚轮缩放
+        </div>
+      )}
+
+      {showEndPrompt && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/45 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#171717] p-6 shadow-2xl">
+            <h3 className="font-headline text-xl font-black text-white">当前图集已经结束</h3>
+            <p className="mt-3 text-sm leading-6 text-white/75">是否进入下一个图集继续浏览？</p>
+            <div className="mt-6 flex justify-end gap-3">
+              {onRequestNextAlbum ? (
+                <>
+                  <button
+                    onClick={handleDismissPrompt}
+                    className="rounded-full px-4 py-2 text-sm font-semibold text-white/75 transition-colors hover:bg-white/10"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleEnterNextAlbum}
+                    className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition-all hover:brightness-95"
+                  >
+                    进入下一个图集
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleDismissPrompt}
+                  className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition-all hover:brightness-95"
+                >
+                  知道了
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

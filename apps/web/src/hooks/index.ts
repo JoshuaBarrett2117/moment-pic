@@ -5,4 +5,4 @@ export { useScan } from './useScan';
 export { useLibraryScan } from './useLibraryScan';
 export { useWebSocket } from './useWebSocket';
 export { useSystemConfig } from './useSystemConfig';
-export { useMobile, useTablet, useDesktop, useBetween } from './useResponsive';
+export { useMobile, useWideMobile, useTablet, useDesktop, useBetween } from './useResponsive';

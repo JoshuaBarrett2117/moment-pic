@@ -4,7 +4,7 @@ import { Plus, ArrowRight, ChevronLeft, ChevronRight, Trash2, Search, X, Images 
 import { Sidebar } from './Sidebar';
 import { useToast } from './Toast';
 import { ThrottledImage } from './ThrottledImage';
-import { deleteAlbum, useMobile, useSystemConfig } from '../hooks';
+import { deleteAlbum, useMobile, useSystemConfig, useWideMobile } from '../hooks';
 import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO } from '../types/api';
 
 interface GalleryScreenProps {
@@ -84,6 +84,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onScrollPositionChange,
 }) => {
   const isMobile = useMobile();
+  const isWideMobile = useWideMobile();
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
   const { toast } = useToast();
   const [visibleCount, setVisibleCount] = useState(RENDER_CHUNK_SIZE);
@@ -101,8 +102,15 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     currentSortOrder !== 'desc' ||
     currentPageSize !== 24;
   const albumListItemMinWidth = isMobile
-    ? (systemConfig?.albumListItemMinWidthMobile ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE)
+    ? (isWideMobile
+      ? (systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP)
+      : (systemConfig?.albumListItemMinWidthMobile ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE))
     : (systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
+  const mainPaddingClass = isMobile ? (isWideMobile ? 'px-6 pt-14 pb-[calc(env(safe-area-inset-bottom)+7rem)]' : 'px-4 pt-12 pb-[calc(env(safe-area-inset-bottom)+6.5rem)]') : 'md:ml-80 md:px-12 md:pt-16 md:pb-24';
+  const headerClass = isMobile
+    ? `relative z-10 mb-4 flex w-auto items-center justify-between bg-surface/92 py-3 ${isWideMobile ? '-mx-6 px-6' : '-mx-4 px-4'}`
+    : 'relative z-10 -mx-4 mb-4 flex w-auto items-center justify-between bg-surface/92 px-4 py-3 md:mx-0 md:mb-8 md:bg-transparent md:px-0 md:py-0';
+  const gridGapClass = isWideMobile ? 'gap-5' : 'gap-4 md:gap-6';
 
   useEffect(() => {
     if (scrollPosition !== undefined && mainRef.current) {
@@ -205,24 +213,24 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
       <main
         ref={mainRef}
-        className="relative h-full flex-1 overflow-y-auto bg-surface px-4 pt-12 pb-[calc(env(safe-area-inset-bottom)+6.5rem)] custom-scrollbar md:ml-80 md:px-12 md:pt-16 md:pb-24"
+        className={`relative h-full flex-1 overflow-y-auto bg-surface custom-scrollbar ${mainPaddingClass}`}
       >
-        <header className="relative z-10 -mx-4 mb-4 flex w-auto items-center justify-between bg-surface/92 px-4 py-3 md:mx-0 md:mb-8 md:bg-transparent md:px-0 md:py-0">
+        <header className={headerClass}>
           <div className="flex flex-col gap-1">
-            <h1 className="font-script text-2xl font-bold leading-tight tracking-tighter text-on-surface md:text-6xl">
+            <h1 className={`font-script font-bold leading-tight tracking-tighter text-on-surface ${isWideMobile ? 'text-3xl' : 'text-2xl md:text-6xl'}`}>
               瞬间图库
             </h1>
-            <p className="hidden font-body text-base text-outline/70 md:block md:text-xl">
+            <p className={`font-body text-base text-outline/70 ${isMobile ? 'block text-sm' : 'hidden md:block md:text-xl'}`}>
               更懂你的，也更懂你如何整理回忆
             </p>
           </div>
           <button
             onClick={onProfileClick}
-            title="Logout"
-            className="h-11 w-11 cursor-pointer overflow-hidden rounded-full border-2 border-white shadow-md transition-transform hover:scale-105 md:h-14 md:w-14 md:border-4 md:shadow-xl"
+            title="退出登录"
+            className={`cursor-pointer overflow-hidden rounded-full border-2 border-white shadow-md transition-transform hover:scale-105 ${isWideMobile ? 'h-12 w-12' : 'h-11 w-11 md:h-14 md:w-14 md:border-4 md:shadow-xl'}`}
           >
             <img
-              alt="Logout"
+              alt="退出登录"
               className="h-full w-full object-cover"
               src="https://picsum.photos/seed/portrait/200/200"
             />
@@ -239,7 +247,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </button>
 
           <div className={`${isFilterExpanded ? 'block' : 'hidden'} md:block`}>
-            <div className="mb-6 rounded-2xl bg-surface-container-highest p-3 shadow-sm md:mb-8 md:p-4">
+            <div className={`mb-6 rounded-2xl bg-surface-container-highest p-3 shadow-sm ${isWideMobile ? 'md:mb-8 md:p-4' : 'md:mb-8 md:p-4'}`}>
               <div className="relative mb-3 w-full">
                 <input
                   className="w-full rounded-full border-2 border-outline/30 bg-surface-container-high py-2 pl-10 pr-10 text-sm outline-none placeholder:text-outline/50 focus:border-transparent focus:ring-2 focus:ring-primary-container"
@@ -253,7 +261,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                   <button
                     onClick={() => onKeywordChange('')}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-outline transition-colors hover:text-on-surface"
-                    title="Clear search"
+                    title="清空搜索"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -344,7 +352,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           variants={containerVariants}
           initial="hidden"
           animate="show"
-          className="grid w-full gap-4 md:gap-6"
+          className={`grid w-full ${gridGapClass}`}
           style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${albumListItemMinWidth}px, 1fr))` }}
         >
           {isLoading && albums.length === 0 ? (
@@ -375,7 +383,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                   <Search className="h-6 w-6" />
                 </motion.div>
               </div>
-                            <div className="space-y-2 text-center">
+              <div className="space-y-2 text-center">
                 <p className="font-headline text-2xl font-bold tracking-tight text-on-surface">
                   {hasActiveFilters ? '没有找到匹配的相册' : '这里还是一片空白'}
                 </p>
@@ -404,7 +412,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                         setPendingDeleteAlbum(album);
                       }}
                       className="absolute right-2 top-2 z-20 rounded-full bg-red-400 p-2.5 text-white opacity-100 shadow-md transition-all hover:scale-105 hover:bg-red-500 md:opacity-0 md:group-hover:opacity-100"
-                      title="Delete album"
+                      title="删除相册"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -437,7 +445,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                           {album.name}
                         </h3>
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold uppercase tracking-wider text-outline">{album.assetCount} items</span>
+                          <span className="text-sm font-semibold uppercase tracking-wider text-outline">{album.assetCount} 张</span>
                           <ArrowRight className="h-4 w-4 text-outline/30 transition-all group-hover:translate-x-1 group-hover:text-primary" />
                         </div>
                       </div>
@@ -461,7 +469,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               onClick={() => onPageChange(currentPage - 1)}
               disabled={currentPage <= 1 || isLoading}
               className="rounded-full bg-surface-container-high p-2 text-on-surface-variant transition-all hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-50"
-              title="Previous page"
+              title="上一页"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
@@ -500,13 +508,13 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               onClick={() => onPageChange(currentPage + 1)}
               disabled={currentPage >= totalPages || isLoading}
               className="rounded-full bg-surface-container-high p-2 text-on-surface-variant transition-all hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-50"
-              title="Next page"
+              title="下一页"
             >
               <ChevronRight className="h-5 w-5" />
             </button>
 
             <span className="ml-2 text-xs text-outline md:ml-4 md:text-sm">
-              共 {pagination.total} 页 / {totalPages} 页
+              共 {pagination.total} 项 / {totalPages} 页
             </span>
           </div>
         )}
@@ -534,7 +542,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                     const success = await deleteAlbum(targetAlbum.id);
 
                     if (success) {
-                      toast('Album deleted', 'success');
+                      toast('相册已删除', 'success');
                       onAlbumDeleted?.();
                       return;
                     }

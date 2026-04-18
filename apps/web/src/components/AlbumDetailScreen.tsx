@@ -4,13 +4,14 @@ import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, 
 import { Polaroid } from './Polaroid';
 import { useToast } from './Toast';
 import { ViewerGallery } from './ViewerGallery';
-import { useAlbumAssets, deleteAsset, useMobile, useSystemConfig } from '../hooks';
+import { useAlbumAssets, deleteAsset, useMobile, useSystemConfig, useWideMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
 interface AlbumDetailScreenProps {
   albumId: string;
   onBack: () => void;
   onAssetDeleted?: () => void;
+  onRequestNextAlbum?: () => void;
 }
 
 const PAGE_SIZE = 24;
@@ -20,8 +21,9 @@ const DEFAULT_PRELOAD_AFTER = 3;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
 
-export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onAssetDeleted }) => {
+export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onAssetDeleted, onRequestNextAlbum }) => {
   const isMobile = useMobile();
+  const isWideMobile = useWideMobile();
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
   const { toast } = useToast();
@@ -73,6 +75,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     setCurrentPage(0);
     setTotalItems(0);
     setVisibleRenderCount(RENDER_CHUNK_SIZE);
+    setSelectedImageIndex(null);
 
     if (albumId) {
       void loadPage(1, false);
@@ -124,8 +127,16 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   const preloadBefore = systemConfig?.preloadBefore ?? DEFAULT_PRELOAD_BEFORE;
   const preloadAfter = systemConfig?.preloadAfter ?? DEFAULT_PRELOAD_AFTER;
   const albumDetailItemMinWidth = isMobile
-    ? (systemConfig?.albumDetailItemMinWidthMobile ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE)
+    ? (isWideMobile
+      ? (systemConfig?.albumDetailItemMinWidthDesktop ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP)
+      : (systemConfig?.albumDetailItemMinWidthMobile ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE))
     : (systemConfig?.albumDetailItemMinWidthDesktop ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP);
+  const mobileHeaderClass = isWideMobile
+    ? 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-surface/92 px-6 pt-4 backdrop-blur-md'
+    : 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-surface/92 px-4 pt-4 backdrop-blur-md';
+  const mobileSectionClass = isWideMobile
+    ? 'custom-scrollbar flex-1 overflow-y-auto px-6 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth'
+    : 'custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth';
   const renderedItems = loadedItems.slice(0, visibleRenderCount);
   const hasMore = loadedItems.length < totalItems;
   const hasMoreToRender = visibleRenderCount < loadedItems.length;
@@ -184,12 +195,12 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
 
       <main className={`relative flex h-full flex-1 flex-col bg-surface ${isMobile ? 'w-full' : ''}`}>
         {isMobile && (
-          <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-surface/92 px-4 pt-4 backdrop-blur-md">
+          <header className={mobileHeaderClass}>
             <button onClick={onBack} className="flex min-h-11 items-center gap-1.5 text-outline transition-colors hover:text-on-surface">
               <ArrowLeft className="h-5 w-5" />
               <span className="text-sm">返回</span>
             </button>
-            <h2 className="max-w-[200px] truncate font-headline text-lg font-bold tracking-tight text-on-surface">
+            <h2 className={`truncate font-headline font-bold tracking-tight text-on-surface ${isWideMobile ? 'max-w-[280px] text-xl' : 'max-w-[200px] text-lg'}`}>
               {assets?.album?.name || albumId}
             </h2>
             <div className="w-16" />
@@ -206,7 +217,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
 
         <section
           ref={scrollContainerRef}
-          className="custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth md:px-12 md:py-8 md:pb-8"
+          className={isMobile ? mobileSectionClass : 'custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth md:px-12 md:py-8 md:pb-8'}
         >
           {isLoading && loadedItems.length === 0 ? (
             <div
@@ -282,14 +293,15 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
       </main>
 
       {selectedImageIndex !== null && (
-        <ViewerGallery
-          items={loadedItems}
-          isOpen
-          initialIndex={selectedImageIndex}
-          onClose={() => setSelectedImageIndex(null)}
-          preloadBefore={preloadBefore}
-          preloadAfter={preloadAfter}
-        />
+      <ViewerGallery
+        items={loadedItems}
+        isOpen
+        initialIndex={selectedImageIndex}
+        onClose={() => setSelectedImageIndex(null)}
+        onRequestNextAlbum={onRequestNextAlbum}
+        preloadBefore={preloadBefore}
+        preloadAfter={preloadAfter}
+      />
       )}
 
       {pendingDeleteAsset && (

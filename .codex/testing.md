@@ -3,33 +3,76 @@
 ## 2026-04-13 Codex
 
 - `npm run build --workspace @moment-pic/server`
-  - ç»“æœï¼šé€šè¿‡ã€‚
+  - ç»“æœï¼šé€šè¿‡ã€?
 - `npm run build --workspace @moment-pic/web`
-  - ç»“æœï¼šå¤±è´¥ã€‚
-  - åŸå› ï¼šå½“å‰ç¯å¢ƒæ— æ³•ç›´æ¥è§£æ web workspace çš„ `vite` å¯æ‰§è¡Œæ–‡ä»¶ã€‚
+  - ç»“æœï¼šå¤±è´¥ã€?
+  - åŸå› ï¼šå½“å‰ç¯å¢ƒæ— æ³•ç›´æ¥è§£æ?web workspace çš?`vite` å¯æ‰§è¡Œæ–‡ä»¶ã€?
 - `npm run lint --workspace @moment-pic/web`
-  - ç»“æœï¼šå¤±è´¥ã€‚
-  - åŸå› ï¼šå½“å‰ç¯å¢ƒç¼ºå°‘å‰ç«¯ä¾èµ–è§£æï¼ŒæŠ¥é”™é›†ä¸­åœ¨ `react`ã€`lucide-react`ã€`vite`ã€`@vitejs/plugin-react` ç­‰æ¨¡å—æ— æ³•æ‰¾åˆ°ã€‚
+  - ç»“æœï¼šå¤±è´¥ã€?
+  - åŸå› ï¼šå½“å‰ç¯å¢ƒç¼ºå°‘å‰ç«¯ä¾èµ–è§£æï¼ŒæŠ¥é”™é›†ä¸­åœ?`react`ã€`lucide-react`ã€`vite`ã€`@vitejs/plugin-react` ç­‰æ¨¡å—æ— æ³•æ‰¾åˆ°ã€?
 ## 2026-04-16 Codex
 
 - `npm run lint --workspace @moment-pic/web`
-  - ç»“æœï¼šé€šè¿‡ã€‚
-
+  - ç»“æœï¼šé€šè¿‡ã€?
 ## 2026-04-16 Codex
 
 - `npm run lint --workspace @moment-pic/web`
-  - ç»“æœï¼šé€šè¿‡ã€‚
-- `npm run build --workspace @moment-pic/server`
-  - ç»“æœï¼šé€šè¿‡ã€‚
-
+  - ç»“æœï¼šé€šè¿‡ã€?- `npm run build --workspace @moment-pic/server`
+  - ç»“æœï¼šé€šè¿‡ã€?
 ## 2026-04-16 Codex
 
 - `npm run lint --workspace @moment-pic/web`
-  - ç»“æœï¼šé€šè¿‡ã€‚
-- `npm run build --workspace @moment-pic/server`
-  - ç»“æœï¼šé€šè¿‡ã€‚
-
+  - ç»“æœï¼šé€šè¿‡ã€?- `npm run build --workspace @moment-pic/server`
+  - ç»“æœï¼šé€šè¿‡ã€?
 ## 2026-04-16 Codex
 
 - `npm run lint --workspace @moment-pic/web`
-  - ç»“æœï¼šé€šè¿‡ã€‚
+  - ç»“æœï¼šé€šè¿‡ã€?
+## 2026-04-18 Codex
+
+- `npm run lint --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+- `npm run build --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+  - ±¸×¢£ºÊä³öÁË¼ÈÓĞµÄ circular chunk ¾¯¸æ£¬µ«²»Ó°Ïì¹¹½¨²úÎïÉú³É¡£
+
+
+## 2026-04-18 Codex£¨²¹³ä£©
+
+- `npm run lint --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+## 2026-04-18 Codex£¨²¹³ä£©
+
+- `npm run lint --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+- `npm run build --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+  - ±¸×¢£ºÊä³öÁË¼ÈÓĞµÄ circular chunk ¾¯¸æ£¬µ«²»Ó°Ïì¹¹½¨²úÎïÉú³É¡£
+## 2026-04-18 Codex£¨²¹³ä£©
+
+- `npm run lint --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+- `npm run build --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+  - ±¸×¢£ºÊä³öÁË¼ÈÓĞµÄ circular chunk ¾¯¸æ£¬µ«²»Ó°Ïì¹¹½¨²úÎïÉú³É¡£
+## 2026-04-18 Codex£¨²¹³ä£©
+
+- `npm run lint --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+- `npm run build --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+  - ±¸×¢£ºÊä³öÁË¼ÈÓĞµÄ circular chunk ¾¯¸æ£¬µ«²»Ó°Ïì¹¹½¨²úÎïÉú³É¡£
+## 2026-04-18 Codex£¨²¹³ä£©
+
+- `npm run lint --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+- `npm run build --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+  - ±¸×¢£ºÊä³öÁË¼ÈÓĞµÄ circular chunk ¾¯¸æ£¬µ«²»Ó°Ïì¹¹½¨²úÎïÉú³É¡£
+## 2026-04-18 Codex£¨ÊÕÎ²£©
+
+- `npm run lint --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+- `npm run build --workspace @moment-pic/web`
+  - ½á¹û£ºÍ¨¹ı¡£
+  - ±¸×¢£ºÊä³öÁË¼ÈÓĞµÄ circular chunk ¾¯¸æ£¬µ«²»Ó°Ïì¹¹½¨²úÎïÉú³É¡£

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Camera, PersonStanding, Lock, Info, ArrowRight, AlertCircle } from 'lucide-react';
-import { WobblyButton } from './WobblyButton';
+﻿import React, { useState } from 'react';
+import { AlertCircle, ArrowRight, Camera, Info, Lock, PersonStanding } from 'lucide-react';
+import { useWideMobile } from '../hooks';
 import { Polaroid } from './Polaroid';
+import { WobblyButton } from './WobblyButton';
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -9,6 +10,7 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }) => {
+  const isWideMobile = useWideMobile();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -16,10 +18,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) return;
+    if (!username || !password) {
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
+
     try {
       const response = await fetch('/api/v1/auth/login', {
         method: 'POST',
@@ -32,11 +37,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
 
       if (data.code === 0) {
         onLogin();
-      } else {
-        const errorMsg = data.message || '登录失败';
-        setError(errorMsg);
-        onAuthError?.(errorMsg);
+        return;
       }
+
+      const errorMsg = data.message || '登录失败';
+      setError(errorMsg);
+      onAuthError?.(errorMsg);
     } catch {
       const errorMsg = '网络错误，请稍后重试';
       setError(errorMsg);
@@ -47,9 +53,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
   };
 
   return (
-    <div className="flex min-h-screen w-full flex-col md:flex-row">
-      <section className="relative z-10 flex min-h-screen w-full flex-col justify-between bg-surface-container-low p-6 sm:p-8 md:min-h-0 md:max-w-[520px] md:p-12">
-        <div className="flex flex-col gap-1">
+    <div className={`flex min-h-screen w-full flex-col ${isWideMobile ? '' : 'md:flex-row'}`}>
+      <section
+        className={`relative z-10 flex min-h-screen w-full flex-col justify-between bg-surface-container-low ${
+          isWideMobile ? 'mx-auto w-full max-w-[980px] px-6 py-8 sm:px-10' : 'p-6 sm:p-8 md:min-h-0 md:max-w-[520px] md:p-12'
+        }`}
+      >
+        <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
             <Camera className="h-10 w-10 fill-on-primary-container text-on-primary-container" />
             <h1 className="font-headline text-3xl font-black tracking-tighter text-on-primary-container">Moment Pic</h1>
@@ -57,12 +67,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
           <p className="pl-12 font-label text-sm font-medium text-outline">本地瞬间图库</p>
         </div>
 
-        <div className="relative mt-16 flex flex-col gap-8 md:mt-0">
-          <div className="sticky-note absolute -right-2 -top-16 z-20 rotate-6 px-6 py-3 md:-right-4">
+        <div className={`relative flex flex-col ${isWideMobile ? 'mt-8 gap-6' : 'mt-16 gap-8 md:mt-0'}`}>
+          <div className={`sticky-note absolute z-20 rotate-6 px-6 py-3 ${isWideMobile ? '-right-1 -top-10' : '-top-16 md:-right-4'}`}>
             <span className="font-body text-lg font-bold text-on-primary-container">欢迎回来</span>
           </div>
 
-          <div className="ambient-shadow rounded-xl border border-outline-variant/30 bg-white/40 p-10 backdrop-blur-sm">
+          <div className="ambient-shadow rounded-xl border border-outline-variant/30 bg-white/40 p-8 backdrop-blur-sm sm:p-10">
             {error && (
               <div className="mb-6 flex items-center gap-2 rounded-lg bg-error-container p-4 text-on-error-container">
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
@@ -70,8 +80,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
               </div>
             )}
 
-            <div className="mb-10">
-              <h2 className="mb-2 font-headline text-4xl font-black text-on-primary-container">登录</h2>
+            <div className={`mb-10 ${isWideMobile ? 'mb-8' : ''}`}>
+              <h2 className={`mb-2 font-headline font-black text-on-primary-container ${isWideMobile ? 'text-3xl' : 'text-4xl'}`}>登录</h2>
               <p className="font-label text-outline">进入你的瞬间图库</p>
             </div>
 
@@ -109,7 +119,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
               <div className="rounded-2xl bg-surface-container-high px-4 py-3 text-sm leading-relaxed text-outline">
                 当前版本仅支持账号密码登录。
                 <br />
-                默认账号为 <code>admin</code>，密码由部署环境配置。
+                默认账号为 <code>admin</code>，密码请以部署环境配置为准。
               </div>
 
               <WobblyButton type="submit" className="mt-4" disabled={isLoading}>
@@ -121,36 +131,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
 
           <div className="flex items-center gap-3 px-4">
             <Info className="h-4 w-4 text-outline" />
-            <p className="text-xs font-medium text-outline">登录后会直接进入图库首页，配置与浏览状态会自动保留。</p>
+            <p className="text-xs font-medium text-outline">登录后会直接进入图库首页，筛选与浏览状态会自动保留。</p>
           </div>
         </div>
 
         <div className="mt-12 text-center font-label text-xs text-outline md:mt-0">© 2024 Moment Pic · 为你的回忆而设计</div>
       </section>
 
-      <section className="relative hidden flex-1 items-center justify-center overflow-hidden bg-background md:flex">
+      <section className={isWideMobile ? 'hidden' : 'relative hidden flex-1 items-center justify-center overflow-hidden bg-background md:flex'}>
         <div className="absolute inset-0 z-0 opacity-40">
-          <div className="absolute left-10 top-10 text-6xl text-primary-fixed-dim">✦·</div>
-          <div className="absolute bottom-20 right-20 text-6xl text-secondary-container">✿</div>
-          <div className="absolute right-10 top-1/2 -rotate-12 text-4xl text-tertiary-container">✦·</div>
+          <div className="absolute left-10 top-10 text-6xl text-primary-fixed-dim">✦</div>
+          <div className="absolute bottom-20 right-20 text-6xl text-secondary-container">✦</div>
+          <div className="absolute right-10 top-1/2 -rotate-12 text-4xl text-tertiary-container">✦</div>
         </div>
 
         <div className="relative flex h-full w-full items-center justify-center p-20">
-          <Polaroid
-            src="https://picsum.photos/seed/home/400/400"
-            rotation={-6}
-            className="absolute left-[20%] top-[15%] w-64"
-          />
-          <Polaroid
-            src="https://picsum.photos/seed/flowers/400/400"
-            rotation={12}
-            className="absolute bottom-[20%] left-[15%] w-56"
-          />
-          <Polaroid
-            src="https://picsum.photos/seed/camera/400/400"
-            rotation={3}
-            className="absolute right-[15%] top-[25%] w-72"
-          />
+          <Polaroid src="https://picsum.photos/seed/home/400/400" rotation={-6} className="absolute left-[20%] top-[15%] w-64" />
+          <Polaroid src="https://picsum.photos/seed/flowers/400/400" rotation={12} className="absolute bottom-[20%] left-[15%] w-56" />
+          <Polaroid src="https://picsum.photos/seed/camera/400/400" rotation={3} className="absolute right-[15%] top-[25%] w-72" />
           <Polaroid
             src="https://picsum.photos/seed/lake/600/600"
             rotation={-1}

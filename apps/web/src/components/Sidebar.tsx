@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Camera, Images, Settings, RefreshCw, Loader2, Clock, Menu, X } from 'lucide-react';
-import { useMobile } from '../hooks';
+﻿import { AnimatePresence, motion } from 'motion/react';
+import { Camera, Clock, Images, Loader2, Menu, RefreshCw, Settings, X } from 'lucide-react';
+import { type FC, useState } from 'react';
+import { useMobile, useWideMobile } from '../hooks';
 import type { LibraryRootDTO } from '../types/api';
 
 interface SidebarProps {
@@ -19,7 +19,7 @@ interface SidebarProps {
   isRecentActive: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({
+export const Sidebar: FC<SidebarProps> = ({
   activeTab,
   onNavigate,
   libraryRoots,
@@ -34,7 +34,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isRecentActive,
 }) => {
   const isMobile = useMobile();
+  const isWideMobile = useWideMobile();
   const [isOpen, setIsOpen] = useState(false);
+
+  const drawerWidthClass = isWideMobile ? 'w-[min(18rem,72vw)] max-w-[72vw]' : 'w-80 max-w-[88vw]';
+  const drawerPaddingClass = isWideMobile
+    ? 'px-5 pt-[calc(env(safe-area-inset-top)+1.25rem)] pb-[calc(env(safe-area-inset-bottom)+1.25rem)]'
+    : 'px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)]';
 
   const sidebarContent = (
     <div className="flex h-full flex-col">
@@ -57,7 +63,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => {
             onNavigate('gallery');
-            if (isMobile) setIsOpen(false);
+            if (isMobile) {
+              setIsOpen(false);
+            }
           }}
           className={`flex items-center gap-4 rounded-full px-6 py-4 font-headline tracking-tight transition-all duration-300 hover:scale-[1.02] ${
             activeTab === 'gallery'
@@ -66,12 +74,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
         >
           <Images className="h-6 w-6" />
-          <span>相册</span>
+          <span>图库</span>
         </button>
         <button
           onClick={() => {
             onNavigate('settings');
-            if (isMobile) setIsOpen(false);
+            if (isMobile) {
+              setIsOpen(false);
+            }
           }}
           className={`flex items-center gap-4 rounded-full px-6 py-4 font-headline tracking-tight transition-all duration-300 hover:scale-[1.02] ${
             activeTab === 'settings'
@@ -88,7 +98,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => {
             onLibraryRootChange('');
-            if (isMobile) setIsOpen(false);
+            if (isMobile) {
+              setIsOpen(false);
+            }
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             currentLibraryRootId === '' && !isRecentActive
@@ -103,7 +115,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => {
             onRecentClick();
-            if (isMobile) setIsOpen(false);
+            if (isMobile) {
+              setIsOpen(false);
+            }
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             isRecentActive
@@ -112,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
         >
           <Clock className="h-5 w-5" />
-          <span className="text-sm font-semibold">近期浏览</span>
+          <span className="text-sm font-semibold">最近浏览</span>
         </button>
 
         {libraryRoots.map((root) => (
@@ -128,7 +142,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={(e) => {
                 e.stopPropagation();
                 onLibraryRootChange(root.id);
-                if (isMobile) setIsOpen(false);
+                if (isMobile) {
+                  setIsOpen(false);
+                }
               }}
               className="flex flex-1 items-center gap-3"
             >
@@ -142,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }}
               disabled={isScanning(root.id)}
               className="rounded-lg p-2 disabled:opacity-50 hover:bg-white/20"
-              title="扫描此图库"
+              title="扫描此图集"
             >
               {isScanning(root.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </button>
@@ -152,7 +168,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => {
             onScanAll();
-            if (isMobile) setIsOpen(false);
+            if (isMobile) {
+              setIsOpen(false);
+            }
           }}
           disabled={isAnyScanning}
           className="mt-2 flex items-center justify-center gap-2 rounded-2xl border border-outline/15 bg-white/50 px-4 py-3 text-sm font-semibold text-outline transition-all hover:bg-primary-container/15 hover:text-on-primary-container disabled:opacity-50"
@@ -194,7 +212,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 animate={{ x: 0 }}
                 exit={{ x: '-100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed left-0 top-0 z-50 h-full w-80 max-w-[88vw] bg-surface-container-low px-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-[calc(env(safe-area-inset-bottom)+1.5rem)] shadow-xl"
+                className={`fixed left-0 top-0 z-50 h-full bg-surface-container-low shadow-xl ${drawerWidthClass} ${drawerPaddingClass}`}
               >
                 <button
                   onClick={() => setIsOpen(false)}
@@ -213,7 +231,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-full w-80 flex-col rounded-r-[3rem] border-r border-outline/5 bg-surface-container-low p-8 shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)]">
+    <aside className={`fixed left-0 top-0 z-40 flex h-full flex-col rounded-r-[3rem] border-r border-outline/5 bg-surface-container-low p-8 shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)] ${isWideMobile ? 'w-[18rem]' : 'w-80'}`}>
       {sidebarContent}
     </aside>
   );

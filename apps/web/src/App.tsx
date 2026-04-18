@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
@@ -122,6 +122,7 @@ export default function App() {
   const initialFilters = getInitialFilters();
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
+  const [nextAlbumId, setNextAlbumId] = useState<string | null>(null);
   const [direction, setDirection] = useState(1);
   const [activeTab, setActiveTab] = useState<'gallery' | 'settings'>('gallery');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -133,6 +134,25 @@ export default function App() {
   const { albums, isLoading, error, fetchAlbums } = useAlbums();
   const { recentAlbums, isLoading: isRecentLoading, fetchRecentAlbums } = useRecentAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
+  const isRestoringHistoryRef = useRef(false);
+
+  const syncHistory = useCallback(
+    (
+      screen: Screen,
+      options: { replace?: boolean; selectedAlbumId?: string | null; isRecentActive?: boolean } = {}
+    ) => {
+      const state = {
+        screen,
+        selectedAlbum: options.selectedAlbumId ?? null,
+        activeTab: screen === Screen.SETTINGS ? 'settings' : 'gallery',
+        isRecentActive: screen === Screen.GALLERY ? (options.isRecentActive ?? false) : false,
+      };
+
+      const method = options.replace ? 'replaceState' : 'pushState';
+      window.history[method](state, '', window.location.href);
+    },
+    []
+  );
 
   const loadAlbums = useCallback(() => {
     return fetchAlbums({
@@ -201,22 +221,66 @@ export default function App() {
   );
 
   useEffect(() => {
+    window.history.replaceState(
+      {
+        screen: currentScreen,
+        selectedAlbum: null,
+        activeTab: 'gallery',
+        isRecentActive: false,
+      },
+      '',
+      window.location.href
+    );
+  }, []);
+
+  useEffect(() => {
     const verifyAuth = async () => {
       const token = localStorage.getItem('auth_token');
       if (token) {
         try {
           await api.get('/albums', { page: 1, pageSize: 1 });
           setIsAuthenticated(true);
+          syncHistory(Screen.GALLERY, { replace: true, isRecentActive: false });
           setCurrentScreen(Screen.GALLERY);
         } catch {
           localStorage.removeItem('auth_token');
           setIsAuthenticated(false);
           setCurrentScreen(Screen.LOGIN);
-          window.history.replaceState({}, '', '/');
+          syncHistory(Screen.LOGIN, { replace: true });
         }
       }
     };
     verifyAuth();
+  }, [syncHistory]);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = (event.state || {}) as {
+        screen?: Screen;
+        selectedAlbum?: string | null;
+        activeTab?: 'gallery' | 'settings';
+        isRecentActive?: boolean;
+      };
+
+      const nextScreen = state.screen || Screen.LOGIN;
+      isRestoringHistoryRef.current = true;
+      setCurrentScreen(nextScreen);
+      setSelectedAlbum(state.selectedAlbum ?? null);
+      setNextAlbumId(null);
+      setActiveTab(state.activeTab || 'gallery');
+      setIsRecentActive(Boolean(state.isRecentActive));
+
+      if (nextScreen !== Screen.ALBUM_DETAIL) {
+        setSelectedAlbum(null);
+      }
+
+      queueMicrotask(() => {
+        isRestoringHistoryRef.current = false;
+      });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   useEffect(() => {
@@ -255,8 +319,15 @@ export default function App() {
     };
   }, [isAuthenticated, isAnyScanning, wsConnected, loadAlbums]);
 
-  const navigate = (screen: Screen, dir: number = 1) => {
+  const navigate = (
+    screen: Screen,
+    dir: number = 1,
+    options: { selectedAlbumId?: string | null; replace?: boolean; isRecentActive?: boolean } = {}
+  ) => {
     setDirection(dir);
+    if (!isRestoringHistoryRef.current) {
+      syncHistory(screen, options);
+    }
     setCurrentScreen(screen);
   };
 
@@ -274,23 +345,35 @@ export default function App() {
       sourceType: nextFilters.sourceType || undefined,
       libraryRootId: undefined,
     });
-    navigate(Screen.GALLERY, 1);
+    navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false });
   };
 
   const handleNavigateToAlbum = (albumId: string) => {
+    const sourceAlbums = isRecentActive ? (recentAlbums || []) : (albums?.items || []);
+    const currentIndex = sourceAlbums.findIndex((album) => album.id === albumId);
+    const nextId = currentIndex >= 0 ? sourceAlbums[currentIndex + 1]?.id ?? null : null;
+
     setSelectedAlbum(albumId);
+    setNextAlbumId(nextId);
     recordAlbumView(albumId);
-    navigate(Screen.ALBUM_DETAIL, 1);
+    navigate(Screen.ALBUM_DETAIL, 1, { selectedAlbumId: albumId, isRecentActive });
   };
 
   const handleProfileClick = () => {
     localStorage.removeItem('auth_token');
     setIsAuthenticated(false);
+    setNextAlbumId(null);
     navigate(Screen.LOGIN, -1);
   };
 
   const handleBackToGallery = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
     setActiveTab('gallery');
+    setNextAlbumId(null);
     fetchAlbums({
       page: filters.page,
       pageSize: filters.pageSize,
@@ -300,7 +383,7 @@ export default function App() {
       sourceType: filters.sourceType || undefined,
       libraryRootId: filters.libraryRootId || undefined,
     });
-    navigate(Screen.GALLERY, -1);
+    navigate(Screen.GALLERY, -1, { replace: true, isRecentActive: false });
   };
 
   const handleSidebarNavigate = (tab: 'gallery' | 'settings') => {
@@ -319,7 +402,7 @@ export default function App() {
         sourceType: nextFilters.sourceType || undefined,
         libraryRootId: undefined,
       });
-      navigate(Screen.GALLERY, 1);
+      navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false });
     } else if (tab === 'settings') {
       navigate(Screen.SETTINGS, 1);
     }
@@ -330,7 +413,7 @@ export default function App() {
     setFilters(prev => ({ ...prev, libraryRootId: '', page: 1 }));
     setScrollPosition(0);
     fetchRecentAlbums({ limit: 50 });
-    navigate(Screen.GALLERY, 1);
+    navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: true });
   };
 
   const handlePageChange = (page: number) => {
@@ -469,6 +552,7 @@ export default function App() {
                 albumId={selectedAlbum || ''} 
                 onBack={handleBackToGallery}
                 onAssetDeleted={loadAlbums}
+                onRequestNextAlbum={nextAlbumId ? () => handleNavigateToAlbum(nextAlbumId) : undefined}
               />
             </Suspense>
           )}

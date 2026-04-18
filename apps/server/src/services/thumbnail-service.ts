@@ -63,6 +63,12 @@ const ensureCacheDir = async () => {
   await fs.promises.mkdir(env.cacheDir, { recursive: true });
 };
 
+const createSharp = (buffer: Buffer) =>
+  sharp(buffer, {
+    animated: true,
+    failOn: "none"
+  });
+
 const buildCacheKey = (input: {
   sourcePath: string;
   zipEntryPath: string | null;
@@ -129,7 +135,7 @@ const syncAssetDimensions = async (input: {
   }
 
   const sourceBuffer = input.buffer ?? (await readOriginalBuffer(asset.id)).buffer;
-  const metadata = await sharp(sourceBuffer, { animated: true }).metadata();
+  const metadata = await createSharp(sourceBuffer).metadata();
   const normalized = normalizeMetadataDimensions(metadata);
   if (!normalized.width || !normalized.height) {
     return;
@@ -274,7 +280,7 @@ const ensureThumbnailWithResolvedInput = async (input: {
     let finalFilePath = filePath;
     let finalCacheKey = input.cacheKey;
     try {
-      const pipeline = sharp(buffer, { animated: true }).resize(input.width, input.height, {
+      const pipeline = createSharp(buffer).resize(input.width, input.height, {
         fit: "cover",
         position: "centre"
       });
@@ -297,7 +303,7 @@ const ensureThumbnailWithResolvedInput = async (input: {
         format: "jpeg"
       });
       finalFilePath = path.join(env.cacheDir, `${finalCacheKey}.jpg`);
-      await sharp(buffer, { animated: true })
+      await createSharp(buffer)
         .resize(input.width, input.height, {
           fit: "cover",
           position: "centre"
@@ -307,7 +313,7 @@ const ensureThumbnailWithResolvedInput = async (input: {
     }
 
     if (canUseDbRecord) {
-      const metadata = await sharp(buffer, { animated: true }).metadata();
+      const metadata = await createSharp(buffer).metadata();
       const normalized = normalizeMetadataDimensions(metadata);
       const updatedAt = new Date().toISOString();
       updateAssetMetadataDb(asset.id, {

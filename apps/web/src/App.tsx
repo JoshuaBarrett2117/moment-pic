@@ -18,6 +18,12 @@ interface GalleryFilters {
   libraryRootId: string;
 }
 
+interface UrlNavigationState {
+  screen: Screen;
+  selectedAlbumId: string | null;
+  isRecentActive: boolean;
+}
+
 const parseFiltersFromUrl = (): Partial<GalleryFilters> => {
   const params = new URLSearchParams(window.location.search);
   const result: Partial<GalleryFilters> = {};
@@ -60,7 +66,39 @@ const parseFiltersFromUrl = (): Partial<GalleryFilters> => {
   return result;
 };
 
-const syncFiltersToUrl = (filters: GalleryFilters) => {
+const parseNavigationFromUrl = (): UrlNavigationState => {
+  const params = new URLSearchParams(window.location.search);
+  const screenParam = params.get('screen');
+  const albumId = params.get('albumId');
+  const recent = params.get('recent');
+
+  if (screenParam === 'album' && albumId) {
+    return {
+      screen: Screen.ALBUM_DETAIL,
+      selectedAlbumId: albumId,
+      isRecentActive: recent === '1',
+    };
+  }
+
+  if (screenParam === 'settings') {
+    return {
+      screen: Screen.SETTINGS,
+      selectedAlbumId: null,
+      isRecentActive: false,
+    };
+  }
+
+  return {
+    screen: Screen.GALLERY,
+    selectedAlbumId: null,
+    isRecentActive: recent === '1',
+  };
+};
+
+const buildUrl = (
+  filters: GalleryFilters,
+  navigation: { screen: Screen; selectedAlbumId?: string | null; isRecentActive?: boolean }
+) => {
   const params = new URLSearchParams();
   params.set('page', String(filters.page));
   params.set('pageSize', String(filters.pageSize));
@@ -80,8 +118,23 @@ const syncFiltersToUrl = (filters: GalleryFilters) => {
     params.set('libraryRootId', filters.libraryRootId);
   }
 
-  const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
-  window.history.replaceState({}, '', newUrl);
+  if (navigation.screen === Screen.ALBUM_DETAIL && navigation.selectedAlbumId) {
+    params.set('screen', 'album');
+    params.set('albumId', navigation.selectedAlbumId);
+  } else if (navigation.screen === Screen.SETTINGS) {
+    params.set('screen', 'settings');
+  }
+
+  if (navigation.isRecentActive) {
+    params.set('recent', '1');
+  }
+
+  return params.toString() ? `?${params.toString()}` : window.location.pathname;
+};
+
+const syncFiltersToUrl = (filters: GalleryFilters, navigation: UrlNavigationState) => {
+  const newUrl = buildUrl(filters, navigation);
+  window.history.replaceState(window.history.state ?? null, '', newUrl);
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
@@ -120,13 +173,14 @@ const SettingsScreen = lazy(() =>
 
 export default function App() {
   const initialFilters = getInitialFilters();
+  const initialNavigation = parseNavigationFromUrl();
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
-  const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
+  const [selectedAlbum, setSelectedAlbum] = useState<string | null>(initialNavigation.selectedAlbumId);
   const [nextAlbumId, setNextAlbumId] = useState<string | null>(null);
   const [direction, setDirection] = useState(1);
-  const [activeTab, setActiveTab] = useState<'gallery' | 'settings'>('gallery');
+  const [activeTab, setActiveTab] = useState<'gallery' | 'settings'>(initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isRecentActive, setIsRecentActive] = useState(false);
+  const [isRecentActive, setIsRecentActive] = useState(initialNavigation.isRecentActive);
   const [scrollPosition, setScrollPosition] = useState(0);
   const [filters, setFilters] = useState<GalleryFilters>(initialFilters);
   const [debouncedKeyword, setDebouncedKeyword] = useState(initialFilters.keyword);
@@ -141,17 +195,25 @@ export default function App() {
       screen: Screen,
       options: { replace?: boolean; selectedAlbumId?: string | null; isRecentActive?: boolean } = {}
     ) => {
+      const nextUrl = buildUrl(filters, {
+        screen,
+        selectedAlbumId: options.selectedAlbumId ?? null,
+        isRecentActive: screen === Screen.GALLERY || screen === Screen.ALBUM_DETAIL ? (options.isRecentActive ?? false) : false,
+      });
       const state = {
         screen,
         selectedAlbum: options.selectedAlbumId ?? null,
         activeTab: screen === Screen.SETTINGS ? 'settings' : 'gallery',
-        isRecentActive: screen === Screen.GALLERY ? (options.isRecentActive ?? false) : false,
+        isRecentActive:
+          screen === Screen.GALLERY || screen === Screen.ALBUM_DETAIL
+            ? (options.isRecentActive ?? false)
+            : false,
       };
 
       const method = options.replace ? 'replaceState' : 'pushState';
-      window.history[method](state, '', window.location.href);
+      window.history[method](state, '', nextUrl);
     },
-    []
+    [filters]
   );
 
   const loadAlbums = useCallback(() => {
@@ -221,15 +283,20 @@ export default function App() {
   );
 
   useEffect(() => {
+    const initialUrl = buildUrl(initialFilters, {
+      screen: initialNavigation.screen,
+      selectedAlbumId: initialNavigation.selectedAlbumId,
+      isRecentActive: initialNavigation.isRecentActive,
+    });
     window.history.replaceState(
       {
         screen: currentScreen,
-        selectedAlbum: null,
-        activeTab: 'gallery',
-        isRecentActive: false,
+        selectedAlbum: initialNavigation.selectedAlbumId,
+        activeTab: initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery',
+        isRecentActive: initialNavigation.isRecentActive,
       },
       '',
-      window.location.href
+      initialUrl
     );
   }, []);
 
@@ -240,8 +307,15 @@ export default function App() {
         try {
           await api.get('/albums', { page: 1, pageSize: 1 });
           setIsAuthenticated(true);
-          syncHistory(Screen.GALLERY, { replace: true, isRecentActive: false });
-          setCurrentScreen(Screen.GALLERY);
+          setSelectedAlbum(initialNavigation.selectedAlbumId);
+          setIsRecentActive(initialNavigation.isRecentActive);
+          setActiveTab(initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery');
+          syncHistory(initialNavigation.screen, {
+            replace: true,
+            selectedAlbumId: initialNavigation.selectedAlbumId,
+            isRecentActive: initialNavigation.isRecentActive,
+          });
+          setCurrentScreen(initialNavigation.screen);
         } catch {
           localStorage.removeItem('auth_token');
           setIsAuthenticated(false);
@@ -251,7 +325,7 @@ export default function App() {
       }
     };
     verifyAuth();
-  }, [syncHistory]);
+  }, [initialNavigation.isRecentActive, initialNavigation.screen, initialNavigation.selectedAlbumId, syncHistory]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -262,7 +336,7 @@ export default function App() {
         isRecentActive?: boolean;
       };
 
-      const nextScreen = state.screen || Screen.LOGIN;
+      const nextScreen = state.screen || (isAuthenticated ? Screen.GALLERY : Screen.LOGIN);
       isRestoringHistoryRef.current = true;
       setCurrentScreen(nextScreen);
       setSelectedAlbum(state.selectedAlbum ?? null);
@@ -281,7 +355,7 @@ export default function App() {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (currentScreen === Screen.GALLERY && isAuthenticated) {
@@ -297,9 +371,13 @@ export default function App() {
 
   useEffect(() => {
     if (currentScreen === Screen.GALLERY && isAuthenticated) {
-      syncFiltersToUrl(filters);
+      syncFiltersToUrl(filters, {
+        screen: Screen.GALLERY,
+        selectedAlbumId: null,
+        isRecentActive,
+      });
     }
-  }, [filters, currentScreen, isAuthenticated]);
+  }, [filters, currentScreen, isAuthenticated, isRecentActive]);
 
   useEffect(() => {
     if (!isAuthenticated || !isAnyScanning) {
@@ -373,16 +451,9 @@ export default function App() {
     }
 
     setActiveTab('gallery');
+    setIsRecentActive(false);
     setNextAlbumId(null);
-    fetchAlbums({
-      page: filters.page,
-      pageSize: filters.pageSize,
-      keyword: filters.keyword || undefined,
-      sortBy: filters.sortBy,
-      sortOrder: filters.sortOrder,
-      sourceType: filters.sourceType || undefined,
-      libraryRootId: filters.libraryRootId || undefined,
-    });
+    setSelectedAlbum(null);
     navigate(Screen.GALLERY, -1, { replace: true, isRecentActive: false });
   };
 
@@ -551,7 +622,6 @@ export default function App() {
               <AlbumDetailScreen 
                 albumId={selectedAlbum || ''} 
                 onBack={handleBackToGallery}
-                onAssetDeleted={loadAlbums}
                 onRequestNextAlbum={nextAlbumId ? () => handleNavigateToAlbum(nextAlbumId) : undefined}
               />
             </Suspense>

@@ -1,16 +1,15 @@
 import { type FC, useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, RefreshCw } from 'lucide-react';
 import { Polaroid } from './Polaroid';
 import { useToast } from './Toast';
 import { ViewerGallery } from './ViewerGallery';
-import { useAlbumAssets, deleteAsset, useMobile, useSystemConfig, useWideMobile } from '../hooks';
+import { useAlbumAssets, rescanAlbum, useMobile, useSystemConfig, useWideMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
 interface AlbumDetailScreenProps {
   albumId: string;
   onBack: () => void;
-  onAssetDeleted?: () => void;
   onRequestNextAlbum?: () => void;
 }
 
@@ -21,18 +20,18 @@ const DEFAULT_PRELOAD_AFTER = 3;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
 
-export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onAssetDeleted, onRequestNextAlbum }) => {
+export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onRequestNextAlbum }) => {
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
   const { toast } = useToast();
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
-  const [pendingDeleteAsset, setPendingDeleteAsset] = useState<AssetListItemDTO | null>(null);
   const [loadedItems, setLoadedItems] = useState<AssetListItemDTO[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isRescanningAlbum, setIsRescanningAlbum] = useState(false);
   const [visibleRenderCount, setVisibleRenderCount] = useState(RENDER_CHUNK_SIZE);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
@@ -145,6 +144,24 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     await loadPage(1, false);
   }, [loadPage]);
 
+  const handleRescanAlbum = useCallback(async () => {
+    if (!albumId || isRescanningAlbum) {
+      return;
+    }
+
+    setIsRescanningAlbum(true);
+    const success = await rescanAlbum(albumId);
+    if (!success) {
+      toast('重扫图集失败，请稍后重试', 'error');
+      setIsRescanningAlbum(false);
+      return;
+    }
+
+    await loadPage(1, false);
+    toast('图集已重新扫描', 'success');
+    setIsRescanningAlbum(false);
+  }, [albumId, isRescanningAlbum, loadPage, toast]);
+
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-surface">
       {!isMobile && (
@@ -163,6 +180,17 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
             >
               <ArrowLeft className="h-4 w-4" />
               返回首页
+            </button>
+          </div>
+
+          <div className="mb-8 flex">
+            <button
+              onClick={() => void handleRescanAlbum()}
+              disabled={isRescanningAlbum}
+              className="wobbly-mask flex items-center gap-1 rounded-sm bg-primary-container px-4 py-1.5 text-xs font-medium text-on-primary-container shadow-sm transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isRescanningAlbum ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              重扫当前图集
             </button>
           </div>
 
@@ -203,7 +231,14 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
             <h2 className={`truncate font-headline font-bold tracking-tight text-on-surface ${isWideMobile ? 'max-w-[280px] text-xl' : 'max-w-[200px] text-lg'}`}>
               {assets?.album?.name || albumId}
             </h2>
-            <div className="w-16" />
+            <button
+              onClick={() => void handleRescanAlbum()}
+              disabled={isRescanningAlbum}
+              className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60"
+              title="重扫当前图集"
+            >
+              {isRescanningAlbum ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
+            </button>
           </header>
         )}
 
@@ -257,16 +292,6 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                     }}
                     className="group relative cursor-pointer"
                   >
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPendingDeleteAsset(asset);
-                      }}
-                      className="absolute right-2 top-2 z-20 rounded-full bg-red-400 p-2.5 text-white opacity-100 shadow-md transition-all hover:scale-105 hover:bg-red-500 md:opacity-0 md:group-hover:opacity-100"
-                      title="删除图片"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
                     <div onClick={() => setSelectedImageIndex(index)}>
                       <Polaroid src={asset.thumbnailUrl} caption="" rotation={(index % 5 - 2) * 1} className="w-full" />
                     </div>
@@ -302,46 +327,6 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
         preloadBefore={preloadBefore}
         preloadAfter={preloadAfter}
       />
-      )}
-
-      {pendingDeleteAsset && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 px-4">
-          <div className="w-full max-w-md rounded-3xl border border-outline/10 bg-surface p-6 shadow-2xl">
-            <h3 className="font-headline text-xl font-black text-on-surface">确认删除图片</h3>
-            <p className="mt-3 text-sm leading-6 text-outline">
-              删除后该图片会从当前相册中移除
-              <span className="font-semibold text-on-surface">{pendingDeleteAsset.name}</span>
-              ，请确认继续。
-            </p>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => setPendingDeleteAsset(null)}
-                className="rounded-full px-4 py-2 text-sm font-semibold text-outline transition-colors hover:bg-surface-container-high"
-              >
-                取消
-              </button>
-              <button
-                onClick={async () => {
-                  const targetAsset = pendingDeleteAsset;
-                  setPendingDeleteAsset(null);
-                  const success = await deleteAsset(targetAsset.id);
-
-                  if (success) {
-                    toast('图片已删除', 'success');
-                    onAssetDeleted?.();
-                    await loadPage(1, false);
-                    return;
-                  }
-
-                  toast('删除图片失败，请稍后重试', 'error');
-                }}
-                className="rounded-full bg-error px-4 py-2 text-sm font-semibold text-white transition-all hover:brightness-95"
-              >
-                删除图片
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between rounded-t-[2rem] border-t border-white/60 bg-white/85 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.1rem)] shadow-[0_-12px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl md:hidden">

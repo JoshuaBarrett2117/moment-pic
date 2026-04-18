@@ -77,6 +77,12 @@ export const findLibraryRootByPathDb = (targetPath: string): LibraryRootRecord |
   return row ? rowToLibraryRoot(row) : null;
 };
 
+export const findLibraryRootByIdDb = (id: string): LibraryRootRecord | null => {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM library_roots WHERE id = ? LIMIT 1").get(id) as Record<string, unknown> | undefined;
+  return row ? rowToLibraryRoot(row) : null;
+};
+
 export const upsertLibraryRootDb = (root: LibraryRootRecord) => {
   const db = getDb();
   db.prepare(`

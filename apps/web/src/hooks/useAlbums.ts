@@ -117,6 +117,15 @@ export const recordAlbumView = async (albumId: string): Promise<boolean> => {
   }
 };
 
+export const rescanAlbum = async (albumId: string): Promise<boolean> => {
+  try {
+    await api.post<{ albumId: string; name: string; assetCount: number }>(`/albums/${albumId}/rescan`, {});
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 interface UseRecentAlbumsOptions {
   limit?: number;
 }

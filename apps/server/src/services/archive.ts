@@ -378,11 +378,17 @@ export const listRootImageEntries = async (archivePath: string): Promise<Archive
   const entries = await collectAllImageEntries(archivePath);
 
   const rootImages = entries.filter((entry) => !entry.entryPath.includes("/"));
-  if (rootImages.length > 0) {
-    return rootImages;
+  const nestedImages = entries.filter((entry) => entry.entryPath.includes("/"));
+
+  if (rootImages.length === 0 || nestedImages.length === 0) {
+    return rootImages.length > 0 ? rootImages : entries;
   }
 
-  return entries;
+  const sumSize = (items: ArchiveImageEntry[]) => items.reduce((total, item) => total + item.sizeBytes, 0);
+  const rootSize = sumSize(rootImages);
+  const nestedSize = sumSize(nestedImages);
+
+  return nestedSize > rootSize ? nestedImages : rootImages;
 };
 
 const readZipBuffer = async (zipPath: string, entryPath: string): Promise<Buffer> => {
@@ -450,18 +456,6 @@ const extractJpegFromPsd = (buffer: Buffer): Buffer => {
     const jpeg = findEmbeddedJpegInPsd(buffer);
     if (jpeg) {
       return jpeg;
-    }
-  }
-
-  if (buffer.subarray(0, 2).equals(JPEG_SOI)) {
-    const searchArea = buffer.subarray(4, 34);
-    const hasAdobeMarker = searchArea.includes(Buffer.from("Adobe")) ||
-                           searchArea.includes(Buffer.from("Photoshop"));
-    if (hasAdobeMarker) {
-      const jpeg = findEmbeddedJpegInPsd(buffer);
-      if (jpeg) {
-        return jpeg;
-      }
     }
   }
 

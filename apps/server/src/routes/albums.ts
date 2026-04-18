@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
 import { deleteAlbum, getAlbumAssets, getAlbumDetail, listAlbums, recordAlbumView, getRecentAlbums } from "../services/album-service.js";
+import { rescanAlbum, ScanAlbumNotFoundError, ScanAlbumSourceInvalidError, ScanLibraryRootNotFoundError } from "../services/library-scanner.js";
 
 export const albumRoutes: FastifyPluginAsync = async (app) => {
   const normalizeHeader = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
@@ -90,6 +91,31 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return ok(payload);
+  });
+
+  app.post("/api/v1/albums/:albumId/rescan", async (request, reply) => {
+    const { albumId } = request.params as { albumId: string };
+
+    try {
+      const payload = await rescanAlbum(albumId);
+      return ok(payload);
+    } catch (error) {
+      if (error instanceof ScanAlbumNotFoundError) {
+        return reply.status(404).send({
+          code: 4001,
+          message: "album not found"
+        });
+      }
+
+      if (error instanceof ScanLibraryRootNotFoundError || error instanceof ScanAlbumSourceInvalidError) {
+        return reply.status(400).send({
+          code: 4006,
+          message: error.message
+        });
+      }
+
+      throw error;
+    }
   });
 
   app.delete("/api/v1/albums/:albumId", async (request, reply) => {

@@ -8,6 +8,8 @@ import { nowIso } from "../lib/time.js";
 import type { AlbumRecord, AssetRecord, LibraryRootRecord, SourceType } from "../types/store.js";
 import {
   applyLibraryRootScanDiffDb,
+  findAlbumByIdDb,
+  findLibraryRootByIdDb,
   listAlbumsByLibraryRootIdDb,
   listAlbumsDb,
   listAssetsByAlbumIdDb,
@@ -43,6 +45,20 @@ export class ScanLibraryRootNotFoundError extends Error {
   constructor(rootId: string) {
     super(`library root not found: ${rootId}`);
     this.name = "ScanLibraryRootNotFoundError";
+  }
+}
+
+export class ScanAlbumNotFoundError extends Error {
+  constructor(albumId: string) {
+    super(`album not found: ${albumId}`);
+    this.name = "ScanAlbumNotFoundError";
+  }
+}
+
+export class ScanAlbumSourceInvalidError extends Error {
+  constructor(albumId: string, sourcePath: string) {
+    super(`album source invalid: ${albumId} -> ${sourcePath}`);
+    this.name = "ScanAlbumSourceInvalidError";
   }
 }
 
@@ -549,6 +565,65 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
   return {
     albumsDiscovered,
     assetsDiscovered
+  };
+};
+
+export const rescanAlbum = async (albumId: string) => {
+  const existingAlbum = findAlbumByIdDb(albumId);
+  if (!existingAlbum) {
+    throw new ScanAlbumNotFoundError(albumId);
+  }
+
+  const libraryRoot = findLibraryRootByIdDb(existingAlbum.libraryRootId);
+  if (!libraryRoot) {
+    throw new ScanLibraryRootNotFoundError(existingAlbum.libraryRootId);
+  }
+
+  const timestamp = nowIso();
+  const existingBySourcePath = new Map<string, AlbumRecord>();
+  const discoveredAlbum =
+    existingAlbum.sourceType === "zip"
+      ? await scanZipAlbum(libraryRoot.path, existingAlbum.sourcePath, existingBySourcePath)
+      : await scanFolderAlbum(libraryRoot.path, existingAlbum.sourcePath, existingBySourcePath);
+
+  if (!discoveredAlbum) {
+    throw new ScanAlbumSourceInvalidError(albumId, existingAlbum.sourcePath);
+  }
+
+  const assets = discoveredAlbum.assets.map((asset) => toAssetRecord(existingAlbum.id, timestamp, asset));
+  const assetsFingerprint = buildAssetsFingerprint(discoveredAlbum.assets);
+
+  const album: AlbumRecord = {
+    id: existingAlbum.id,
+    libraryRootId: existingAlbum.libraryRootId,
+    name: discoveredAlbum.name,
+    sourceType: discoveredAlbum.sourceType,
+    sourcePath: discoveredAlbum.sourcePath,
+    sourceMtime: discoveredAlbum.sourceMtime,
+    assetsFingerprint,
+    coverAssetId: assets[0]?.id ?? null,
+    assetCount: assets.length,
+    scanStatus: "ready",
+    errorMessage: null,
+    createdAt: existingAlbum.createdAt,
+    updatedAt: timestamp
+  };
+
+  applyLibraryRootScanDiffDb({
+    removedAlbumIds: [],
+    replacedAlbums: [
+      {
+        existingAlbumId: existingAlbum.id,
+        album,
+        assets
+      }
+    ]
+  });
+
+  return {
+    albumId: existingAlbum.id,
+    name: album.name,
+    assetCount: assets.length
   };
 };
 

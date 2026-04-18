@@ -513,19 +513,22 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        data-viewer-state={isImageLoading ? 'loading' : 'ready'}
         style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'pointer' }}
       >
         {isImageLoading && (
-          <div className="viewer-loading">
+          <div className="viewer-loading" data-viewer-loading="true">
             <div className="viewer-loading-spinner" />
           </div>
         )}
         <img
+          key={currentImage.src}
           src={currentImage.src}
           alt={currentImage.alt}
           className="viewer-image"
           style={{
             transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
+            opacity: isImageLoading ? 0 : 1,
           }}
           onLoad={() => setIsImageLoading(false)}
           onError={() => setIsImageLoading(false)}

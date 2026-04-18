@@ -9,10 +9,37 @@ const outputDir = path.resolve("./.logs/browser-check");
 const main = async () => {
   await fs.mkdir(outputDir, { recursive: true });
 
-  const rootsResponse = await fetch(`${baseUrl}/api/v1/library-roots`);
+  const loginResponse = await fetch(`${baseUrl}/api/v1/auth/login`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      username: "admin",
+      password: "admin"
+    })
+  });
+  if (!loginResponse.ok) {
+    throw new Error(`登录失败：${loginResponse.status}`);
+  }
+
+  const authCookie = loginResponse.headers.get("set-cookie")?.split(";")[0];
+  if (!authCookie) {
+    throw new Error("登录后未拿到认证 cookie");
+  }
+
+  const requestHeaders = {
+    cookie: authCookie
+  };
+
+  const rootsResponse = await fetch(`${baseUrl}/api/v1/library-roots`, {
+    headers: requestHeaders
+  });
   const rootsPayload = await rootsResponse.json();
   const roots = rootsPayload.data;
-  const zipAlbumsResponse = await fetch(`${baseUrl}/api/v1/albums?page=1&pageSize=20&sourceType=zip&sortBy=assetCount&sortOrder=desc`);
+  const zipAlbumsResponse = await fetch(`${baseUrl}/api/v1/albums?page=1&pageSize=20&sourceType=zip&sortBy=assetCount&sortOrder=desc`, {
+    headers: requestHeaders
+  });
   const zipAlbumsPayload = await zipAlbumsResponse.json();
   const firstAlbum = zipAlbumsPayload.data.items[0];
   if (!firstAlbum) {
@@ -21,43 +48,75 @@ const main = async () => {
 
   const browser = await chromium.launch({ executablePath: edgePath, headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
+  await page.addInitScript(() => {
+    localStorage.setItem("auth_token", "authenticated");
+  });
+  await page.context().addCookies([
+    {
+      name: "moment_pic_auth",
+      value: authCookie.split("=")[1] ?? "",
+      url: baseUrl
+    }
+  ]);
 
   await page.goto(`${baseUrl}/index.html`, { waitUntil: "networkidle" });
-  await page.waitForSelector('.root-chip');
+  await page.waitForSelector('text=瞬间图库');
   await page.screenshot({ path: path.join(outputDir, "home-paged.png"), fullPage: true });
 
-  await page.fill('input[name="keyword"]', '桜桃喵');
+  await page.fill('input[placeholder="搜索相册名称"]', '桜桃喵');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(1200);
   await page.screenshot({ path: path.join(outputDir, "home-search.png"), fullPage: true });
 
   await page.goto(`${baseUrl}/index.html`, { waitUntil: "networkidle" });
-  await page.selectOption('select[name="sourceType"]', 'zip');
-  await page.selectOption('select[name="sortBy"]', 'assetCount');
-  await page.selectOption('select[name="sortOrder"]', 'desc');
+  await page.locator('select').nth(0).selectOption('zip');
+  await page.locator('select').nth(1).selectOption('assetCount');
+  await page.locator('select').nth(2).selectOption('96');
   await page.waitForTimeout(1200);
   await page.screenshot({ path: path.join(outputDir, "home-filtered.png"), fullPage: true });
 
   await page.goto(`${baseUrl}/index.html#/albums/${firstAlbum.id}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
   await page.screenshot({ path: path.join(outputDir, "album.png"), fullPage: true });
-  const albumPageText = await page.locator('.pagination-meta').last().textContent();
-  const hasSecondAssetPage = /第 1 \/ [2-9]\d* 页/.test(albumPageText ?? "");
+  const albumPageText = await page.getByText(/共\s+\d+\s+项\s+\/\s+\d+\s+页/).textContent();
+  const hasSecondAssetPage = /\/\s*[2-9]\d*\s*页/.test(albumPageText ?? "");
   if (hasSecondAssetPage) {
-    await page.click('[data-album-page-action="next"]');
+    await page.getByTitle('下一页').click();
     await page.waitForTimeout(900);
     await page.screenshot({ path: path.join(outputDir, "album-page-2.png"), fullPage: true });
   }
 
-  await page.goto(`${baseUrl}/index.html#/albums/${firstAlbum.id}/view/0`, { waitUntil: "networkidle" });
-  await page.waitForTimeout(300);
-  const progressVisibleInitially = await page.locator('[data-viewer-progress]').evaluate((node) => node.classList.contains('visible'));
-  await page.waitForTimeout(2400);
-  const progressHiddenAfterIdle = await page.locator('[data-viewer-progress]').evaluate((node) => !node.classList.contains('visible'));
+  await page.locator('main h3').first().click();
+  await page.waitForTimeout(1200);
+  await page.locator('.polaroid').first().click();
+  await page.waitForSelector('.viewer-counter');
+  const initialCounterText = await page.locator('.viewer-counter').textContent();
+  let delayNextImage = false;
+  await page.route('**/*', async (route) => {
+    const request = route.request();
+    const isImageRequest = request.resourceType() === 'image';
+
+    if (delayNextImage && isImageRequest) {
+      await page.waitForTimeout(1200);
+      delayNextImage = false;
+    }
+
+    await route.continue();
+  });
+
+  await page.waitForTimeout(800);
+  delayNextImage = true;
   await page.keyboard.press('ArrowRight');
   await page.waitForTimeout(250);
-  const progressVisibleAfterSwitch = await page.locator('[data-viewer-progress]').evaluate((node) => node.classList.contains('visible'));
-  const dimensionText = await page.locator('.viewer-title .muted').textContent();
+  const switchedCounterText = await page.locator('.viewer-counter').textContent();
+  const viewerStateAfterSwitch = await page.locator('[data-viewer-state]').getAttribute('data-viewer-state');
+  const imageOpacityAfterSwitch = await page.locator('.viewer-image').evaluate((node) => getComputedStyle(node).opacity);
+  await page.waitForFunction(() => {
+    const node = document.querySelector('[data-viewer-state]');
+    return node?.getAttribute('data-viewer-state') === 'ready';
+  }, null, { timeout: 6000 });
+  const viewerStateAfterLoad = await page.locator('[data-viewer-state]').getAttribute('data-viewer-state');
+  const dimensionText = await page.locator('.viewer-image').getAttribute('alt');
   const fullscreenActive = await page.evaluate(() => Boolean(document.fullscreenElement));
   await page.screenshot({ path: path.join(outputDir, "viewer.png"), fullPage: true });
   await page.keyboard.press('r');
@@ -74,9 +133,11 @@ const main = async () => {
     albumName: firstAlbum.name,
     albumPageText,
     hasSecondAssetPage,
-    progressVisibleInitially,
-    progressHiddenAfterIdle,
-    progressVisibleAfterSwitch,
+    initialCounterText,
+    switchedCounterText,
+    viewerStateAfterSwitch,
+    imageOpacityAfterSwitch,
+    viewerStateAfterLoad,
     dimensionText,
     fullscreenActive,
     fullscreenAfterEscape,

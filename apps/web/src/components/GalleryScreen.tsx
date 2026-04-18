@@ -1,10 +1,9 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Plus, ArrowRight, ChevronLeft, ChevronRight, Trash2, Search, X, Images } from 'lucide-react';
+import { Plus, ArrowRight, ChevronLeft, ChevronRight, Search, X, Images } from 'lucide-react';
 import { Sidebar } from './Sidebar';
-import { useToast } from './Toast';
 import { ThrottledImage } from './ThrottledImage';
-import { deleteAlbum, useMobile, useSystemConfig, useWideMobile } from '../hooks';
+import { useMobile, useSystemConfig, useWideMobile } from '../hooks';
 import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO } from '../types/api';
 
 interface GalleryScreenProps {
@@ -77,7 +76,6 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onScanOne,
   isAnyScanning,
   isScanning,
-  onAlbumDeleted,
   onRecentClick,
   isRecentActive,
   scrollPosition,
@@ -86,10 +84,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
-  const { toast } = useToast();
   const [visibleCount, setVisibleCount] = useState(RENDER_CHUNK_SIZE);
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
-  const [pendingDeleteAlbum, setPendingDeleteAlbum] = useState<AlbumListItemDTO | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
 
@@ -112,7 +108,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     : 'relative z-10 -mx-4 mb-4 flex w-auto items-center justify-between bg-surface/92 px-4 py-3 md:mx-0 md:mb-8 md:bg-transparent md:px-0 md:py-0';
   const gridGapClass = isWideMobile ? 'gap-5' : 'gap-4 md:gap-6';
 
-  useEffect(() => {
+  React.useLayoutEffect(() => {
     if (scrollPosition !== undefined && mainRef.current) {
       mainRef.current.scrollTop = scrollPosition;
     }
@@ -406,16 +402,6 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                   className="group cursor-pointer"
                 >
                   <div className="relative rounded-xl bg-surface-container-highest p-4 shadow-lg transition-all duration-300 hover:shadow-xl">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPendingDeleteAlbum(album);
-                      }}
-                      className="absolute right-2 top-2 z-20 rounded-full bg-red-400 p-2.5 text-white opacity-100 shadow-md transition-all hover:scale-105 hover:bg-red-500 md:opacity-0 md:group-hover:opacity-100"
-                      title="删除相册"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
                     <div onClick={() => handleNavigateToAlbum(album.id)} className="pointer-events-auto">
                       <div
                         className={`absolute -top-3 z-10 rounded-full border border-black/5 px-4 py-1 text-xs font-bold shadow-sm ${
@@ -519,44 +505,6 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
         )}
 
-        {pendingDeleteAlbum && (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 px-4">
-            <div className="w-full max-w-md rounded-3xl border border-outline/10 bg-surface p-6 shadow-2xl">
-              <h3 className="font-headline text-xl font-black text-on-surface">确认删除相册</h3>
-              <p className="mt-3 text-sm leading-6 text-outline">
-                删除后将无法在图库中继续浏览
-                <span className="font-semibold text-on-surface">{pendingDeleteAlbum.name}</span>
-                ，请确认此操作。
-              </p>
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  onClick={() => setPendingDeleteAlbum(null)}
-                  className="rounded-full px-4 py-2 text-sm font-semibold text-outline transition-colors hover:bg-surface-container-high"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={async () => {
-                    const targetAlbum = pendingDeleteAlbum;
-                    setPendingDeleteAlbum(null);
-                    const success = await deleteAlbum(targetAlbum.id);
-
-                    if (success) {
-                      toast('相册已删除', 'success');
-                      onAlbumDeleted?.();
-                      return;
-                    }
-
-                    toast('删除相册失败，请稍后重试', 'error');
-                  }}
-                  className="rounded-full bg-error px-4 py-2 text-sm font-semibold text-white transition-all hover:brightness-95"
-                >
-                  删除相册
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );

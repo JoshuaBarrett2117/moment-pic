@@ -180,9 +180,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
             <Paperclip className="absolute -top-3 right-4 h-5 w-5 rotate-12 text-outline" />
             {assets?.album ? (
               <>
-                <p className="text-sm font-medium leading-relaxed text-on-tertiary-container">
-                  共 {assets.album.assetCount} 张图片
-                </p>
+                <p className="text-sm font-medium leading-relaxed text-on-tertiary-container">共 {assets.album.assetCount} 张图片</p>
                 <p className="mt-2 text-[10px] text-on-tertiary-container/60">已加载 {loadedItems.length} 张</p>
                 <p className="mt-1 text-[10px] text-on-tertiary-container/60">
                   更新于 {new Date(assets.album.updatedAt || Date.now()).toLocaleDateString('zh-CN')}
@@ -312,7 +310,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
             <h3 className="font-headline text-xl font-black text-on-surface">确认删除图片</h3>
             <p className="mt-3 text-sm leading-6 text-outline">
               删除后该图片会从当前相册中移除
-              <span className="font-semibold text-on-surface">「{pendingDeleteAsset.name}」</span>
+              <span className="font-semibold text-on-surface">{pendingDeleteAsset.name}</span>
               ，请确认继续。
             </p>
             <div className="mt-6 flex justify-end gap-3">
@@ -353,7 +351,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
         </div>
         <button onClick={onBack} className="flex min-h-12 min-w-16 flex-col items-center justify-center text-outline transition-opacity hover:opacity-80">
           <ArrowLeft className="h-6 w-6" />
-          <span className="text-[10px] tracking-widest">返回图库</span>
+          <span className="text-[10px] tracking-widest">返回相册</span>
         </button>
       </nav>
     </div>

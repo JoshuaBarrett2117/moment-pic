@@ -15,6 +15,36 @@ const DEFAULT_THUMBNAIL_HEIGHT = 360;
 const MIN_THUMBNAIL_SIZE = 80;
 const MAX_THUMBNAIL_SIZE = 720;
 type ThumbnailFormat = "webp" | "jpeg";
+export type PreviewPreset = "low" | "balanced" | "high";
+type ImageVariantKind = "thumbnail" | "preview";
+type ImageVariantResult = {
+  filePath: string;
+  mimeType: string;
+  cacheKey: string;
+  width: number;
+  height: number;
+  format: ThumbnailFormat;
+};
+const PREVIEW_PRESET_OPTIONS: Record<PreviewPreset, { maxWidth: number; maxHeight: number; webpQuality: number; jpegQuality: number }> = {
+  low: {
+    maxWidth: 1600,
+    maxHeight: 1600,
+    webpQuality: 70,
+    jpegQuality: 72
+  },
+  balanced: {
+    maxWidth: 2560,
+    maxHeight: 2560,
+    webpQuality: 80,
+    jpegQuality: 82
+  },
+  high: {
+    maxWidth: 3840,
+    maxHeight: 3840,
+    webpQuality: 86,
+    jpegQuality: 88
+  }
+};
 export class AssetNotFoundError extends Error {
   constructor(assetId: string) {
     super(`asset not found: ${assetId}`);
@@ -32,14 +62,7 @@ export class OriginalAssetSourceMissingError extends Error {
 export type OriginalImageBody = Buffer | Readable;
 
 const THUMBNAIL_GENERATION_CONCURRENCY = 6;
-const inFlightThumbnailTasks = new Map<string, Promise<{
-  filePath: string;
-  mimeType: string;
-  cacheKey: string;
-  width: number;
-  height: number;
-  format: ThumbnailFormat;
-}>>();
+const inFlightVariantTasks = new Map<string, Promise<ImageVariantResult>>();
 const dimensionSyncedAssetIds = new Set<string>();
 let activeGenerationCount = 0;
 const generationWaitQueue: Array<() => void> = [];
@@ -74,16 +97,18 @@ const createSharp = (buffer: Buffer) =>
   });
 
 const buildCacheKey = (input: {
+  kind: ImageVariantKind;
   sourcePath: string;
   zipEntryPath: string | null;
   sourceMtime: string | null;
   width: number;
   height: number;
   format: ThumbnailFormat;
+  quality: number;
 }) =>
   crypto
     .createHash("sha1")
-    .update(`${input.sourcePath}|${input.zipEntryPath ?? ""}|${input.sourceMtime ?? ""}|${input.width}x${input.height}|${input.format}|v3`)
+    .update(`${input.kind}|${input.sourcePath}|${input.zipEntryPath ?? ""}|${input.sourceMtime ?? ""}|${input.width}x${input.height}|${input.format}|q${input.quality}|v4`)
     .digest("hex");
 
 const sanitizeDimension = (value: number | undefined, fallback: number) => {
@@ -103,6 +128,13 @@ const resolveThumbnailSize = (input?: { width?: number; height?: number }) => {
 const resolveThumbnailFormat = (format?: string): ThumbnailFormat => {
   return format === "webp" ? "webp" : "jpeg";
 };
+
+const resolvePreviewPreset = (preset?: string): PreviewPreset => {
+  return preset === "low" || preset === "high" ? preset : "balanced";
+};
+
+const getEncodeQuality = (format: ThumbnailFormat, input: { webpQuality: number; jpegQuality: number }) =>
+  format === "webp" ? input.webpQuality : input.jpegQuality;
 
 const hasValidDimension = (value: number | null | undefined): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -234,6 +266,7 @@ const ensureThumbnailWithResolvedInput = async (input: {
   height: number;
   format: ThumbnailFormat;
   cacheKey: string;
+  quality: number;
 }) => {
   const asset = findAssetByIdDb(input.assetId);
   if (!asset) {
@@ -325,9 +358,9 @@ const ensureThumbnailWithResolvedInput = async (input: {
         position: "centre"
       });
       if (input.format === "webp") {
-        await pipeline.webp({ quality: 80 }).toFile(filePath);
+        await pipeline.webp({ quality: input.quality }).toFile(filePath);
       } else {
-        await pipeline.jpeg({ quality: 82 }).toFile(filePath);
+        await pipeline.jpeg({ quality: input.quality }).toFile(filePath);
       }
     } catch (error) {
       if (input.format !== "webp") {
@@ -335,12 +368,14 @@ const ensureThumbnailWithResolvedInput = async (input: {
       }
       finalFormat = "jpeg";
       finalCacheKey = buildCacheKey({
+        kind: "thumbnail",
         sourcePath: asset.sourcePath,
         zipEntryPath: asset.zipEntryPath,
         sourceMtime: asset.sourceMtime,
         width: input.width,
         height: input.height,
-        format: "jpeg"
+        format: "jpeg",
+        quality: input.quality
       });
       finalFilePath = path.join(env.cacheDir, `${finalCacheKey}.jpg`);
       await createSharp(buffer)
@@ -348,7 +383,7 @@ const ensureThumbnailWithResolvedInput = async (input: {
           fit: "cover",
           position: "centre"
         })
-        .jpeg({ quality: 82 })
+        .jpeg({ quality: input.quality })
         .toFile(finalFilePath);
     }
 
@@ -404,16 +439,19 @@ export const ensureThumbnail = async (
 
   const { width, height } = resolveThumbnailSize(input);
   const format = resolveThumbnailFormat(input?.format);
+  const quality = format === "webp" ? 80 : 82;
   const cacheKey = buildCacheKey({
+    kind: "thumbnail",
     sourcePath: asset.sourcePath,
     zipEntryPath: asset.zipEntryPath,
     sourceMtime: asset.sourceMtime,
     width,
     height,
-    format
+    format,
+    quality
   });
   const dedupeKey = cacheKey;
-  const inFlight = inFlightThumbnailTasks.get(dedupeKey);
+  const inFlight = inFlightVariantTasks.get(dedupeKey);
   if (inFlight) {
     return inFlight;
   }
@@ -423,12 +461,120 @@ export const ensureThumbnail = async (
     width,
     height,
     format,
-    cacheKey
+    cacheKey,
+    quality
   }).finally(() => {
-    inFlightThumbnailTasks.delete(dedupeKey);
+    inFlightVariantTasks.delete(dedupeKey);
   });
 
-  inFlightThumbnailTasks.set(dedupeKey, task);
+  inFlightVariantTasks.set(dedupeKey, task);
+  return task;
+};
+
+export const ensurePreview = async (
+  assetId: string,
+  input?: {
+    preset?: PreviewPreset;
+    format?: ThumbnailFormat;
+  }
+) => {
+  await ensureCacheDir();
+  const asset = findAssetByIdDb(assetId);
+  if (!asset) {
+    throw new AssetNotFoundError(assetId);
+  }
+
+  const preset = resolvePreviewPreset(input?.preset);
+  const format = resolveThumbnailFormat(input?.format);
+  const presetOptions = PREVIEW_PRESET_OPTIONS[preset];
+  const quality = getEncodeQuality(format, presetOptions);
+  const cacheKey = buildCacheKey({
+    kind: "preview",
+    sourcePath: asset.sourcePath,
+    zipEntryPath: asset.zipEntryPath,
+    sourceMtime: asset.sourceMtime,
+    width: presetOptions.maxWidth,
+    height: presetOptions.maxHeight,
+    format,
+    quality
+  });
+  const fileExt = format === "webp" ? "webp" : "jpg";
+  const filePath = path.join(env.cacheDir, `${cacheKey}.${fileExt}`);
+  const dedupeKey = cacheKey;
+  const inFlight = inFlightVariantTasks.get(dedupeKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const task = withGenerationSlot(async () => {
+    try {
+      await fs.promises.access(filePath, fs.constants.F_OK);
+      return {
+        filePath,
+        mimeType: format === "webp" ? "image/webp" : "image/jpeg",
+        cacheKey,
+        width: presetOptions.maxWidth,
+        height: presetOptions.maxHeight,
+        format
+      };
+    } catch {
+      // no-op
+    }
+
+    const { buffer } = await readOriginalBuffer(assetId);
+    await syncAssetDimensions({ asset, buffer });
+    let finalFormat: ThumbnailFormat = format;
+    let finalFilePath = filePath;
+    let finalCacheKey = cacheKey;
+
+    try {
+      const pipeline = createSharp(buffer).resize(presetOptions.maxWidth, presetOptions.maxHeight, {
+        fit: "inside",
+        withoutEnlargement: true
+      });
+      if (format === "webp") {
+        await pipeline.webp({ quality }).toFile(filePath);
+      } else {
+        await pipeline.jpeg({ quality }).toFile(filePath);
+      }
+    } catch (error) {
+      if (format !== "webp") {
+        throw error;
+      }
+      finalFormat = "jpeg";
+      finalCacheKey = buildCacheKey({
+        kind: "preview",
+        sourcePath: asset.sourcePath,
+        zipEntryPath: asset.zipEntryPath,
+        sourceMtime: asset.sourceMtime,
+        width: presetOptions.maxWidth,
+        height: presetOptions.maxHeight,
+        format: "jpeg",
+        quality: presetOptions.jpegQuality
+      });
+      finalFilePath = path.join(env.cacheDir, `${finalCacheKey}.jpg`);
+      await createSharp(buffer)
+        .resize(presetOptions.maxWidth, presetOptions.maxHeight, {
+          fit: "inside",
+          withoutEnlargement: true
+        })
+        .jpeg({ quality: presetOptions.jpegQuality })
+        .toFile(finalFilePath);
+    }
+
+    return {
+      filePath: finalFilePath,
+      mimeType: finalFormat === "webp" ? "image/webp" : "image/jpeg",
+      cacheKey: finalCacheKey,
+      width: presetOptions.maxWidth,
+      height: presetOptions.maxHeight,
+      format: finalFormat
+    };
+  }).finally(() => {
+    inFlightVariantTasks.delete(dedupeKey);
+  });
+
+  inFlightVariantTasks.set(dedupeKey, task);
   return task;
 };
 

@@ -7,10 +7,11 @@ import { Readable } from "node:stream";
 import test from "node:test";
 
 import { path7za } from "7zip-bin";
+import sharp from "sharp";
 
 import type { AssetRecord } from "../types/store.js";
-import { findAssetByIdDb } from "./sqlite-store.js";
-import { ensureThumbnail, openOriginalAssetSource } from "./thumbnail-service.js";
+import { findAssetByIdDb, insertAlbumWithAssetsDb, upsertLibraryRootDb } from "./sqlite-store.js";
+import { ensurePreview, ensureThumbnail, openOriginalAssetSource } from "./thumbnail-service.js";
 
 const run7z = async (args: string[], cwd?: string) =>
   new Promise<void>((resolve, reject) => {
@@ -120,6 +121,79 @@ test("openOriginalAssetSource keeps archive-backed assets readable through the n
 
     assert.equal(result.sizeBytes, content.length);
     assert.deepEqual(await readBody(result.body), content);
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("ensurePreview generates a resized preview for folder assets", async () => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-preview-folder-"));
+  const sourcePath = path.join(tempDir, "sample.jpg");
+  const timestamp = new Date().toISOString();
+  const libraryRootId = "root_preview_folder";
+  const albumId = "alb_preview_folder";
+  const assetId = "ast_preview_folder";
+
+  try {
+    const sourceBuffer = await sharp({
+      create: {
+        width: 5000,
+        height: 3200,
+        channels: 3,
+        background: { r: 120, g: 80, b: 160 }
+      }
+    })
+      .jpeg({ quality: 92 })
+      .toBuffer();
+
+    await fs.promises.writeFile(sourcePath, sourceBuffer);
+
+    const asset = createAssetRecord({
+      id: assetId,
+      albumId,
+      sourceType: "folder",
+      sourcePath,
+      sizeBytes: String(sourceBuffer.length)
+    });
+
+    upsertLibraryRootDb({
+      id: libraryRootId,
+      name: "preview-root",
+      path: tempDir,
+      enabled: true,
+      lastScannedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+    if (!findAssetByIdDb(assetId)) {
+      insertAlbumWithAssetsDb({
+        id: albumId,
+        libraryRootId,
+        name: "preview-folder",
+        sourceType: "folder",
+        sourcePath: tempDir,
+        sourceMtime: null,
+        assetsFingerprint: null,
+        coverAssetId: asset.id,
+        assetCount: 1,
+        scanStatus: "ready",
+        errorMessage: null,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }, [asset]);
+    }
+
+    const preview = await ensurePreview(asset.id, {
+      preset: "balanced",
+      format: "jpeg"
+    });
+
+    assert.equal(preview.mimeType, "image/jpeg");
+    await fs.promises.access(preview.filePath, fs.constants.F_OK);
+
+    const metadata = await sharp(preview.filePath).metadata();
+    assert.ok((metadata.width ?? 0) <= 2560);
+    assert.ok((metadata.height ?? 0) <= 2560);
   } finally {
     await fs.promises.rm(tempDir, { recursive: true, force: true });
   }

@@ -1,12 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import type { Readable } from "node:stream";
 
 import sharp from "sharp";
 
 import { env } from "../config/env.js";
+import type { AssetRecord } from "../types/store.js";
 import { findAssetByIdDb, findThumbnailByAssetIdDb, listAlbumCoverAssetIdsDb, makeId, updateAssetMetadataDb, upsertThumbnailDb } from "./sqlite-store.js";
-import { readArchiveEntryBuffer } from "./archive.js";
+import { openArchiveEntryBody, readArchiveEntryBuffer } from "./archive.js";
 
 const DEFAULT_THUMBNAIL_WIDTH = 360;
 const DEFAULT_THUMBNAIL_HEIGHT = 360;
@@ -26,6 +28,8 @@ export class OriginalAssetSourceMissingError extends Error {
     this.name = "OriginalAssetSourceMissingError";
   }
 }
+
+export type OriginalImageBody = Buffer | Readable;
 
 const THUMBNAIL_GENERATION_CONCURRENCY = 6;
 const inFlightThumbnailTasks = new Map<string, Promise<{
@@ -178,6 +182,42 @@ const readOriginalBuffer = async (assetId: string) => {
     return {
       asset,
       buffer: await readArchiveEntryBuffer(asset.sourcePath, asset.zipEntryPath ?? "")
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("not found") || message.includes("ENOENT")) {
+      throw new OriginalAssetSourceMissingError(asset.id, asset.sourcePath);
+    }
+    throw error;
+  }
+};
+
+export const openOriginalAssetSource = async (asset: AssetRecord): Promise<{
+  asset: AssetRecord;
+  body: OriginalImageBody;
+  sizeBytes: number | null;
+}> => {
+  if (asset.sourceType === "folder") {
+    try {
+      const stat = await fs.promises.stat(asset.sourcePath);
+      return {
+        asset,
+        body: fs.createReadStream(asset.sourcePath),
+        sizeBytes: stat.size
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new OriginalAssetSourceMissingError(asset.id, asset.sourcePath);
+      }
+      throw error;
+    }
+  }
+
+  try {
+    return {
+      asset,
+      body: await openArchiveEntryBody(asset.sourcePath, asset.zipEntryPath ?? ""),
+      sizeBytes: asset.sizeBytes ? Number(asset.sizeBytes) : null
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -395,6 +435,16 @@ export const ensureThumbnail = async (
 export const readOriginalImage = async (assetId: string) => {
   const { asset, buffer } = await readOriginalBuffer(assetId);
   return { asset, buffer };
+};
+
+export const openOriginalImage = async (assetId: string) => {
+  const asset = findAssetByIdDb(assetId);
+
+  if (!asset) {
+    throw new AssetNotFoundError(assetId);
+  }
+
+  return openOriginalAssetSource(asset);
 };
 
 export const warmupCoverThumbnails = async (input?: {

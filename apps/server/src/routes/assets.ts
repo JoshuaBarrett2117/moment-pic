@@ -7,6 +7,7 @@ import { deleteAsset, getAssetDetail } from "../services/album-service.js";
 import {
   AssetNotFoundError,
   ensureThumbnail,
+  openOriginalImage,
   OriginalAssetSourceMissingError,
   readOriginalImage
 } from "../services/thumbnail-service.js";
@@ -176,11 +177,14 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     const { assetId } = request.params as { assetId: string };
 
     try {
-      const { asset, buffer } = await readOriginalImage(assetId);
+      const { asset, body, sizeBytes } = await openOriginalImage(assetId);
       const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
       reply.header("Content-Disposition", `inline; filename="${encodeURIComponent(asset.name)}"`);
+      if (sizeBytes !== null && Number.isFinite(sizeBytes)) {
+        reply.header("Content-Length", String(sizeBytes));
+      }
       reply.type(mimeType);
-      return reply.send(buffer);
+      return reply.send(body);
     } catch (error) {
       if (error instanceof AssetNotFoundError) {
         return sendAssetNotFound(reply);

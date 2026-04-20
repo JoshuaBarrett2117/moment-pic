@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { PassThrough, type Readable } from "node:stream";
 import yauzl from "yauzl";
 import { createExtractorFromFile } from "node-unrar-js";
 import { path7za } from "7zip-bin";
@@ -181,6 +182,17 @@ const run7za = async (
 
 const normalizeArchiveEntryPath = (entryPath: string): string =>
   toPosixPath(entryPath).replace(/\\/g, "/");
+
+const createSingleRun = (fn: () => void) => {
+  let called = false;
+  return () => {
+    if (called) {
+      return;
+    }
+    called = true;
+    fn();
+  };
+};
 
 const openZip = async (zipPath: string): Promise<yauzl.ZipFile> =>
   new Promise((resolve, reject) => {
@@ -443,6 +455,71 @@ const readZipBuffer = async (zipPath: string, entryPath: string): Promise<Buffer
   });
 };
 
+const closeZipFileQuietly = (zipFile: yauzl.ZipFile) => {
+  try {
+    zipFile.close();
+  } catch {
+    // no-op
+  }
+};
+
+const readZipStream = async (zipPath: string, entryPath: string): Promise<Readable> => {
+  const zipFile = await openZip(zipPath);
+
+  return new Promise((resolve, reject) => {
+    let found = false;
+    let settled = false;
+
+    const rejectWithCleanup = (error: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      closeZipFileQuietly(zipFile);
+      reject(error);
+    };
+
+    zipFile.readEntry();
+
+    zipFile.on("entry", (entry) => {
+      if (settled) {
+        return;
+      }
+
+      const currentPath = toDecodedZipEntryPath(entry);
+      if (currentPath !== entryPath) {
+        zipFile.readEntry();
+        return;
+      }
+
+      found = true;
+      zipFile.openReadStream(entry, (error, stream) => {
+        if (error || !stream) {
+          rejectWithCleanup(error ?? new Error(`cannot read ZIP entry: ${entryPath}`));
+          return;
+        }
+
+        settled = true;
+        const closeZip = createSingleRun(() => closeZipFileQuietly(zipFile));
+        stream.once("error", closeZip);
+        stream.once("end", closeZip);
+        stream.once("close", closeZip);
+        resolve(stream);
+      });
+    });
+
+    zipFile.once("end", () => {
+      if (!found) {
+        rejectWithCleanup(new Error(`ZIP entry not found: ${entryPath}`));
+      }
+    });
+
+    zipFile.once("error", (error) => {
+      rejectWithCleanup(error);
+    });
+  });
+};
+
 const PSD_MAGIC = Buffer.from([0x38, 0x42, 0x50, 0x53]);
 const JPEG_SOI = Buffer.from([0xff, 0xd8]);
 const JPEG_EOI = Buffer.from([0xff, 0xd9]);
@@ -518,6 +595,32 @@ const readCbrBuffer = async (archivePath: string, entryPath: string): Promise<Bu
   }
 };
 
+const readCbrStream = async (archivePath: string, entryPath: string): Promise<Readable> => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-unrar-"));
+  try {
+    const unrar = await createExtractorFromFile({ filepath: archivePath, targetPath: tempDir });
+    const extracted = await unrar.extract({ files: [entryPath] });
+
+    for (const file of extracted.files) {
+      const extractedPath = path.join(tempDir, file.fileHeader.name);
+      const stream = fs.createReadStream(extractedPath);
+      const cleanup = createSingleRun(() => {
+        void fs.promises.rm(tempDir, { recursive: true, force: true });
+      });
+      stream.once("error", cleanup);
+      stream.once("end", cleanup);
+      stream.once("close", cleanup);
+      return stream;
+    }
+
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+    throw new Error(`CBR entry not found: ${entryPath}`);
+  } catch (error) {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+    throw error;
+  }
+};
+
 const read7zBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
   const { stdout } = await run7za([
     "e",
@@ -528,6 +631,154 @@ const read7zBuffer = async (archivePath: string, entryPath: string): Promise<Buf
     normalizeArchiveEntryPath(entryPath)
   ]);
   return extractJpegFromPsd(stdout);
+};
+
+const run7zaStream = async (args: string[]): Promise<Readable> =>
+  new Promise(async (resolve, reject) => {
+    const commands = await resolve7zExecutables();
+    const unavailableErrors: Error[] = [];
+
+    const runWithCommand = (command: string, index: number) => {
+      const child = spawn(command, args, {
+        windowsHide: true
+      });
+
+      const stdout = child.stdout;
+      const stderrChunks: Buffer[] = [];
+      let settled = false;
+
+      child.stderr.on("data", (chunk) => {
+        stderrChunks.push(Buffer.from(chunk));
+      });
+
+      child.once("error", (error) => {
+        const errorCode = (error as NodeJS.ErrnoException).code;
+        if ((errorCode === "EACCES" || errorCode === "ENOENT") && index < commands.length - 1) {
+          unavailableErrors.push(new Error(`${command}: ${error.message}`));
+          runWithCommand(commands[index + 1], index + 1);
+          return;
+        }
+
+        if ((errorCode === "EACCES" || errorCode === "ENOENT") && unavailableErrors.length > 0) {
+          reject(
+            new Error(
+              `no usable 7z executable. tried: ${[
+                ...unavailableErrors.map((item) => item.message),
+                `${command}: ${error.message}`
+              ].join(" | ")}`
+            )
+          );
+          return;
+        }
+
+        reject(error);
+      });
+
+      child.once("spawn", () => {
+        if (!stdout) {
+          reject(new Error(`7z command failed via "${command}": stdout unavailable`));
+          return;
+        }
+
+        settled = true;
+        child.once("close", (code) => {
+          if (code === 0) {
+            return;
+          }
+
+          const stderr = decode7zText(Buffer.concat(stderrChunks));
+          stdout.destroy(
+            new Error(`7z command failed via "${command}" (code ${code}): ${stderr || args.join(" ")}`)
+          );
+        });
+
+        resolve(stdout);
+      });
+
+      child.once("close", (code) => {
+        if (!settled && code !== 0) {
+          const stderr = decode7zText(Buffer.concat(stderrChunks));
+          reject(new Error(`7z command failed via "${command}" (code ${code}): ${stderr || args.join(" ")}`));
+        }
+      });
+    };
+
+    runWithCommand(commands[0], 0);
+  });
+
+const toArchiveBody = async (streamPromise: Promise<Readable>): Promise<Readable | Buffer> => {
+  const stream = await streamPromise;
+
+  return new Promise((resolve, reject) => {
+    const headChunks: Buffer[] = [];
+    let headLength = 0;
+    let resolved = false;
+
+    const cleanupHeadListeners = () => {
+      stream.off("data", onData);
+      stream.off("end", onEnd);
+      stream.off("error", onError);
+    };
+
+    const resolveWith = (body: Readable | Buffer) => {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+      cleanupHeadListeners();
+      resolve(body);
+    };
+
+    const rejectWith = (error: Error) => {
+      if (resolved) {
+        return;
+      }
+      resolved = true;
+      cleanupHeadListeners();
+      reject(error);
+    };
+
+    const onError = (error: Error) => {
+      rejectWith(error);
+    };
+
+    const onEnd = () => {
+      resolveWith(Buffer.concat(headChunks));
+    };
+
+    const onData = (chunk: Buffer | string) => {
+      const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      headChunks.push(bufferChunk);
+      headLength += bufferChunk.length;
+
+      if (headLength < 4) {
+        return;
+      }
+
+      const headBuffer = Buffer.concat(headChunks);
+      cleanupHeadListeners();
+      if (headBuffer.subarray(0, 4).equals(PSD_MAGIC)) {
+        const remainingChunks = [headBuffer];
+        stream.on("data", (data) => {
+          remainingChunks.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
+        });
+        stream.once("end", () => {
+          resolveWith(extractJpegFromPsd(Buffer.concat(remainingChunks)));
+        });
+        stream.once("error", onError);
+        return;
+      }
+
+      const output = new PassThrough();
+      output.write(headBuffer);
+      stream.pipe(output);
+      resolveWith(output);
+    };
+
+    stream.on("data", onData);
+    stream.once("end", onEnd);
+    stream.once("error", onError);
+  });
 };
 
 export const readArchiveEntryBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
@@ -546,6 +797,34 @@ export const readArchiveEntryBuffer = async (archivePath: string, entryPath: str
 
   if (archiveType === "7z") {
     return read7zBuffer(archivePath, entryPath);
+  }
+
+  throw new Error(`archive format reader is not implemented: ${archiveType}`);
+};
+
+export const openArchiveEntryBody = async (archivePath: string, entryPath: string): Promise<Readable | Buffer> => {
+  const archiveType = detectArchiveType(archivePath);
+  if (!archiveType) {
+    throw new Error(`unsupported archive format: ${archivePath}`);
+  }
+
+  if (archiveType === "zip") {
+    return toArchiveBody(readZipStream(archivePath, entryPath));
+  }
+
+  if (archiveType === "cbr") {
+    return toArchiveBody(readCbrStream(archivePath, entryPath));
+  }
+
+  if (archiveType === "7z") {
+    return toArchiveBody(run7zaStream([
+      "e",
+      "-so",
+      "-bd",
+      "-y",
+      archivePath,
+      normalizeArchiveEntryPath(entryPath)
+    ]));
   }
 
   throw new Error(`archive format reader is not implemented: ${archiveType}`);

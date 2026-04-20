@@ -1,7 +1,10 @@
 ﻿import { type FC, type MouseEvent, type TouchEvent, type TouchList, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize2, X, SlidersHorizontal } from 'lucide-react';
 import { useMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
+
+type ImageQualityPreset = 'low' | 'balanced' | 'high' | 'original';
+const VIEWER_QUALITY_SESSION_KEY = 'moment_pic_viewer_quality_preset';
 
 interface ViewerGalleryProps {
   items: AssetListItemDTO[];
@@ -9,6 +12,7 @@ interface ViewerGalleryProps {
   onClose: () => void;
   onRequestNextAlbum?: () => void;
   initialIndex?: number;
+  defaultQualityPreset?: ImageQualityPreset;
   preloadBefore?: number;
   preloadAfter?: number;
 }
@@ -19,12 +23,25 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   onClose,
   onRequestNextAlbum,
   initialIndex = 0,
+  defaultQualityPreset = 'original',
   preloadBefore = 0,
   preloadAfter = 0,
 }) => {
   const isMobile = useMobile();
   const useTouchInteractions = isMobile;
   const safeItems = items ?? [];
+  const readSessionQualityPreset = useCallback((): ImageQualityPreset | null => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    const savedPreset = window.sessionStorage.getItem(VIEWER_QUALITY_SESSION_KEY);
+    if (savedPreset === 'low' || savedPreset === 'balanced' || savedPreset === 'high' || savedPreset === 'original') {
+      return savedPreset;
+    }
+
+    return null;
+  }, []);
 
   const images = useMemo(() => {
     if (!Array.isArray(safeItems)) {
@@ -34,10 +51,26 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     return safeItems
       .filter((item) => item && item.originalUrl)
       .map((item) => ({
-        src: item.originalUrl,
+        id: item.id,
+        originalSrc: item.originalUrl,
         alt: item.name,
       }));
   }, [safeItems]);
+
+  const buildPreviewSrc = useCallback((assetId: string, preset: Exclude<ImageQualityPreset, 'original'>) => {
+    return `/api/v1/assets/${assetId}/preview?preset=${preset}`;
+  }, []);
+
+  const resolveImageSrc = useCallback((
+    image: { id: string; originalSrc: string },
+    preset: ImageQualityPreset,
+  ) => {
+    if (preset === 'original') {
+      return image.originalSrc;
+    }
+
+    return buildPreviewSrc(image.id, preset);
+  }, [buildPreviewSrc]);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [scale, setScale] = useState(1);
@@ -48,6 +81,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const [showControls, setShowControls] = useState(false);
   const [isImageLoading, setIsImageLoading] = useState(true);
   const [showEndPrompt, setShowEndPrompt] = useState(false);
+  const [qualityPreset, setQualityPreset] = useState<ImageQualityPreset>(defaultQualityPreset);
+  const [showQualityPanel, setShowQualityPanel] = useState(false);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
   const lastTouchDistance = useRef<number>(0);
@@ -64,12 +99,32 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   useEffect(() => {
     if (isOpen && images.length > 0) {
       const validIndex = Math.min(initialIndex, Math.max(0, images.length - 1));
+      const sessionPreset = readSessionQualityPreset();
       setActiveIndex(validIndex);
+      setQualityPreset(sessionPreset ?? defaultQualityPreset);
       resetView();
       setShowControls(true);
+      setShowQualityPanel(false);
       setShowEndPrompt(false);
     }
-  }, [isOpen, initialIndex, images.length, resetView]);
+  }, [defaultQualityPreset, initialIndex, isOpen, images.length, readSessionQualityPreset, resetView]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.sessionStorage.setItem(VIEWER_QUALITY_SESSION_KEY, qualityPreset);
+  }, [qualityPreset]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setIsImageLoading(true);
+    setShowQualityPanel(false);
+  }, [activeIndex, isOpen, qualityPreset]);
 
   useEffect(() => {
     if (!isOpen || images.length === 0) {
@@ -77,8 +132,18 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       return;
     }
 
-    const start = Math.max(0, activeIndex - Math.max(0, preloadBefore));
-    const end = Math.min(images.length - 1, activeIndex + Math.max(0, preloadAfter));
+    const effectivePreloadBefore = qualityPreset === 'original'
+      ? 0
+      : qualityPreset === 'high'
+        ? Math.min(Math.max(0, preloadBefore), 1)
+        : Math.max(0, preloadBefore);
+    const effectivePreloadAfter = qualityPreset === 'original'
+      ? 0
+      : qualityPreset === 'high'
+        ? Math.min(Math.max(0, preloadAfter), 1)
+        : Math.max(0, preloadAfter);
+    const start = Math.max(0, activeIndex - effectivePreloadBefore);
+    const end = Math.min(images.length - 1, activeIndex + effectivePreloadAfter);
     const urlsToPreload = new Set<string>();
 
     for (let index = start; index <= end; index += 1) {
@@ -87,8 +152,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       }
 
       const target = images[index];
-      if (target?.src) {
-        urlsToPreload.add(target.src);
+      if (target) {
+        urlsToPreload.add(resolveImageSrc(target, qualityPreset));
       }
     }
 
@@ -102,7 +167,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     return () => {
       preloadedImagesRef.current = [];
     };
-  }, [activeIndex, images, isOpen, preloadAfter, preloadBefore]);
+  }, [activeIndex, images, isOpen, preloadAfter, preloadBefore, qualityPreset, resolveImageSrc]);
 
   const goToPrev = useCallback(() => {
     if (images.length === 0) {
@@ -132,6 +197,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     setScale(1);
     setRotation(0);
     setPosition({ x: 0, y: 0 });
+    setShowQualityPanel(false);
     setShowEndPrompt(false);
     onClose();
   }, [onClose]);
@@ -209,6 +275,12 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       clearTimeout(timer);
     };
   }, [activeIndex, isOpen, useTouchInteractions]);
+
+  useEffect(() => {
+    if (!showControls) {
+      setShowQualityPanel(false);
+    }
+  }, [showControls]);
 
   const handleZoomIn = useCallback(() => {
     setScale((prev) => Math.min(prev * 1.2, 6));
@@ -343,6 +415,15 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const toolbarBtnSize = isMobile ? 56 : 44;
   const closeBtnSize = isMobile ? 56 : 48;
   const navBtnSize = isMobile ? 64 : 56;
+  const currentImageSrc = resolveImageSrc(currentImage, qualityPreset);
+  const qualityLabel = qualityPreset === 'low' ? '省流' : qualityPreset === 'high' ? '高清' : qualityPreset === 'original' ? '原图' : '均衡';
+  const preloadHint = qualityPreset === 'original' ? '当前档位已关闭相邻预加载' : qualityPreset === 'high' ? '当前档位会减少相邻预加载' : null;
+  const qualityOptions: Array<{ value: ImageQualityPreset; label: string; description: string }> = [
+    { value: 'low', label: '省流', description: '打开更快' },
+    { value: 'balanced', label: '均衡', description: '默认推荐' },
+    { value: 'high', label: '高清', description: '更清晰' },
+    { value: 'original', label: '原图', description: '最完整' },
+  ];
 
   return (
     <div
@@ -458,6 +539,45 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           opacity: ${showControls ? 1 : 0};
           transition: all 0.3s;
         }
+        .viewer-quality-panel {
+          position: fixed;
+          bottom: calc(env(safe-area-inset-bottom) + 112px);
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          width: min(18rem, calc(100vw - 2rem));
+          padding: 14px;
+          background: rgba(0, 0, 0, 0.82);
+          border-radius: 20px;
+          backdrop-filter: blur(12px);
+          z-index: 21;
+          opacity: ${showControls && showQualityPanel ? 1 : 0};
+          pointer-events: ${showControls && showQualityPanel ? 'auto' : 'none'};
+          transition: all 0.2s;
+        }
+        .viewer-quality-option {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          width: 100%;
+          padding: 12px 14px;
+          border: none;
+          border-radius: 14px;
+          color: white;
+          background: rgba(255, 255, 255, 0.08);
+          cursor: pointer;
+          text-align: left;
+          transition: background 0.2s;
+        }
+        .viewer-quality-option:hover {
+          background: rgba(255, 255, 255, 0.16);
+        }
+        .viewer-quality-option[data-active='true'] {
+          background: rgba(255, 255, 255, 0.22);
+        }
         .viewer-image-container {
           position: absolute;
           inset: 0;
@@ -522,8 +642,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
           </div>
         )}
         <img
-          key={currentImage.src}
-          src={currentImage.src}
+          key={currentImageSrc}
+          src={currentImageSrc}
           alt={currentImage.alt}
           className="viewer-image"
           style={{
@@ -537,16 +657,45 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       </div>
 
       <div className="viewer-counter">
-        {activeIndex + 1} / {images.length}
+        {activeIndex + 1} / {images.length} · {qualityLabel}
       </div>
 
+      {preloadHint && showControls && (
+        <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.8rem)] z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
+          {preloadHint}
+        </div>
+      )}
+
       {useTouchInteractions && showControls && (
-        <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
+        <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+7.3rem)] z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
           左右滑动切换，点按图片显示或隐藏工具栏
         </div>
       )}
 
+      <div className="viewer-quality-panel">
+        {qualityOptions.map((option) => (
+          <button
+            key={option.value}
+            className="viewer-quality-option"
+            data-active={option.value === qualityPreset}
+            onClick={() => setQualityPreset(option.value)}
+            title={option.label}
+          >
+            <span>{option.label}</span>
+            <span className="text-xs text-white/70">{option.description}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="viewer-toolbar">
+        <button
+          className="viewer-btn"
+          onClick={() => setShowQualityPanel((prev) => !prev)}
+          title="画质"
+          style={{ width: toolbarBtnSize, height: toolbarBtnSize }}
+        >
+          <SlidersHorizontal size={isMobile ? 24 : 20} />
+        </button>
         <button className="viewer-btn" onClick={handleZoomOut} title="缩小" style={{ width: toolbarBtnSize, height: toolbarBtnSize }}>
           <ZoomOut size={isMobile ? 28 : 22} />
         </button>

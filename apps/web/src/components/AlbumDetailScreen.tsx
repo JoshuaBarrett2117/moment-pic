@@ -318,15 +318,16 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
       </main>
 
       {selectedImageIndex !== null && (
-      <ViewerGallery
-        items={loadedItems}
-        isOpen
-        initialIndex={selectedImageIndex}
-        onClose={() => setSelectedImageIndex(null)}
-        onRequestNextAlbum={onRequestNextAlbum}
-        preloadBefore={preloadBefore}
-        preloadAfter={preloadAfter}
-      />
+        <ViewerGallery
+          items={loadedItems}
+          isOpen
+          initialIndex={selectedImageIndex}
+          onClose={() => setSelectedImageIndex(null)}
+          onRequestNextAlbum={onRequestNextAlbum}
+          defaultQualityPreset={systemConfig?.defaultImageQualityPreset ?? 'original'}
+          preloadBefore={preloadBefore}
+          preloadAfter={preloadAfter}
+        />
       )}
 
       <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between rounded-t-[2rem] border-t border-white/60 bg-white/85 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.1rem)] shadow-[0_-12px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl md:hidden">

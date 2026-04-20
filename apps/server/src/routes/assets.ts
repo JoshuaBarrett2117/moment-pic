@@ -6,7 +6,9 @@ import { ok } from "../lib/api.js";
 import { deleteAsset, getAssetDetail } from "../services/album-service.js";
 import {
   AssetNotFoundError,
+  ensurePreview,
   ensureThumbnail,
+  openOriginalImage,
   OriginalAssetSourceMissingError,
   readOriginalImage
 } from "../services/thumbnail-service.js";
@@ -176,11 +178,14 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     const { assetId } = request.params as { assetId: string };
 
     try {
-      const { asset, buffer } = await readOriginalImage(assetId);
+      const { asset, body, sizeBytes } = await openOriginalImage(assetId);
       const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
       reply.header("Content-Disposition", `inline; filename="${encodeURIComponent(asset.name)}"`);
+      if (sizeBytes !== null && Number.isFinite(sizeBytes)) {
+        reply.header("Content-Length", String(sizeBytes));
+      }
       reply.type(mimeType);
-      return reply.send(buffer);
+      return reply.send(body);
     } catch (error) {
       if (error instanceof AssetNotFoundError) {
         return sendAssetNotFound(reply);
@@ -189,6 +194,76 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         return sendOriginalSourceMissing(reply);
       }
       throw error;
+    }
+  });
+
+  app.get("/api/v1/assets/:assetId/preview", async (request, reply) => {
+    const { assetId } = request.params as { assetId: string };
+    const query = request.query as { preset?: "low" | "balanced" | "high"; format?: "webp" | "jpeg" };
+    const acceptHeader = normalizeHeader(request.headers.accept) ?? "";
+    const preferredFormat =
+      query.format === "webp" || query.format === "jpeg"
+        ? query.format
+        : acceptHeader.includes("image/webp")
+          ? "webp"
+          : "jpeg";
+    const releaseSlot = await acquireThumbnailRequestSlot();
+    if (!releaseSlot) {
+      const stats = getThumbnailQueueStats();
+      reply.header("Retry-After", "1");
+      reply.header("X-Thumb-Active", String(stats.active));
+      reply.header("X-Thumb-Queued", String(stats.queued));
+      return reply.status(503).send({
+        code: 5003,
+        message: "thumbnail service busy, retry later"
+      });
+    }
+    const slotStats = getThumbnailQueueStats();
+    reply.header("X-Thumb-Active", String(slotStats.active));
+    reply.header("X-Thumb-Queued", String(slotStats.queued));
+
+    try {
+      try {
+        const preview = await ensurePreview(assetId, {
+          preset: query.preset,
+          format: preferredFormat
+        });
+        const etag = `"preview-${preview.cacheKey}"`;
+        const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);
+        if (ifNoneMatch === etag) {
+          return reply.status(304).send();
+        }
+
+        const stat = await fs.promises.stat(preview.filePath);
+        reply.header("ETag", etag);
+        reply.header("Last-Modified", stat.mtime.toUTCString());
+        reply.header("Cache-Control", "private, max-age=86400, must-revalidate");
+        reply.type(preview.mimeType);
+        return reply.send(fs.createReadStream(preview.filePath));
+      } catch (error) {
+        if (error instanceof AssetNotFoundError) {
+          return sendAssetNotFound(reply);
+        }
+        if (error instanceof OriginalAssetSourceMissingError) {
+          return sendOriginalSourceMissing(reply);
+        }
+        try {
+          const { asset, buffer } = await readOriginalImage(assetId);
+          const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
+          reply.type(mimeType);
+          return reply.send(buffer);
+        } catch (fallbackError) {
+          if (fallbackError instanceof AssetNotFoundError) {
+            return sendAssetNotFound(reply);
+          }
+          if (fallbackError instanceof OriginalAssetSourceMissingError) {
+            return sendOriginalSourceMissing(reply);
+          }
+          throw fallbackError;
+        }
+      }
+    } finally {
+      releaseSlot();
     }
   });
 

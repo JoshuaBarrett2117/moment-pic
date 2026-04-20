@@ -32,6 +32,7 @@ const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP = 300;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
+const DEFAULT_IMAGE_QUALITY_PRESET = 'original';
 
 const clampPreloadRadius = (value: number): number => {
   if (!Number.isFinite(value)) {
@@ -62,6 +63,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
   const [isAdding, setIsAdding] = useState(false);
   const [preloadBefore, setPreloadBefore] = useState(DEFAULT_PRELOAD_BEFORE);
   const [preloadAfter, setPreloadAfter] = useState(DEFAULT_PRELOAD_AFTER);
+  const [defaultImageQualityPreset, setDefaultImageQualityPreset] = useState<'low' | 'balanced' | 'high' | 'original'>(DEFAULT_IMAGE_QUALITY_PRESET);
   const [albumListItemMinWidthMobile, setAlbumListItemMinWidthMobile] = useState(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE);
   const [albumListItemMinWidthDesktop, setAlbumListItemMinWidthDesktop] = useState(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
   const [albumDetailItemMinWidthMobile, setAlbumDetailItemMinWidthMobile] = useState(DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE);
@@ -86,6 +88,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
     if (systemConfig) {
       setPreloadBefore(clampPreloadRadius(systemConfig.preloadBefore));
       setPreloadAfter(clampPreloadRadius(systemConfig.preloadAfter));
+      setDefaultImageQualityPreset(systemConfig.defaultImageQualityPreset);
       setAlbumListItemMinWidthMobile(clampGridWidth(systemConfig.albumListItemMinWidthMobile));
       setAlbumListItemMinWidthDesktop(clampGridWidth(systemConfig.albumListItemMinWidthDesktop));
       setAlbumDetailItemMinWidthMobile(clampGridWidth(systemConfig.albumDetailItemMinWidthMobile));
@@ -95,6 +98,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
       const savedAfter = window.localStorage.getItem(VIEWER_PRELOAD_AFTER_KEY);
       setPreloadBefore(clampPreloadRadius(Number(savedBefore ?? DEFAULT_PRELOAD_BEFORE)));
       setPreloadAfter(clampPreloadRadius(Number(savedAfter ?? DEFAULT_PRELOAD_AFTER)));
+      setDefaultImageQualityPreset(DEFAULT_IMAGE_QUALITY_PRESET);
       setAlbumListItemMinWidthMobile(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE);
       setAlbumListItemMinWidthDesktop(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
       setAlbumDetailItemMinWidthMobile(DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE);
@@ -275,54 +279,88 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
 
             <div className="bg-surface-container-highest rounded-2xl p-6 mb-8">
               <h3 className="text-lg font-bold text-on-surface mb-4">图片预览</h3>
-              <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
-                  <Images className="h-6 w-6" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <p className="font-bold text-on-surface">图片预加载张数</p>
-                      <p className="mt-1 text-sm text-outline">查看大图时，预先加载当前图片前后相邻的图片数量</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-outline">前</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="1"
-                          value={preloadBefore}
-                          onChange={(event) => handleViewerPreloadRadiusChange(event.target.value, 'before')}
-                          onBlur={async () => {
-                            if (systemConfig) {
-                              await saveConfig({ preloadBefore });
-                            }
-                          }}
-                          disabled={isSavingConfig}
-                          className="w-20 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
-                        />
-                        <span className="text-sm text-outline">张</span>
+              <div className="space-y-4">
+                <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
+                    <Images className="h-6 w-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <p className="font-bold text-on-surface">大图默认画质</p>
+                        <p className="mt-1 text-sm text-outline">大图查看器默认使用的画质档位，用户仍可在查看器内随时切换</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-outline">后</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="1"
-                          value={preloadAfter}
-                          onChange={(event) => handleViewerPreloadRadiusChange(event.target.value, 'after')}
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={defaultImageQualityPreset}
+                          onChange={(event) => setDefaultImageQualityPreset(event.target.value as 'low' | 'balanced' | 'high' | 'original')}
                           onBlur={async () => {
                             if (systemConfig) {
-                              await saveConfig({ preloadAfter });
+                              await saveConfig({ defaultImageQualityPreset });
                             }
                           }}
                           disabled={isSavingConfig}
-                          className="w-20 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
-                        />
-                        <span className="text-sm text-outline">张</span>
+                          className="rounded-xl border-2 border-outline/20 bg-surface px-4 py-2 font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                        >
+                          <option value="low">省流</option>
+                          <option value="balanced">均衡</option>
+                          <option value="high">高清</option>
+                          <option value="original">原图</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
+                    <Images className="h-6 w-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <p className="font-bold text-on-surface">图片预加载张数</p>
+                        <p className="mt-1 text-sm text-outline">查看大图时，预先加载当前图片前后相邻的图片数量</p>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-outline">前</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={preloadBefore}
+                            onChange={(event) => handleViewerPreloadRadiusChange(event.target.value, 'before')}
+                            onBlur={async () => {
+                              if (systemConfig) {
+                                await saveConfig({ preloadBefore });
+                              }
+                            }}
+                            disabled={isSavingConfig}
+                            className="w-20 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                          />
+                          <span className="text-sm text-outline">张</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-outline">后</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={preloadAfter}
+                            onChange={(event) => handleViewerPreloadRadiusChange(event.target.value, 'after')}
+                            onBlur={async () => {
+                              if (systemConfig) {
+                                await saveConfig({ preloadAfter });
+                              }
+                            }}
+                            disabled={isSavingConfig}
+                            className="w-20 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                          />
+                          <span className="text-sm text-outline">张</span>
+                        </div>
                       </div>
                     </div>
                   </div>

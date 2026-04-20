@@ -100,6 +100,7 @@ export type SystemConfigDTO = {
   pollingInterval: number;
   preloadBefore: number;
   preloadAfter: number;
+  defaultImageQualityPreset: "low" | "balanced" | "high" | "original";
   albumListItemMinWidthMobile: number;
   albumListItemMinWidthDesktop: number;
   albumDetailItemMinWidthMobile: number;

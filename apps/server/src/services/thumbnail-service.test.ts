@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -130,9 +131,10 @@ test("ensurePreview generates a resized preview for folder assets", async () => 
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-preview-folder-"));
   const sourcePath = path.join(tempDir, "sample.jpg");
   const timestamp = new Date().toISOString();
-  const libraryRootId = "root_preview_folder";
-  const albumId = "alb_preview_folder";
-  const assetId = "ast_preview_folder";
+  const suffix = crypto.randomUUID().replace(/-/g, "");
+  const libraryRootId = `root_preview_folder_${suffix}`;
+  const albumId = `alb_preview_folder_${suffix}`;
+  const assetId = `ast_preview_folder_${suffix}`;
 
   try {
     const sourceBuffer = await sharp({

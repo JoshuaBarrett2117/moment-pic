@@ -13,47 +13,47 @@ import {
 } from "../services/thumbnail-service.js";
 
 export const assetRoutes: FastifyPluginAsync = async (app) => {
-  const THUMBNAIL_REQUEST_MAX_ACTIVE = 24;
-  const THUMBNAIL_REQUEST_MAX_QUEUE = 320;
-  const THUMBNAIL_REQUEST_QUEUE_TIMEOUT_MS = 8000;
-  let activeThumbnailRequests = 0;
-  const thumbnailWaitQueue: Array<{
+  const ASSET_REQUEST_MAX_ACTIVE = 6;
+  const ASSET_REQUEST_MAX_QUEUE = 1024;
+  const ASSET_REQUEST_QUEUE_TIMEOUT_MS = 120000;
+  let activeAssetRequests = 0;
+  const assetWaitQueue: Array<{
     resolve: () => void;
     timeout: NodeJS.Timeout;
   }> = [];
 
-  const getThumbnailQueueStats = () => ({
-    active: activeThumbnailRequests,
-    queued: thumbnailWaitQueue.length
+  const getAssetQueueStats = () => ({
+    active: activeAssetRequests,
+    queued: assetWaitQueue.length
   });
 
-  const tryWakeNextThumbnailRequest = () => {
-    const next = thumbnailWaitQueue.shift();
+  const tryWakeNextAssetRequest = () => {
+    const next = assetWaitQueue.shift();
     if (!next) {
       return;
     }
     clearTimeout(next.timeout);
-    activeThumbnailRequests += 1;
+    activeAssetRequests += 1;
     next.resolve();
   };
 
-  const acquireThumbnailRequestSlot = async (): Promise<(() => void) | null> => {
-    if (activeThumbnailRequests < THUMBNAIL_REQUEST_MAX_ACTIVE) {
-      activeThumbnailRequests += 1;
+  const acquireAssetRequestSlot = async (): Promise<(() => void) | null> => {
+    if (activeAssetRequests < ASSET_REQUEST_MAX_ACTIVE) {
+      activeAssetRequests += 1;
     } else {
-      if (thumbnailWaitQueue.length >= THUMBNAIL_REQUEST_MAX_QUEUE) {
+      if (assetWaitQueue.length >= ASSET_REQUEST_MAX_QUEUE) {
         return null;
       }
       const acquired = await new Promise<boolean>((resolve) => {
         const timeout = setTimeout(() => {
-          const index = thumbnailWaitQueue.findIndex((item) => item.timeout === timeout);
+          const index = assetWaitQueue.findIndex((item) => item.timeout === timeout);
           if (index >= 0) {
-            thumbnailWaitQueue.splice(index, 1);
+            assetWaitQueue.splice(index, 1);
           }
           resolve(false);
-        }, THUMBNAIL_REQUEST_QUEUE_TIMEOUT_MS);
+        }, ASSET_REQUEST_QUEUE_TIMEOUT_MS);
 
-        thumbnailWaitQueue.push({
+        assetWaitQueue.push({
           timeout,
           resolve: () => resolve(true)
         });
@@ -70,8 +70,8 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         return;
       }
       released = true;
-      activeThumbnailRequests = Math.max(0, activeThumbnailRequests - 1);
-      tryWakeNextThumbnailRequest();
+      activeAssetRequests = Math.max(0, activeAssetRequests - 1);
+      tryWakeNextAssetRequest();
     };
   };
 
@@ -122,20 +122,20 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         : acceptHeader.includes("image/webp")
           ? "webp"
           : "jpeg";
-    const releaseSlot = await acquireThumbnailRequestSlot();
+    const releaseSlot = await acquireAssetRequestSlot();
     if (!releaseSlot) {
-      const stats = getThumbnailQueueStats();
+      const stats = getAssetQueueStats();
       reply.header("Retry-After", "1");
-      reply.header("X-Thumb-Active", String(stats.active));
-      reply.header("X-Thumb-Queued", String(stats.queued));
+      reply.header("X-Asset-Active", String(stats.active));
+      reply.header("X-Asset-Queued", String(stats.queued));
       return reply.status(503).send({
         code: 5003,
-        message: "thumbnail service busy, retry later"
+        message: "asset service busy, retry later"
       });
     }
-    const slotStats = getThumbnailQueueStats();
-    reply.header("X-Thumb-Active", String(slotStats.active));
-    reply.header("X-Thumb-Queued", String(slotStats.queued));
+    const slotStats = getAssetQueueStats();
+    reply.header("X-Asset-Active", String(slotStats.active));
+    reply.header("X-Asset-Queued", String(slotStats.queued));
 
     try {
       try {
@@ -182,6 +182,20 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/assets/:assetId/original", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
+    const releaseSlot = await acquireAssetRequestSlot();
+    if (!releaseSlot) {
+      const stats = getAssetQueueStats();
+      reply.header("Retry-After", "1");
+      reply.header("X-Asset-Active", String(stats.active));
+      reply.header("X-Asset-Queued", String(stats.queued));
+      return reply.status(503).send({
+        code: 5003,
+        message: "asset service busy, retry later"
+      });
+    }
+    const slotStats = getAssetQueueStats();
+    reply.header("X-Asset-Active", String(slotStats.active));
+    reply.header("X-Asset-Queued", String(slotStats.queued));
 
     try {
       const { asset, body, sizeBytes } = await openOriginalImage(assetId);
@@ -200,6 +214,8 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         return sendOriginalSourceMissing(reply);
       }
       throw error;
+    } finally {
+      releaseSlot();
     }
   });
 
@@ -213,20 +229,20 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         : acceptHeader.includes("image/webp")
           ? "webp"
           : "jpeg";
-    const releaseSlot = await acquireThumbnailRequestSlot();
+    const releaseSlot = await acquireAssetRequestSlot();
     if (!releaseSlot) {
-      const stats = getThumbnailQueueStats();
+      const stats = getAssetQueueStats();
       reply.header("Retry-After", "1");
-      reply.header("X-Thumb-Active", String(stats.active));
-      reply.header("X-Thumb-Queued", String(stats.queued));
+      reply.header("X-Asset-Active", String(stats.active));
+      reply.header("X-Asset-Queued", String(stats.queued));
       return reply.status(503).send({
         code: 5003,
-        message: "thumbnail service busy, retry later"
+        message: "asset service busy, retry later"
       });
     }
-    const slotStats = getThumbnailQueueStats();
-    reply.header("X-Thumb-Active", String(slotStats.active));
-    reply.header("X-Thumb-Queued", String(slotStats.queued));
+    const slotStats = getAssetQueueStats();
+    reply.header("X-Asset-Active", String(slotStats.active));
+    reply.header("X-Asset-Queued", String(slotStats.queued));
 
     try {
       try {

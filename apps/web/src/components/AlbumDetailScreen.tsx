@@ -14,7 +14,7 @@ interface AlbumDetailScreenProps {
 }
 
 const PAGE_SIZE = 24;
-const RENDER_CHUNK_SIZE = 96;
+const RENDER_CHUNK_SIZE = 36;
 const DEFAULT_PRELOAD_BEFORE = 2;
 const DEFAULT_PRELOAD_AFTER = 3;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;

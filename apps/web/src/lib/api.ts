@@ -20,7 +20,7 @@ class ApiClient {
     this.client = axios.create({
       baseURL: API_BASE_URL,
       withCredentials: true,
-      timeout: 30000,
+      timeout: 90000,
     });
 
     this.client.interceptors.response.use(

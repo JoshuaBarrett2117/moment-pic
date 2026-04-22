@@ -61,7 +61,14 @@ export class OriginalAssetSourceMissingError extends Error {
 
 export type OriginalImageBody = Buffer | Readable;
 
-const THUMBNAIL_GENERATION_CONCURRENCY = 6;
+sharp.cache({
+  memory: 64,
+  files: 0,
+  items: 128
+});
+sharp.concurrency(2);
+
+const THUMBNAIL_GENERATION_CONCURRENCY = 2;
 const inFlightVariantTasks = new Map<string, Promise<ImageVariantResult>>();
 const dimensionSyncedAssetIds = new Set<string>();
 let activeGenerationCount = 0;

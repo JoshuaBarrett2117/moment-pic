@@ -9,8 +9,7 @@ import {
   ensurePreview,
   ensureThumbnail,
   openOriginalImage,
-  OriginalAssetSourceMissingError,
-  readOriginalImage
+  OriginalAssetSourceMissingError
 } from "../services/thumbnail-service.js";
 
 export const assetRoutes: FastifyPluginAsync = async (app) => {
@@ -90,6 +89,16 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
       message: "original asset source not found"
     });
 
+  const sendOriginalAssetFallback = async (assetId: string, reply: any) => {
+    const { asset, body, sizeBytes } = await openOriginalImage(assetId);
+    const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
+    if (sizeBytes !== null && Number.isFinite(sizeBytes)) {
+      reply.header("Content-Length", String(sizeBytes));
+    }
+    reply.type(mimeType);
+    return reply.send(body);
+  };
+
   app.get("/api/v1/assets/:assetId", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
     const asset = await getAssetDetail(assetId);
@@ -155,10 +164,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
           return sendOriginalSourceMissing(reply);
         }
         try {
-          const { asset, buffer } = await readOriginalImage(assetId);
-          const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
-          reply.type(mimeType);
-          return reply.send(buffer);
+          return await sendOriginalAssetFallback(assetId, reply);
         } catch (fallbackError) {
           if (fallbackError instanceof AssetNotFoundError) {
             return sendAssetNotFound(reply);
@@ -248,10 +254,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
           return sendOriginalSourceMissing(reply);
         }
         try {
-          const { asset, buffer } = await readOriginalImage(assetId);
-          const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
-          reply.type(mimeType);
-          return reply.send(buffer);
+          return await sendOriginalAssetFallback(assetId, reply);
         } catch (fallbackError) {
           if (fallbackError instanceof AssetNotFoundError) {
             return sendAssetNotFound(reply);

@@ -13,14 +13,17 @@ import {
 } from "../services/thumbnail-service.js";
 
 export const assetRoutes: FastifyPluginAsync = async (app) => {
-  const ASSET_REQUEST_MAX_ACTIVE = 6;
-  const ASSET_REQUEST_MAX_QUEUE = 1024;
-  const ASSET_REQUEST_QUEUE_TIMEOUT_MS = 120000;
+  const ASSET_REQUEST_MAX_ACTIVE = 4;
+  const ASSET_REQUEST_MAX_QUEUE = 64;
+  const ASSET_REQUEST_QUEUE_TIMEOUT_MS = 15000;
   let activeAssetRequests = 0;
   const assetWaitQueue: Array<{
+    id: number;
     resolve: () => void;
+    reject: () => void;
     timeout: NodeJS.Timeout;
   }> = [];
+  let nextAssetQueueId = 1;
 
   const getAssetQueueStats = () => ({
     active: activeAssetRequests,
@@ -37,25 +40,52 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     next.resolve();
   };
 
-  const acquireAssetRequestSlot = async (): Promise<(() => void) | null> => {
+  const removeQueuedAssetRequest = (queueId: number) => {
+    const index = assetWaitQueue.findIndex((item) => item.id === queueId);
+    if (index < 0) {
+      return false;
+    }
+
+    const [entry] = assetWaitQueue.splice(index, 1);
+    clearTimeout(entry.timeout);
+    entry.reject();
+    return true;
+  };
+
+  const acquireAssetRequestSlot = async (request: any): Promise<(() => void) | null> => {
     if (activeAssetRequests < ASSET_REQUEST_MAX_ACTIVE) {
       activeAssetRequests += 1;
     } else {
       if (assetWaitQueue.length >= ASSET_REQUEST_MAX_QUEUE) {
         return null;
       }
+
+      const queueId = nextAssetQueueId;
+      nextAssetQueueId += 1;
       const acquired = await new Promise<boolean>((resolve) => {
         const timeout = setTimeout(() => {
-          const index = assetWaitQueue.findIndex((item) => item.timeout === timeout);
-          if (index >= 0) {
-            assetWaitQueue.splice(index, 1);
-          }
+          removeQueuedAssetRequest(queueId);
           resolve(false);
         }, ASSET_REQUEST_QUEUE_TIMEOUT_MS);
 
+        const handleAbort = () => {
+          request.raw.off("close", handleAbort);
+          removeQueuedAssetRequest(queueId);
+          resolve(false);
+        };
+
+        request.raw.once("close", handleAbort);
+
         assetWaitQueue.push({
+          id: queueId,
           timeout,
-          resolve: () => resolve(true)
+          resolve: () => {
+            request.raw.off("close", handleAbort);
+            resolve(true);
+          },
+          reject: () => {
+            request.raw.off("close", handleAbort);
+          }
         });
       });
 
@@ -122,7 +152,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         : acceptHeader.includes("image/webp")
           ? "webp"
           : "jpeg";
-    const releaseSlot = await acquireAssetRequestSlot();
+    const releaseSlot = await acquireAssetRequestSlot(request);
     if (!releaseSlot) {
       const stats = getAssetQueueStats();
       reply.header("Retry-After", "1");
@@ -182,7 +212,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/assets/:assetId/original", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
-    const releaseSlot = await acquireAssetRequestSlot();
+    const releaseSlot = await acquireAssetRequestSlot(request);
     if (!releaseSlot) {
       const stats = getAssetQueueStats();
       reply.header("Retry-After", "1");
@@ -229,7 +259,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         : acceptHeader.includes("image/webp")
           ? "webp"
           : "jpeg";
-    const releaseSlot = await acquireAssetRequestSlot();
+    const releaseSlot = await acquireAssetRequestSlot(request);
     if (!releaseSlot) {
       const stats = getAssetQueueStats();
       reply.header("Retry-After", "1");

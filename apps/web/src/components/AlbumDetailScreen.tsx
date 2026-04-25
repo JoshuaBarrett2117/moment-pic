@@ -144,6 +144,15 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     await loadPage(1, false);
   }, [loadPage]);
 
+  const handleLoadMoreForViewer = useCallback(async (): Promise<boolean> => {
+    if (isLoading || isLoadingMore || loadedItems.length >= totalItems) {
+      return false;
+    }
+
+    await loadPage(currentPage + 1, true);
+    return true;
+  }, [currentPage, isLoading, isLoadingMore, loadedItems.length, loadPage, totalItems]);
+
   const handleRescanAlbum = useCallback(async () => {
     if (!albumId || isRescanningAlbum) {
       return;
@@ -324,6 +333,9 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           initialIndex={selectedImageIndex}
           onClose={() => setSelectedImageIndex(null)}
           onRequestNextAlbum={onRequestNextAlbum}
+          hasMoreItems={loadedItems.length < totalItems}
+          onLoadMoreItems={handleLoadMoreForViewer}
+          isLoadingMoreItems={isLoadingMore}
           defaultQualityPreset={systemConfig?.defaultImageQualityPreset ?? 'original'}
           preloadBefore={preloadBefore}
           preloadAfter={preloadAfter}

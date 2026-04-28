@@ -18,6 +18,7 @@ import {
 import { WobblyButton } from './WobblyButton';
 import { useToast } from './Toast';
 import { useLibraryRoots, useLibraryScan, useSystemConfig } from '../hooks';
+import { SmartAlbumSettingsPanel } from './SmartAlbumSettingsPanel';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -57,7 +58,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
   });
   const { systemConfig, fetchSystemConfig, updateSystemConfig } = useSystemConfig();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'basic' | 'advanced'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'advanced' | 'smart'>('basic');
   const [newPath, setNewPath] = useState('');
   const [newName, setNewName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -252,6 +253,17 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
           >
             <Settings className="w-5 h-5" />
             <span>高级设置</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('smart')}
+            className={`flex items-center gap-3 font-headline font-semibold px-4 py-2 rounded-lg transition-all ${
+              activeTab === 'smart'
+                ? 'bg-primary-container text-on-primary-container'
+                : 'text-outline hover:text-on-primary-container hover:bg-primary-container/10'
+            }`}
+          >
+            <Images className="w-5 h-5" />
+            <span>智能归纳</span>
           </button>
         </nav>
       </aside>
@@ -713,6 +725,17 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
                 </div>
               </div>
             </div>
+          </>
+        )}
+
+        {activeTab === 'smart' && (
+          <>
+            <header className="mb-6 md:mb-12">
+              <h2 className="text-2xl md:text-4xl font-headline font-black text-on-surface">智能归纳</h2>
+              <p className="text-outline mt-2 text-sm md:text-base">配置自动整理归纳规则，并为后续 AI 自动归纳准备策略。</p>
+            </header>
+
+            <SmartAlbumSettingsPanel onRebuildComplete={onScanComplete} />
           </>
         )}
       </main>

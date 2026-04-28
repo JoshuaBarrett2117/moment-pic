@@ -91,6 +91,82 @@ const bootstrap = (db: Database.Database) => {
       viewed_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS smart_albums (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      normalized_key TEXT NOT NULL UNIQUE,
+      cover_asset_id TEXT,
+      album_count INTEGER NOT NULL,
+      asset_count INTEGER NOT NULL,
+      source_summary TEXT,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS smart_album_members (
+      id TEXT PRIMARY KEY,
+      smart_album_id TEXT NOT NULL,
+      album_id TEXT NOT NULL,
+      source_engine TEXT NOT NULL,
+      match_record_id TEXT,
+      confidence REAL NOT NULL,
+      is_pinned INTEGER NOT NULL DEFAULT 0,
+      is_excluded INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (smart_album_id, album_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS smart_album_match_records (
+      id TEXT PRIMARY KEY,
+      album_id TEXT NOT NULL,
+      smart_album_name TEXT NOT NULL,
+      normalized_key TEXT NOT NULL,
+      source_engine TEXT NOT NULL,
+      rule_id TEXT,
+      confidence REAL NOT NULL,
+      matched_scopes_json TEXT NOT NULL,
+      matched_tokens_json TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS smart_album_rules (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      priority INTEGER NOT NULL DEFAULT 100,
+      scope TEXT NOT NULL,
+      match_mode TEXT NOT NULL,
+      patterns_json TEXT NOT NULL,
+      normalize_options_json TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_name TEXT,
+      target_name_template TEXT,
+      min_album_count INTEGER NOT NULL DEFAULT 1,
+      min_confidence REAL NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS smart_album_ai_configs (
+      id TEXT PRIMARY KEY DEFAULT 'smart_album_ai_config',
+      enabled INTEGER NOT NULL DEFAULT 0,
+      mode TEXT NOT NULL DEFAULT 'assist',
+      min_confidence_auto_apply REAL NOT NULL DEFAULT 0.9,
+      min_cluster_album_count INTEGER NOT NULL DEFAULT 3,
+      max_suggestions_per_run INTEGER NOT NULL DEFAULT 50,
+      allow_alias_merge INTEGER NOT NULL DEFAULT 1,
+      allow_cross_root_grouping INTEGER NOT NULL DEFAULT 1,
+      excluded_tokens_json TEXT NOT NULL DEFAULT '[]',
+      preferred_scopes_json TEXT NOT NULL DEFAULT '[\"albumName\",\"sourcePath\"]',
+      review_required_below_confidence REAL NOT NULL DEFAULT 0.9,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_albums_library_root_id ON albums (library_root_id);
     CREATE INDEX IF NOT EXISTS idx_albums_name ON albums (name);
     CREATE INDEX IF NOT EXISTS idx_albums_source_type ON albums (source_type);
@@ -99,6 +175,11 @@ const bootstrap = (db: Database.Database) => {
     CREATE INDEX IF NOT EXISTS idx_assets_thumbnail_key ON assets (thumbnail_key);
     CREATE INDEX IF NOT EXISTS idx_album_views_album_id ON album_views (album_id);
     CREATE INDEX IF NOT EXISTS idx_album_views_viewed_at ON album_views (viewed_at);
+    CREATE INDEX IF NOT EXISTS idx_smart_albums_name ON smart_albums (name);
+    CREATE INDEX IF NOT EXISTS idx_smart_album_members_album_id ON smart_album_members (album_id);
+    CREATE INDEX IF NOT EXISTS idx_smart_album_match_records_album_id ON smart_album_match_records (album_id);
+    CREATE INDEX IF NOT EXISTS idx_smart_album_match_records_run_id ON smart_album_match_records (run_id);
+    CREATE INDEX IF NOT EXISTS idx_smart_album_rules_enabled_priority ON smart_album_rules (enabled, priority DESC);
   `);
 
   try {
@@ -155,6 +236,41 @@ const bootstrap = (db: Database.Database) => {
         db.prepare("UPDATE system_config SET album_detail_item_min_width_mobile = 160 WHERE id = 'system_config'").run();
       }
     }
+  } catch (e) {}
+
+  try {
+    db.exec(`
+      INSERT OR IGNORE INTO smart_album_ai_configs (
+        id,
+        enabled,
+        mode,
+        min_confidence_auto_apply,
+        min_cluster_album_count,
+        max_suggestions_per_run,
+        allow_alias_merge,
+        allow_cross_root_grouping,
+        excluded_tokens_json,
+        preferred_scopes_json,
+        review_required_below_confidence,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        'smart_album_ai_config',
+        0,
+        'assist',
+        0.9,
+        3,
+        50,
+        1,
+        1,
+        '[]',
+        '["albumName","sourcePath"]',
+        0.9,
+        datetime('now'),
+        datetime('now')
+      );
+    `);
   } catch (e) {}
 };
 

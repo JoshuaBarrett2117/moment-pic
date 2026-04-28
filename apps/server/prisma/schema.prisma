@@ -23,6 +23,45 @@ enum ThumbnailStatus {
   error
 }
 
+enum SmartAlbumStatus {
+  active
+  hidden
+  review_pending
+}
+
+enum SmartAlbumSourceEngine {
+  rule
+  ai
+  manual
+}
+
+enum SmartAlbumRuleScope {
+  albumName
+  sourcePath
+  parentPath
+  assetFileName
+}
+
+enum SmartAlbumRuleMatchMode {
+  contains
+  equals
+  prefix
+  suffix
+  regex
+}
+
+enum SmartAlbumRuleAction {
+  assignSmartAlbum
+  mergeAlias
+  exclude
+}
+
+enum SmartAlbumAiMode {
+  assist
+  auto_low_risk
+  full_auto
+}
+
 model LibraryRoot {
   id            String   @id @default(cuid())
   path          String   @unique
@@ -52,6 +91,7 @@ model Album {
   updatedAt     DateTime    @updatedAt
   libraryRoot   LibraryRoot @relation(fields: [libraryRootId], references: [id], onDelete: Cascade)
   assets        Asset[]
+  smartAlbumMembers SmartAlbumMember[]
 
   @@index([libraryRootId], map: "idx_albums_library_root_id")
   @@index([name], map: "idx_albums_name")
@@ -126,4 +166,98 @@ model AlbumView {
   @@index([albumId], map: "idx_album_views_album_id")
   @@index([viewedAt], map: "idx_album_views_viewed_at")
   @@map("album_views")
+}
+
+model SmartAlbum {
+  id            String             @id @default(cuid())
+  name          String
+  normalizedKey String             @unique
+  coverAssetId  String?
+  albumCount    Int                @default(0)
+  assetCount    Int                @default(0)
+  sourceSummary String?
+  status        SmartAlbumStatus   @default(active)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  members       SmartAlbumMember[]
+
+  @@index([name], map: "idx_smart_albums_name")
+  @@map("smart_albums")
+}
+
+model SmartAlbumMember {
+  id            String                 @id @default(cuid())
+  smartAlbumId  String
+  albumId       String
+  sourceEngine  SmartAlbumSourceEngine
+  matchRecordId String?
+  confidence    Float
+  isPinned      Boolean                @default(false)
+  isExcluded    Boolean                @default(false)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  smartAlbum    SmartAlbum             @relation(fields: [smartAlbumId], references: [id], onDelete: Cascade)
+  album         Album                  @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@unique([smartAlbumId, albumId], map: "uq_smart_album_members_pair")
+  @@index([albumId], map: "idx_smart_album_members_album_id")
+  @@map("smart_album_members")
+}
+
+model SmartAlbumMatchRecord {
+  id               String                 @id @default(cuid())
+  albumId          String
+  smartAlbumName   String
+  normalizedKey    String
+  sourceEngine     SmartAlbumSourceEngine
+  ruleId           String?
+  confidence       Float
+  matchedScopesJson String
+  matchedTokensJson String
+  reason           String
+  runId            String
+  createdAt        DateTime               @default(now())
+
+  @@index([albumId], map: "idx_smart_album_match_records_album_id")
+  @@index([runId], map: "idx_smart_album_match_records_run_id")
+  @@map("smart_album_match_records")
+}
+
+model SmartAlbumRule {
+  id                   String                  @id @default(cuid())
+  name                 String
+  enabled              Boolean                 @default(true)
+  priority             Int                     @default(100)
+  scope                SmartAlbumRuleScope
+  matchMode            SmartAlbumRuleMatchMode
+  patternsJson         String
+  normalizeOptionsJson String
+  action               SmartAlbumRuleAction
+  targetName           String?
+  targetNameTemplate   String?
+  minAlbumCount        Int                     @default(1)
+  minConfidence        Float                   @default(1)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@index([enabled, priority], map: "idx_smart_album_rules_enabled_priority")
+  @@map("smart_album_rules")
+}
+
+model SmartAlbumAiConfig {
+  id                       String            @id @default("smart_album_ai_config")
+  enabled                  Boolean           @default(false)
+  mode                     SmartAlbumAiMode  @default(assist)
+  minConfidenceAutoApply   Float             @default(0.9)
+  minClusterAlbumCount     Int               @default(3)
+  maxSuggestionsPerRun     Int               @default(50)
+  allowAliasMerge          Boolean           @default(true)
+  allowCrossRootGrouping   Boolean           @default(true)
+  excludedTokensJson       String            @default("[]")
+  preferredScopesJson      String            @default("[\"albumName\",\"sourcePath\"]")
+  reviewRequiredBelowConfidence Float        @default(0.9)
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+
+  @@map("smart_album_ai_configs")
 }

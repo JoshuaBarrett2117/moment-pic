@@ -1,4 +1,10 @@
 export type SourceType = "folder" | "zip";
+export type SmartAlbumStatus = "active" | "hidden" | "review_pending";
+export type SmartAlbumSourceEngine = "rule" | "ai" | "manual";
+export type SmartAlbumRuleScope = "albumName" | "sourcePath" | "parentPath" | "assetFileName";
+export type SmartAlbumRuleMatchMode = "contains" | "equals" | "prefix" | "suffix" | "regex";
+export type SmartAlbumRuleAction = "assignSmartAlbum" | "mergeAlias" | "exclude";
+export type SmartAlbumAiMode = "assist" | "auto_low_risk" | "full_auto";
 
 export type LibraryRootRecord = {
   id: string;
@@ -64,10 +70,98 @@ export type AlbumViewRecord = {
   viewedAt: string;
 };
 
+export type SmartAlbumRecord = {
+  id: string;
+  name: string;
+  normalizedKey: string;
+  coverAssetId: string | null;
+  albumCount: number;
+  assetCount: number;
+  sourceSummary: string | null;
+  status: SmartAlbumStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SmartAlbumMemberRecord = {
+  id: string;
+  smartAlbumId: string;
+  albumId: string;
+  sourceEngine: SmartAlbumSourceEngine;
+  matchRecordId: string | null;
+  confidence: number;
+  isPinned: boolean;
+  isExcluded: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SmartAlbumMatchRecord = {
+  id: string;
+  albumId: string;
+  smartAlbumName: string;
+  normalizedKey: string;
+  sourceEngine: SmartAlbumSourceEngine;
+  ruleId: string | null;
+  confidence: number;
+  matchedScopesJson: string;
+  matchedTokensJson: string;
+  reason: string;
+  runId: string;
+  createdAt: string;
+};
+
+export type SmartAlbumRuleNormalizeOptions = {
+  trimSpaces?: boolean;
+  normalizeCase?: boolean;
+  stripSequenceNo?: boolean;
+  stripDate?: boolean;
+  stripPageStats?: boolean;
+  stripSizeStats?: boolean;
+};
+
+export type SmartAlbumRuleRecord = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  priority: number;
+  scope: SmartAlbumRuleScope;
+  matchMode: SmartAlbumRuleMatchMode;
+  patternsJson: string;
+  normalizeOptionsJson: string;
+  action: SmartAlbumRuleAction;
+  targetName: string | null;
+  targetNameTemplate: string | null;
+  minAlbumCount: number;
+  minConfidence: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SmartAlbumAiConfigRecord = {
+  id: string;
+  enabled: boolean;
+  mode: SmartAlbumAiMode;
+  minConfidenceAutoApply: number;
+  minClusterAlbumCount: number;
+  maxSuggestionsPerRun: number;
+  allowAliasMerge: boolean;
+  allowCrossRootGrouping: boolean;
+  excludedTokensJson: string;
+  preferredScopesJson: string;
+  reviewRequiredBelowConfidence: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type IndexStore = {
   libraryRoots: LibraryRootRecord[];
   albums: AlbumRecord[];
   assets: AssetRecord[];
   thumbnails: ThumbnailRecord[];
   albumViews: AlbumViewRecord[];
+  smartAlbums: SmartAlbumRecord[];
+  smartAlbumMembers: SmartAlbumMemberRecord[];
+  smartAlbumMatchRecords: SmartAlbumMatchRecord[];
+  smartAlbumRules: SmartAlbumRuleRecord[];
 };

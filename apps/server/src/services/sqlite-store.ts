@@ -1,7 +1,17 @@
 import crypto from "node:crypto";
-
 import { getDb } from "../db/sqlite.js";
-import type { AlbumRecord, AssetRecord, LibraryRootRecord, ThumbnailRecord, AlbumViewRecord } from "../types/store.js";
+import type {
+  AlbumRecord,
+  AlbumViewRecord,
+  AssetRecord,
+  LibraryRootRecord,
+  SmartAlbumAiConfigRecord,
+  SmartAlbumMatchRecord,
+  SmartAlbumMemberRecord,
+  SmartAlbumRecord,
+  SmartAlbumRuleRecord,
+  ThumbnailRecord
+} from "../types/store.js";
 
 export type AlbumSortBy = "name" | "updatedAt" | "assetCount";
 export type SortOrder = "asc" | "desc";
@@ -60,6 +70,107 @@ const rowToThumbnail = (row: Record<string, unknown>): ThumbnailRecord => ({
   height: Number(row.height),
   filePath: String(row.file_path),
   status: row.status === "stale" ? "stale" : row.status === "error" ? "error" : "ready",
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
+});
+
+const rowToSmartAlbum = (row: Record<string, unknown>): SmartAlbumRecord => ({
+  id: String(row.id),
+  name: String(row.name),
+  normalizedKey: String(row.normalized_key),
+  coverAssetId: row.cover_asset_id ? String(row.cover_asset_id) : null,
+  albumCount: Number(row.album_count),
+  assetCount: Number(row.asset_count),
+  sourceSummary: row.source_summary ? String(row.source_summary) : null,
+  status:
+    row.status === "hidden"
+      ? "hidden"
+      : row.status === "review_pending"
+        ? "review_pending"
+        : "active",
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
+});
+
+const rowToSmartAlbumMember = (row: Record<string, unknown>): SmartAlbumMemberRecord => ({
+  id: String(row.id),
+  smartAlbumId: String(row.smart_album_id),
+  albumId: String(row.album_id),
+  sourceEngine: row.source_engine === "ai" ? "ai" : row.source_engine === "manual" ? "manual" : "rule",
+  matchRecordId: row.match_record_id ? String(row.match_record_id) : null,
+  confidence: Number(row.confidence),
+  isPinned: Number(row.is_pinned) === 1,
+  isExcluded: Number(row.is_excluded) === 1,
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
+});
+
+const rowToSmartAlbumMatchRecord = (row: Record<string, unknown>): SmartAlbumMatchRecord => ({
+  id: String(row.id),
+  albumId: String(row.album_id),
+  smartAlbumName: String(row.smart_album_name),
+  normalizedKey: String(row.normalized_key),
+  sourceEngine: row.source_engine === "ai" ? "ai" : row.source_engine === "manual" ? "manual" : "rule",
+  ruleId: row.rule_id ? String(row.rule_id) : null,
+  confidence: Number(row.confidence),
+  matchedScopesJson: String(row.matched_scopes_json),
+  matchedTokensJson: String(row.matched_tokens_json),
+  reason: String(row.reason),
+  runId: String(row.run_id),
+  createdAt: String(row.created_at)
+});
+
+const rowToSmartAlbumRule = (row: Record<string, unknown>): SmartAlbumRuleRecord => ({
+  id: String(row.id),
+  name: String(row.name),
+  enabled: Number(row.enabled) === 1,
+  priority: Number(row.priority),
+  scope:
+    row.scope === "sourcePath"
+      ? "sourcePath"
+      : row.scope === "parentPath"
+        ? "parentPath"
+        : row.scope === "assetFileName"
+          ? "assetFileName"
+          : "albumName",
+  matchMode:
+    row.match_mode === "equals"
+      ? "equals"
+      : row.match_mode === "prefix"
+        ? "prefix"
+        : row.match_mode === "suffix"
+          ? "suffix"
+          : row.match_mode === "regex"
+            ? "regex"
+            : "contains",
+  patternsJson: String(row.patterns_json),
+  normalizeOptionsJson: String(row.normalize_options_json),
+  action:
+    row.action === "mergeAlias"
+      ? "mergeAlias"
+      : row.action === "exclude"
+        ? "exclude"
+        : "assignSmartAlbum",
+  targetName: row.target_name ? String(row.target_name) : null,
+  targetNameTemplate: row.target_name_template ? String(row.target_name_template) : null,
+  minAlbumCount: Number(row.min_album_count),
+  minConfidence: Number(row.min_confidence),
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
+});
+
+const rowToSmartAlbumAiConfig = (row: Record<string, unknown>): SmartAlbumAiConfigRecord => ({
+  id: String(row.id),
+  enabled: Number(row.enabled) === 1,
+  mode: row.mode === "auto_low_risk" ? "auto_low_risk" : row.mode === "full_auto" ? "full_auto" : "assist",
+  minConfidenceAutoApply: Number(row.min_confidence_auto_apply),
+  minClusterAlbumCount: Number(row.min_cluster_album_count),
+  maxSuggestionsPerRun: Number(row.max_suggestions_per_run),
+  allowAliasMerge: Number(row.allow_alias_merge) === 1,
+  allowCrossRootGrouping: Number(row.allow_cross_root_grouping) === 1,
+  excludedTokensJson: String(row.excluded_tokens_json),
+  preferredScopesJson: String(row.preferred_scopes_json),
+  reviewRequiredBelowConfidence: Number(row.review_required_below_confidence),
   createdAt: String(row.created_at),
   updatedAt: String(row.updated_at)
 });
@@ -533,4 +644,247 @@ export const getRecentAlbumIdsDb = (limit = 50): string[] => {
   `).all(limit) as { album_id: string }[];
 
   return rows.map((row) => row.album_id);
+};
+
+export const listSmartAlbumsDb = (
+  page: number,
+  pageSize: number,
+  input?: {
+    keyword?: string;
+    status?: "active" | "hidden" | "review_pending";
+    sortBy?: "name" | "updatedAt" | "albumCount" | "assetCount";
+    sortOrder?: "asc" | "desc";
+  }
+) => {
+  const db = getDb();
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = {
+    limit: pageSize,
+    offset: (page - 1) * pageSize
+  };
+
+  if (input?.keyword?.trim()) {
+    conditions.push("name LIKE @keyword");
+    params.keyword = `%${input.keyword.trim()}%`;
+  }
+
+  if (input?.status) {
+    conditions.push("status = @status");
+    params.status = input.status;
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const orderByMap = {
+    name: "name",
+    updatedAt: "updated_at",
+    albumCount: "album_count",
+    assetCount: "asset_count"
+  } as const;
+  const sortBy = input?.sortBy ?? "updatedAt";
+  const sortOrder = input?.sortOrder ?? "desc";
+  const orderBy = `${orderByMap[sortBy]} ${sortOrder.toUpperCase()}, name ASC`;
+
+  const items = db
+    .prepare(`SELECT * FROM smart_albums ${where} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset`)
+    .all(params)
+    .map((row: unknown) => rowToSmartAlbum(row as Record<string, unknown>));
+  const totalRow = db.prepare(`SELECT COUNT(*) AS total FROM smart_albums ${where}`).get(params) as { total: number };
+  return { items, total: totalRow.total };
+};
+
+export const findSmartAlbumByIdDb = (smartAlbumId: string): SmartAlbumRecord | null => {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM smart_albums WHERE id = ? LIMIT 1").get(smartAlbumId) as Record<string, unknown> | undefined;
+  return row ? rowToSmartAlbum(row) : null;
+};
+
+export const listSmartAlbumMembersDb = (smartAlbumId: string): SmartAlbumMemberRecord[] => {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM smart_album_members WHERE smart_album_id = ? AND is_excluded = 0 ORDER BY confidence DESC, created_at ASC")
+    .all(smartAlbumId)
+    .map((row: unknown) => rowToSmartAlbumMember(row as Record<string, unknown>));
+};
+
+export const listSmartAlbumRulesDb = (): SmartAlbumRuleRecord[] => {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM smart_album_rules ORDER BY priority DESC, created_at ASC")
+    .all()
+    .map((row: unknown) => rowToSmartAlbumRule(row as Record<string, unknown>));
+};
+
+export const findSmartAlbumRuleByIdDb = (ruleId: string): SmartAlbumRuleRecord | null => {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM smart_album_rules WHERE id = ? LIMIT 1").get(ruleId) as Record<string, unknown> | undefined;
+  return row ? rowToSmartAlbumRule(row) : null;
+};
+
+export const upsertSmartAlbumRuleDb = (rule: SmartAlbumRuleRecord): SmartAlbumRuleRecord => {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO smart_album_rules (
+      id, name, enabled, priority, scope, match_mode, patterns_json, normalize_options_json,
+      action, target_name, target_name_template, min_album_count, min_confidence, created_at, updated_at
+    )
+    VALUES (
+      @id, @name, @enabled, @priority, @scope, @matchMode, @patternsJson, @normalizeOptionsJson,
+      @action, @targetName, @targetNameTemplate, @minAlbumCount, @minConfidence, @createdAt, @updatedAt
+    )
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      enabled = excluded.enabled,
+      priority = excluded.priority,
+      scope = excluded.scope,
+      match_mode = excluded.match_mode,
+      patterns_json = excluded.patterns_json,
+      normalize_options_json = excluded.normalize_options_json,
+      action = excluded.action,
+      target_name = excluded.target_name,
+      target_name_template = excluded.target_name_template,
+      min_album_count = excluded.min_album_count,
+      min_confidence = excluded.min_confidence,
+      updated_at = excluded.updated_at
+  `).run({
+    ...rule,
+    enabled: rule.enabled ? 1 : 0
+  });
+
+  return rule;
+};
+
+export const deleteSmartAlbumRuleDb = (ruleId: string): boolean => {
+  const db = getDb();
+  const result = db.prepare("DELETE FROM smart_album_rules WHERE id = ?").run(ruleId);
+  return result.changes > 0;
+};
+
+export const getSmartAlbumAiConfigDb = (): SmartAlbumAiConfigRecord => {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM smart_album_ai_configs WHERE id = 'smart_album_ai_config'").get() as Record<string, unknown>;
+  return rowToSmartAlbumAiConfig(row);
+};
+
+export const updateSmartAlbumAiConfigDb = (
+  updates: Omit<SmartAlbumAiConfigRecord, "createdAt" | "updatedAt">
+): SmartAlbumAiConfigRecord => {
+  const db = getDb();
+  const existing = getSmartAlbumAiConfigDb();
+  const next: SmartAlbumAiConfigRecord = {
+    ...existing,
+    ...updates,
+    updatedAt: new Date().toISOString()
+  };
+
+  db.prepare(`
+    UPDATE smart_album_ai_configs
+    SET enabled = @enabled,
+        mode = @mode,
+        min_confidence_auto_apply = @minConfidenceAutoApply,
+        min_cluster_album_count = @minClusterAlbumCount,
+        max_suggestions_per_run = @maxSuggestionsPerRun,
+        allow_alias_merge = @allowAliasMerge,
+        allow_cross_root_grouping = @allowCrossRootGrouping,
+        excluded_tokens_json = @excludedTokensJson,
+        preferred_scopes_json = @preferredScopesJson,
+        review_required_below_confidence = @reviewRequiredBelowConfidence,
+        updated_at = @updatedAt
+    WHERE id = @id
+  `).run({
+    ...next,
+    enabled: next.enabled ? 1 : 0,
+    allowAliasMerge: next.allowAliasMerge ? 1 : 0,
+    allowCrossRootGrouping: next.allowCrossRootGrouping ? 1 : 0
+  });
+
+  return getSmartAlbumAiConfigDb();
+};
+
+export const replaceSmartAlbumsDb = (input: {
+  smartAlbums: SmartAlbumRecord[];
+  members: SmartAlbumMemberRecord[];
+  matchRecords: SmartAlbumMatchRecord[];
+}) => {
+  const db = getDb();
+  const deleteMembers = db.prepare("DELETE FROM smart_album_members");
+  const deleteAlbums = db.prepare("DELETE FROM smart_albums");
+  const deleteMatchRecords = db.prepare("DELETE FROM smart_album_match_records");
+  const insertAlbum = db.prepare(`
+    INSERT INTO smart_albums (
+      id, name, normalized_key, cover_asset_id, album_count, asset_count, source_summary, status, created_at, updated_at
+    )
+    VALUES (
+      @id, @name, @normalizedKey, @coverAssetId, @albumCount, @assetCount, @sourceSummary, @status, @createdAt, @updatedAt
+    )
+  `);
+  const insertMember = db.prepare(`
+    INSERT INTO smart_album_members (
+      id, smart_album_id, album_id, source_engine, match_record_id, confidence, is_pinned, is_excluded, created_at, updated_at
+    )
+    VALUES (
+      @id, @smartAlbumId, @albumId, @sourceEngine, @matchRecordId, @confidence, @isPinned, @isExcluded, @createdAt, @updatedAt
+    )
+  `);
+  const insertMatchRecord = db.prepare(`
+    INSERT INTO smart_album_match_records (
+      id, album_id, smart_album_name, normalized_key, source_engine, rule_id, confidence, matched_scopes_json, matched_tokens_json, reason, run_id, created_at
+    )
+    VALUES (
+      @id, @albumId, @smartAlbumName, @normalizedKey, @sourceEngine, @ruleId, @confidence, @matchedScopesJson, @matchedTokensJson, @reason, @runId, @createdAt
+    )
+  `);
+
+  const transaction = db.transaction(() => {
+    deleteMembers.run();
+    deleteAlbums.run();
+    deleteMatchRecords.run();
+    for (const record of input.matchRecords) {
+      insertMatchRecord.run(record);
+    }
+    for (const smartAlbum of input.smartAlbums) {
+      insertAlbum.run(smartAlbum);
+    }
+    for (const member of input.members) {
+      insertMember.run({
+        ...member,
+        isPinned: member.isPinned ? 1 : 0,
+        isExcluded: member.isExcluded ? 1 : 0
+      });
+    }
+  });
+
+  transaction();
+};
+
+export const listAlbumsForSmartRuleScopeDb = (): Array<{
+  id: string;
+  name: string;
+  sourcePath: string;
+  assetCount: number;
+  coverAssetId: string | null;
+  updatedAt: string;
+  sourceType: "folder" | "zip";
+}> => {
+  const db = getDb();
+  return db
+    .prepare("SELECT id, name, source_path, asset_count, cover_asset_id, updated_at, source_type FROM albums ORDER BY updated_at DESC, name ASC")
+    .all()
+    .map((row: unknown) => {
+      const current = row as Record<string, unknown>;
+      return {
+        id: String(current.id),
+        name: String(current.name),
+        sourcePath: String(current.source_path),
+        assetCount: Number(current.asset_count),
+        coverAssetId: current.cover_asset_id ? String(current.cover_asset_id) : null,
+        updatedAt: String(current.updated_at),
+        sourceType: current.source_type === "zip" ? "zip" : "folder"
+      };
+    });
+};
+
+export const listAssetNamesByAlbumIdDb = (albumId: string): string[] => {
+  const db = getDb();
+  const rows = db.prepare("SELECT name FROM assets WHERE album_id = ? ORDER BY sort_index ASC").all(albumId) as Array<{ name: string }>;
+  return rows.map((row) => row.name);
 };

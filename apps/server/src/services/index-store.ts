@@ -9,7 +9,11 @@ const emptyStore = (): IndexStore => ({
   albums: [],
   assets: [],
   thumbnails: [],
-  albumViews: []
+  albumViews: [],
+  smartAlbums: [],
+  smartAlbumMembers: [],
+  smartAlbumMatchRecords: [],
+  smartAlbumRules: []
 });
 
 export const ensureDataDir = async () => {

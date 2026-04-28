@@ -19,6 +19,7 @@ import {
   upsertLibraryRootDb
 } from "./sqlite-store.js";
 import { isArchiveFile, listRootImageEntries } from "./archive.js";
+import { rebuildSmartAlbums } from "./smart-album-service.js";
 
 type ScannedAlbum = {
   name: string;
@@ -562,6 +563,8 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
     }
   }
 
+  await rebuildSmartAlbums();
+
   return {
     albumsDiscovered,
     assetsDiscovered
@@ -619,6 +622,8 @@ export const rescanAlbum = async (albumId: string) => {
       }
     ]
   });
+
+  await rebuildSmartAlbums();
 
   return {
     albumId: existingAlbum.id,

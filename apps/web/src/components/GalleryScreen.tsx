@@ -38,6 +38,8 @@ interface GalleryScreenProps {
   isRecentActive: boolean;
   scrollPosition?: number;
   onScrollPositionChange?: (position: number) => void;
+  onSmartAlbumsClick: () => void;
+  isSmartAlbumsActive: boolean;
 }
 
 const tagColors: Record<string, { bg: string; text: string }> = {
@@ -80,6 +82,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   isRecentActive,
   scrollPosition,
   onScrollPositionChange,
+  onSmartAlbumsClick,
+  isSmartAlbumsActive,
 }) => {
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
@@ -205,6 +209,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         albumCount={pagination?.total || 0}
         onRecentClick={onRecentClick}
         isRecentActive={isRecentActive}
+        onSmartAlbumsClick={onSmartAlbumsClick}
+        isSmartAlbumsActive={isSmartAlbumsActive}
       />
 
       <main

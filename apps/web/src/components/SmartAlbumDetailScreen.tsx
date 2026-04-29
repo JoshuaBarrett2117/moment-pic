@@ -1,7 +1,10 @@
 import React, { useEffect } from 'react';
 import { ArrowLeft, Sparkles } from 'lucide-react';
-import { useSmartAlbums } from '../hooks';
+import { useMobile, useSmartAlbums, useSystemConfig, useWideMobile } from '../hooks';
 import { ThrottledImage } from './ThrottledImage';
+
+const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE = 160;
+const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP = 300;
 
 interface SmartAlbumDetailScreenProps {
   smartAlbumId: string;
@@ -11,10 +14,26 @@ interface SmartAlbumDetailScreenProps {
 
 export const SmartAlbumDetailScreen: React.FC<SmartAlbumDetailScreenProps> = ({ smartAlbumId, onBack, onNavigateToAlbum }) => {
   const { smartAlbumDetail, smartAlbumMembers, isLoading, error, fetchSmartAlbumDetail } = useSmartAlbums();
+  const { systemConfig, fetchSystemConfig } = useSystemConfig();
+  const isMobile = useMobile();
+  const isWideMobile = useWideMobile();
+
+  const albumListItemMinWidth = isMobile
+    ? (isWideMobile
+      ? (systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP)
+      : (systemConfig?.albumListItemMinWidthMobile ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE))
+    : (systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
+  const gridTemplateColumns = isMobile && !isWideMobile
+    ? 'minmax(0, 1fr)'
+    : `repeat(auto-fill, minmax(${albumListItemMinWidth}px, 1fr))`;
 
   useEffect(() => {
     void fetchSmartAlbumDetail(smartAlbumId);
   }, [fetchSmartAlbumDetail, smartAlbumId]);
+
+  useEffect(() => {
+    void fetchSystemConfig();
+  }, [fetchSystemConfig]);
 
   return (
     <div className="h-[100dvh] overflow-y-auto bg-surface px-4 py-6 md:px-10 md:py-10">
@@ -52,7 +71,7 @@ export const SmartAlbumDetailScreen: React.FC<SmartAlbumDetailScreenProps> = ({ 
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 md:gap-6" style={{ gridTemplateColumns }}>
             {(smartAlbumMembers || []).map((member) => (
               <button
                 key={member.albumId}

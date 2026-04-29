@@ -11,6 +11,10 @@ export interface ApiErrorResponse {
   message: string;
 }
 
+type ApiRequestOptions = {
+  timeoutMs?: number;
+};
+
 const API_BASE_URL = '/api/v1';
 
 class ApiClient {
@@ -41,8 +45,23 @@ class ApiClient {
     return response.data.data;
   }
 
+  async getWithOptions<T>(url: string, params?: Record<string, unknown>, options?: ApiRequestOptions): Promise<T> {
+    const response = await this.client.get<ApiResponse<T>>(url, {
+      params,
+      timeout: options?.timeoutMs
+    });
+    return response.data.data;
+  }
+
   async post<T>(url: string, data?: unknown): Promise<T> {
     const response = await this.client.post<ApiResponse<T>>(url, data);
+    return response.data.data;
+  }
+
+  async postWithOptions<T>(url: string, data?: unknown, options?: ApiRequestOptions): Promise<T> {
+    const response = await this.client.post<ApiResponse<T>>(url, data, {
+      timeout: options?.timeoutMs
+    });
     return response.data.data;
   }
 

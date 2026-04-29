@@ -23,12 +23,48 @@ type UseLibraryScanOptions = {
   onScanComplete?: () => void | Promise<void>;
 };
 
+const SCAN_REQUEST_TIMEOUT_MS = 0;
+const SCAN_TASK_STORAGE_KEY = 'moment_pic_active_scan_tasks';
+
+type PersistedScanTask = {
+  libraryRootId: string | null;
+  taskId: string;
+};
+
+const getTaskKey = (libraryRootId: string | null | undefined): string => libraryRootId ?? 'all';
+
+const loadPersistedScanTasks = (): PersistedScanTask[] => {
+  try {
+    const raw = window.localStorage.getItem(SCAN_TASK_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter((item): item is PersistedScanTask => {
+      if (typeof item !== 'object' || item === null) {
+        return false;
+      }
+
+      const candidate = item as { taskId?: unknown; libraryRootId?: unknown };
+      return typeof candidate.taskId === 'string' && (candidate.libraryRootId === null || typeof candidate.libraryRootId === 'string');
+    });
+  } catch {
+    return [];
+  }
+};
+
 export function useLibraryScan(options: UseLibraryScanOptions = {}): UseLibraryScanReturn {
   const [scanTasks, setScanTasks] = useState<Map<string, ScanTask>>(new Map<string, ScanTask>());
   const pollIntervalsRef = useRef<Map<string, number>>(new Map<string, number>());
+  const pollFailureCountRef = useRef<Map<string, number>>(new Map<string, number>());
   const onScanCompleteRef = useRef(options.onScanComplete);
   onScanCompleteRef.current = options.onScanComplete;
-  const scanTaskList = Array.from(scanTasks.values() as IterableIterator<ScanTask>);
+  const scanTaskList = Array.from(scanTasks.values()) as ScanTask[];
   const isAnyScanning = scanTaskList.some(
     (task) => task.status === 'running' || task.status === 'pending'
   );
@@ -51,26 +87,45 @@ export function useLibraryScan(options: UseLibraryScanOptions = {}): UseLibraryS
       clearInterval(intervalId);
       pollIntervalsRef.current.delete(libraryRootId);
     }
+    pollFailureCountRef.current.delete(libraryRootId);
   }, []);
+
+  useEffect(() => {
+    const persistedTasks = (Array.from(scanTasks.values()) as ScanTask[])
+      .filter((task) => task.status === 'running' || task.status === 'pending')
+      .map((task) => ({
+        libraryRootId: task.libraryRootId,
+        taskId: task.taskId
+      }));
+
+    if (persistedTasks.length > 0) {
+      window.localStorage.setItem(SCAN_TASK_STORAGE_KEY, JSON.stringify(persistedTasks));
+      return;
+    }
+
+    window.localStorage.removeItem(SCAN_TASK_STORAGE_KEY);
+  }, [scanTasks]);
 
   const startPolling = useCallback((libraryRootId: string, taskId: string) => {
     clearPollInterval(libraryRootId);
 
     const intervalId = window.setInterval(async () => {
       try {
-        const status = await api.get<ScanResultDTO>(`/scan/${taskId}`);
+        const status = await api.getWithOptions<ScanResultDTO>(`/scan/${taskId}`, undefined, {
+          timeoutMs: SCAN_REQUEST_TIMEOUT_MS
+        });
+        pollFailureCountRef.current.set(libraryRootId, 0);
         
         setScanTasks((prev: Map<string, ScanTask>) => {
           const next = new Map<string, ScanTask>(prev);
-          const task = next.get(libraryRootId);
-          if (task) {
-            next.set(libraryRootId, {
-              ...task,
-              status: status.status,
-              finishedAt: status.finishedAt ?? null,
-              error: status.error ?? null
-            });
-          }
+          next.set(libraryRootId, {
+            taskId: status.taskId,
+            libraryRootId: status.libraryRootId,
+            status: status.status,
+            startedAt: status.startedAt ?? null,
+            finishedAt: status.finishedAt ?? null,
+            error: status.error ?? null
+          });
           return next;
         });
 
@@ -80,7 +135,27 @@ export function useLibraryScan(options: UseLibraryScanOptions = {}): UseLibraryS
         if (status.status === 'completed') {
           void onScanCompleteRef.current?.();
         }
-      } catch {
+      } catch (error) {
+        const failureCount = (pollFailureCountRef.current.get(libraryRootId) ?? 0) + 1;
+        pollFailureCountRef.current.set(libraryRootId, failureCount);
+
+        if (failureCount < 3) {
+          return;
+        }
+
+        setScanTasks((prev: Map<string, ScanTask>) => {
+          const next = new Map<string, ScanTask>(prev);
+          const task = next.get(libraryRootId);
+          if (task) {
+            next.set(libraryRootId, {
+              ...task,
+              status: 'failed',
+              finishedAt: new Date().toISOString(),
+              error: error instanceof Error ? error.message : 'scan polling failed'
+            });
+          }
+          return next;
+        });
         clearPollInterval(libraryRootId);
       }
     }, 2000);
@@ -113,18 +188,20 @@ export function useLibraryScan(options: UseLibraryScanOptions = {}): UseLibraryS
     });
 
     try {
-      const result = await api.post<ScanResultDTO>('/scan', { libraryRootId });
+      const result = await api.postWithOptions<ScanResultDTO>('/scan', { libraryRootId }, {
+        timeoutMs: SCAN_REQUEST_TIMEOUT_MS
+      });
       
       setScanTasks((prev: Map<string, ScanTask>) => {
         const next = new Map<string, ScanTask>(prev);
-        const task = next.get(key);
-        if (task) {
-          next.set(key, {
-            ...task,
-            status: 'running',
-            startedAt: result.startedAt ?? new Date().toISOString()
-          });
-        }
+        next.set(key, {
+          taskId: result.taskId,
+          libraryRootId: result.libraryRootId,
+          status: result.status,
+          startedAt: result.startedAt ?? new Date().toISOString(),
+          finishedAt: result.finishedAt ?? null,
+          error: result.error ?? null
+        });
         return next;
       });
 
@@ -157,6 +234,45 @@ export function useLibraryScan(options: UseLibraryScanOptions = {}): UseLibraryS
       return next;
     });
   }, [clearPollInterval]);
+
+  useEffect(() => {
+    const restoreScanTasks = async () => {
+      try {
+        const serverTasks = await api.getWithOptions<ScanResultDTO[]>('/scan', undefined, {
+          timeoutMs: SCAN_REQUEST_TIMEOUT_MS
+        });
+        const activeTasks = serverTasks
+          .filter((task) => task.status === 'pending' || task.status === 'running');
+
+        if (activeTasks.length === 0) {
+          return;
+        }
+
+        setScanTasks((prev: Map<string, ScanTask>) => {
+          const next = new Map<string, ScanTask>(prev);
+          for (const serverTask of activeTasks) {
+            next.set(getTaskKey(serverTask.libraryRootId), {
+              taskId: serverTask.taskId,
+              libraryRootId: serverTask.libraryRootId,
+              status: serverTask.status,
+              startedAt: serverTask.startedAt ?? null,
+              finishedAt: serverTask.finishedAt ?? null,
+              error: serverTask.error ?? null
+            });
+          }
+          return next;
+        });
+
+        for (const serverTask of activeTasks) {
+          startPolling(getTaskKey(serverTask.libraryRootId), serverTask.taskId);
+        }
+      } catch {
+        return;
+      }
+    };
+
+    void restoreScanTasks();
+  }, [startPolling]);
 
   useEffect(() => {
     return () => {

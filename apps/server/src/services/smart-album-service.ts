@@ -78,7 +78,8 @@ type AiCluster = {
 };
 
 const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
-const MAX_AI_ALBUMS_PER_BATCH = 80;
+const MAX_AI_ALBUMS_PER_BATCH = 40;
+const OPENAI_GROUPING_TIMEOUT_MS = 90000;
 
 const parseJsonArray = (value: string): string[] => {
   try {
@@ -457,7 +458,7 @@ const requestOpenAiClusters = async (
       ],
       maxTokens: 2400,
       temperature: 0.1,
-      timeoutMs: 45000
+      timeoutMs: OPENAI_GROUPING_TIMEOUT_MS
     }
   );
 
@@ -501,7 +502,11 @@ const buildAiCandidates = async (): Promise<CandidateRecord[]> => {
   try {
     return await buildOpenAiCandidates(config);
   } catch (error) {
-    console.error("[smart-album-service] OpenAI grouping failed, fallback to heuristic AI:", error);
+    const runtime = buildAiRuntimeConfig(config);
+    console.error(
+      `[smart-album-service] OpenAI grouping failed, fallback to heuristic AI: endpoint=${runtime.endpoint} model=${runtime.model} batchSize=${MAX_AI_ALBUMS_PER_BATCH} timeoutMs=${OPENAI_GROUPING_TIMEOUT_MS}`,
+      error
+    );
     return buildHeuristicAiCandidates(config);
   }
 };

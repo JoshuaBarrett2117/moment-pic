@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import type {
   SmartAlbumAiConfigDTO,
@@ -6,7 +6,7 @@ import type {
   SmartAlbumDetailDTO,
   SmartAlbumMemberDTO,
   SmartAlbumMembersListDTO,
-  SmartAlbumRebuildResultDTO,
+  SmartAlbumRebuildTaskDTO,
   SmartAlbumRuleDTO,
   SmartAlbumRuleListDTO,
   SmartAlbumRuleTestResultDTO,
@@ -38,14 +38,82 @@ type SmartAlbumAiConnectionTestInput = {
   apiToken?: string | null;
 };
 
-export function useSmartAlbums() {
+type UseSmartAlbumsOptions = {
+  onRebuildComplete?: (task: SmartAlbumRebuildTaskDTO) => void | Promise<void>;
+};
+
+const SMART_ALBUM_REBUILD_TASK_STORAGE_KEY = 'moment_pic_active_smart_album_rebuild_task';
+
+export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
   const [smartAlbums, setSmartAlbums] = useState<SmartAlbumsListDTO | null>(null);
   const [smartAlbumDetail, setSmartAlbumDetail] = useState<SmartAlbumDetailDTO | null>(null);
   const [smartAlbumMembers, setSmartAlbumMembers] = useState<SmartAlbumMemberDTO[] | null>(null);
   const [rules, setRules] = useState<SmartAlbumRuleDTO[]>([]);
   const [aiConfig, setAiConfig] = useState<SmartAlbumAiConfigDTO | null>(null);
+  const [currentRebuildTask, setCurrentRebuildTask] = useState<SmartAlbumRebuildTaskDTO | null>(null);
+  const [isRebuilding, setIsRebuilding] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const rebuildPollIntervalRef = useRef<number | null>(null);
+  const rebuildPollFailureCountRef = useRef(0);
+  const lastHandledCompletedTaskIdRef = useRef<string | null>(null);
+  const onRebuildCompleteRef = useRef(options.onRebuildComplete);
+  onRebuildCompleteRef.current = options.onRebuildComplete;
+
+  const clearRebuildPolling = useCallback(() => {
+    if (rebuildPollIntervalRef.current) {
+      clearInterval(rebuildPollIntervalRef.current);
+      rebuildPollIntervalRef.current = null;
+    }
+    rebuildPollFailureCountRef.current = 0;
+  }, []);
+
+  const getRebuildStatus = useCallback(async (taskId: string) => {
+    try {
+      return await api.get<SmartAlbumRebuildTaskDTO>(`/smart-albums/rebuild/${taskId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取自动整理重建状态失败');
+      return null;
+    }
+  }, []);
+
+  const startRebuildPolling = useCallback((taskId: string) => {
+    clearRebuildPolling();
+
+    rebuildPollIntervalRef.current = window.setInterval(async () => {
+      const status = await getRebuildStatus(taskId);
+      if (!status) {
+        rebuildPollFailureCountRef.current += 1;
+        if (rebuildPollFailureCountRef.current < 3) {
+          return;
+        }
+
+        clearRebuildPolling();
+        setIsRebuilding(false);
+        setCurrentRebuildTask((prev) => prev ? {
+          ...prev,
+          status: 'failed',
+          finishedAt: new Date().toISOString(),
+          error: '自动整理重建状态轮询失败'
+        } : prev);
+        window.localStorage.removeItem(SMART_ALBUM_REBUILD_TASK_STORAGE_KEY);
+        return;
+      }
+
+      rebuildPollFailureCountRef.current = 0;
+      setCurrentRebuildTask(status);
+
+      if (status.status === 'completed' || status.status === 'failed') {
+        clearRebuildPolling();
+        setIsRebuilding(false);
+        window.localStorage.removeItem(SMART_ALBUM_REBUILD_TASK_STORAGE_KEY);
+        if (status.status === 'completed' && lastHandledCompletedTaskIdRef.current !== status.taskId) {
+          lastHandledCompletedTaskIdRef.current = status.taskId;
+          void onRebuildCompleteRef.current?.(status);
+        }
+      }
+    }, 2000);
+  }, [clearRebuildPolling, getRebuildStatus]);
 
   const fetchSmartAlbums = useCallback(async (params?: {
     page?: number;
@@ -89,12 +157,23 @@ export function useSmartAlbums() {
   const rebuildSmartAlbums = useCallback(async () => {
     setError(null);
     try {
-      return await api.post<SmartAlbumRebuildResultDTO>('/smart-albums/rebuild', {});
+      const task = await api.post<SmartAlbumRebuildTaskDTO>('/smart-albums/rebuild', {});
+      setCurrentRebuildTask(task);
+      const isTaskActive = task.status === 'pending' || task.status === 'running';
+      setIsRebuilding(isTaskActive);
+      if (isTaskActive) {
+        window.localStorage.setItem(SMART_ALBUM_REBUILD_TASK_STORAGE_KEY, task.taskId);
+        startRebuildPolling(task.taskId);
+      } else {
+        window.localStorage.removeItem(SMART_ALBUM_REBUILD_TASK_STORAGE_KEY);
+      }
+      return task;
     } catch (err) {
       setError(err instanceof Error ? err.message : '重建自动整理失败');
+      setIsRebuilding(false);
       return null;
     }
-  }, []);
+  }, [startRebuildPolling]);
 
   const fetchRules = useCallback(async () => {
     setError(null);
@@ -188,17 +267,52 @@ export function useSmartAlbums() {
     }
   }, []);
 
+  useEffect(() => {
+    const persistedTaskId = window.localStorage.getItem(SMART_ALBUM_REBUILD_TASK_STORAGE_KEY);
+    if (!persistedTaskId) {
+      return;
+    }
+
+    void (async () => {
+      const status = await getRebuildStatus(persistedTaskId);
+      if (!status) {
+        window.localStorage.removeItem(SMART_ALBUM_REBUILD_TASK_STORAGE_KEY);
+        setIsRebuilding(false);
+        return;
+      }
+
+      setCurrentRebuildTask(status);
+      if (status.status === 'pending' || status.status === 'running') {
+        setIsRebuilding(true);
+        startRebuildPolling(status.taskId);
+        return;
+      }
+
+      setIsRebuilding(false);
+      window.localStorage.removeItem(SMART_ALBUM_REBUILD_TASK_STORAGE_KEY);
+    })();
+  }, [getRebuildStatus, startRebuildPolling]);
+
+  useEffect(() => {
+    return () => {
+      clearRebuildPolling();
+    };
+  }, [clearRebuildPolling]);
+
   return {
     smartAlbums,
     smartAlbumDetail,
     smartAlbumMembers,
     rules,
     aiConfig,
+    currentRebuildTask,
+    isRebuilding,
     isLoading,
     error,
     fetchSmartAlbums,
     fetchSmartAlbumDetail,
     rebuildSmartAlbums,
+    getRebuildStatus,
     fetchRules,
     createRule,
     updateRule,

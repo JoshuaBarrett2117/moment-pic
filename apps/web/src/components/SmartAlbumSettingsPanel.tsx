@@ -35,6 +35,8 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
   const {
     rules,
     aiConfig,
+    currentRebuildTask,
+    isRebuilding,
     isLoading,
     error,
     fetchRules,
@@ -46,7 +48,11 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
     saveAiConfig,
     testAiConnection,
     rebuildSmartAlbums
-  } = useSmartAlbums();
+  } = useSmartAlbums({
+    onRebuildComplete: async () => {
+      await onRebuildComplete?.();
+    }
+  });
   const isMobile = useMobile();
   const { toast } = useToast();
   const [draftRule, setDraftRule] = useState(DEFAULT_RULE);
@@ -58,7 +64,7 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
   const [aiTokenInput, setAiTokenInput] = useState('');
   const [testingAiConnection, setTestingAiConnection] = useState(false);
   const [aiConnectionSummary, setAiConnectionSummary] = useState<string>('');
-  const [isRebuilding, setIsRebuilding] = useState(false);
+  const [handledRebuildTaskId, setHandledRebuildTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     void fetchRules();
@@ -71,6 +77,23 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
       setAiTokenInput('');
     }
   }, [aiConfig]);
+
+  useEffect(() => {
+    if (!currentRebuildTask || handledRebuildTaskId === currentRebuildTask.taskId) {
+      return;
+    }
+
+    if (currentRebuildTask.status === 'completed') {
+      setHandledRebuildTaskId(currentRebuildTask.taskId);
+      toast(`自动整理已重建，生成 ${currentRebuildTask.result?.smartAlbumsDiscovered ?? 0} 个自动整理`, 'success');
+      return;
+    }
+
+    if (currentRebuildTask.status === 'failed') {
+      setHandledRebuildTaskId(currentRebuildTask.taskId);
+      toast(currentRebuildTask.error || '自动整理重建失败', 'error');
+    }
+  }, [currentRebuildTask, handledRebuildTaskId, toast]);
 
   const normalizedPatterns = useMemo(
     () => draftRule.patterns.map((item) => item.trim()).filter(Boolean),
@@ -206,15 +229,14 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
   };
 
   const handleRebuild = async () => {
-    setIsRebuilding(true);
-    const result = await rebuildSmartAlbums();
-    setIsRebuilding(false);
-    if (!result) {
+    const task = await rebuildSmartAlbums();
+    if (!task) {
       toast('自动整理重建失败', 'error');
       return;
     }
-    await onRebuildComplete?.();
-    toast(`自动整理已重建，生成 ${result.smartAlbumsDiscovered} 个自动整理`, 'success');
+    if (task.status === 'pending' || task.status === 'running') {
+      toast('自动整理已开始后台重建，页面会自动轮询结果', 'info');
+    }
   };
 
   return (
@@ -232,13 +254,21 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="text-lg font-bold text-on-surface">自动整理重建</h3>
-            <p className="mt-1 text-sm text-outline">修改规则或 AI 配置后，重建一次即可重新生成自动整理。</p>
+            <p className="mt-1 text-sm text-outline">修改规则或 AI 配置后，重建任务会在后台执行，页面会自动轮询完成状态。</p>
           </div>
           <WobblyButton onClick={handleRebuild} disabled={isRebuilding} className="w-full text-base md:w-auto md:text-lg">
             {isRebuilding ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
             重建自动整理
           </WobblyButton>
         </div>
+        {currentRebuildTask && (
+          <p className="rounded-xl bg-surface-container-high px-4 py-3 text-sm text-outline">
+            {currentRebuildTask.status === 'pending' && '自动整理重建任务已创建，等待后台开始执行。'}
+            {currentRebuildTask.status === 'running' && '自动整理正在后台重建中，页面会自动刷新完成状态。'}
+            {currentRebuildTask.status === 'completed' && `自动整理重建已完成，生成 ${currentRebuildTask.result?.smartAlbumsDiscovered ?? 0} 个自动整理。`}
+            {currentRebuildTask.status === 'failed' && `自动整理重建失败：${currentRebuildTask.error || '未知错误'}`}
+          </p>
+        )}
         {testSummary && <p className="rounded-xl bg-surface-container-high px-4 py-3 text-sm text-outline">{testSummary}</p>}
       </div>
 

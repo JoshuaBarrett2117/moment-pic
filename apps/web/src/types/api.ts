@@ -229,3 +229,13 @@ export type SmartAlbumRebuildResultDTO = {
   smartAlbumsDiscovered: number;
   membersDiscovered: number;
 };
+
+export type SmartAlbumRebuildTaskDTO = {
+  taskId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+  result: SmartAlbumRebuildResultDTO | null;
+};

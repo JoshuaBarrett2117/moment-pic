@@ -90,7 +90,8 @@ export const createOpenAiChatCompletion = async (
   const endpoint = normalizeOpenAiEndpoint(config.endpoint);
   const url = buildChatCompletionsUrl(endpoint);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 30000);
+  const timeoutMs = options.timeoutMs ?? 30000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
@@ -127,8 +128,12 @@ export const createOpenAiChatCompletion = async (
     }
 
     return text.trim();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`OpenAI 接口请求超时，${timeoutMs}ms 内未收到响应`);
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
 };
-

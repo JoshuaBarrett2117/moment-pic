@@ -155,6 +155,10 @@ const bootstrap = (db: Database.Database) => {
       id TEXT PRIMARY KEY DEFAULT 'smart_album_ai_config',
       enabled INTEGER NOT NULL DEFAULT 0,
       mode TEXT NOT NULL DEFAULT 'assist',
+      provider TEXT NOT NULL DEFAULT 'openai',
+      api_endpoint TEXT NOT NULL DEFAULT 'https://api.openai.com/v1',
+      api_token TEXT,
+      api_model TEXT NOT NULL DEFAULT 'gpt-4.1-mini',
       min_confidence_auto_apply REAL NOT NULL DEFAULT 0.9,
       min_cluster_album_count INTEGER NOT NULL DEFAULT 3,
       max_suggestions_per_run INTEGER NOT NULL DEFAULT 50,
@@ -206,6 +210,18 @@ const bootstrap = (db: Database.Database) => {
   try {
     db.exec('ALTER TABLE albums ADD COLUMN assets_fingerprint TEXT');
   } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_ai_configs ADD COLUMN provider TEXT NOT NULL DEFAULT 'openai'");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_ai_configs ADD COLUMN api_endpoint TEXT NOT NULL DEFAULT 'https://api.openai.com/v1'");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_ai_configs ADD COLUMN api_token TEXT");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_ai_configs ADD COLUMN api_model TEXT NOT NULL DEFAULT 'gpt-4.1-mini'");
+  } catch (e) {}
 
   try {
     db.exec(`
@@ -244,6 +260,10 @@ const bootstrap = (db: Database.Database) => {
         id,
         enabled,
         mode,
+        provider,
+        api_endpoint,
+        api_token,
+        api_model,
         min_confidence_auto_apply,
         min_cluster_album_count,
         max_suggestions_per_run,
@@ -259,6 +279,10 @@ const bootstrap = (db: Database.Database) => {
         'smart_album_ai_config',
         0,
         'assist',
+        'openai',
+        'https://api.openai.com/v1',
+        NULL,
+        'gpt-4.1-mini',
         0.9,
         3,
         50,

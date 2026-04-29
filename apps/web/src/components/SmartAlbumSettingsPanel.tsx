@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Bot, Edit2, Plus, RefreshCw, Save, Search, Sparkles, Trash2, Wand2, X } from 'lucide-react';
-import { useSmartAlbums } from '../hooks';
+import { AlertCircle, Bot, Edit2, Link2, Plus, RefreshCw, Save, Search, Sparkles, Trash2, Wand2, X } from 'lucide-react';
+import { useMobile, useSmartAlbums } from '../hooks';
 import { WobblyButton } from './WobblyButton';
 import { useToast } from './Toast';
 import type { SmartAlbumAiConfigDTO, SmartAlbumRuleDTO } from '../types/api';
@@ -44,8 +44,10 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
     testRule,
     fetchAiConfig,
     saveAiConfig,
+    testAiConnection,
     rebuildSmartAlbums
   } = useSmartAlbums();
+  const isMobile = useMobile();
   const { toast } = useToast();
   const [draftRule, setDraftRule] = useState(DEFAULT_RULE);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
@@ -53,6 +55,9 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
   const [testSummary, setTestSummary] = useState<string>('');
   const [savingAi, setSavingAi] = useState(false);
   const [localAiConfig, setLocalAiConfig] = useState<SmartAlbumAiConfigDTO | null>(null);
+  const [aiTokenInput, setAiTokenInput] = useState('');
+  const [testingAiConnection, setTestingAiConnection] = useState(false);
+  const [aiConnectionSummary, setAiConnectionSummary] = useState<string>('');
   const [isRebuilding, setIsRebuilding] = useState(false);
 
   useEffect(() => {
@@ -63,6 +68,7 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
   useEffect(() => {
     if (aiConfig) {
       setLocalAiConfig(aiConfig);
+      setAiTokenInput('');
     }
   }, [aiConfig]);
 
@@ -152,6 +158,10 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
     const result = await saveAiConfig({
       enabled: localAiConfig.enabled,
       mode: localAiConfig.mode,
+      provider: 'openai',
+      apiEndpoint: localAiConfig.apiEndpoint,
+      apiModel: localAiConfig.apiModel,
+      apiToken: aiTokenInput.trim() ? aiTokenInput.trim() : undefined,
       minConfidenceAutoApply: localAiConfig.minConfidenceAutoApply,
       minClusterAlbumCount: localAiConfig.minClusterAlbumCount,
       maxSuggestionsPerRun: localAiConfig.maxSuggestionsPerRun,
@@ -166,7 +176,33 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
       toast('AI 配置保存失败', 'error');
       return;
     }
+    setLocalAiConfig(result);
+    setAiTokenInput('');
     toast('AI 配置已保存', 'success');
+  };
+
+  const handleTestAiConnection = async () => {
+    if (!localAiConfig) {
+      return;
+    }
+
+    setTestingAiConnection(true);
+    const result = await testAiConnection({
+      provider: 'openai',
+      apiEndpoint: localAiConfig.apiEndpoint,
+      apiModel: localAiConfig.apiModel,
+      apiToken: aiTokenInput.trim() ? aiTokenInput.trim() : undefined
+    });
+    setTestingAiConnection(false);
+
+    if (!result) {
+      setAiConnectionSummary('连接测试失败，请检查后端报错信息。');
+      toast('AI 连接测试失败', 'error');
+      return;
+    }
+
+    setAiConnectionSummary(`${result.success ? '成功' : '失败'} · ${result.latencyMs}ms · ${result.message}`);
+    toast(result.success ? 'AI 连接测试成功' : 'AI 连接测试失败', result.success ? 'success' : 'error');
   };
 
   const handleRebuild = async () => {
@@ -182,7 +218,7 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 md:space-y-8">
       {error && (
         <div className="rounded-2xl bg-error-container px-4 py-3 text-on-error-container">
           <div className="flex items-center gap-2">
@@ -192,13 +228,13 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
         </div>
       )}
 
-      <div className="rounded-2xl bg-surface-container-highest p-6 shadow-sm">
+      <div className="rounded-2xl bg-surface-container-highest p-4 shadow-sm md:p-6">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="text-lg font-bold text-on-surface">自动整理重建</h3>
             <p className="mt-1 text-sm text-outline">修改规则或 AI 配置后，重建一次即可重新生成自动整理。</p>
           </div>
-          <WobblyButton onClick={handleRebuild} disabled={isRebuilding}>
+          <WobblyButton onClick={handleRebuild} disabled={isRebuilding} className="w-full text-base md:w-auto md:text-lg">
             {isRebuilding ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
             重建自动整理
           </WobblyButton>
@@ -206,7 +242,7 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
         {testSummary && <p className="rounded-xl bg-surface-container-high px-4 py-3 text-sm text-outline">{testSummary}</p>}
       </div>
 
-      <div className="rounded-2xl bg-surface-container-highest p-6 shadow-sm">
+      <div className="rounded-2xl bg-surface-container-highest p-4 shadow-sm md:p-6">
         <div className="mb-4 flex items-center gap-3">
           <Wand2 className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-bold text-on-surface">{editingRuleId ? '编辑归纳规则' : '新增归纳规则'}</h3>
@@ -286,8 +322,8 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
             />
           </label>
         </div>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <WobblyButton onClick={handleSubmitRule}>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <WobblyButton onClick={handleSubmitRule} className="w-full text-base sm:w-auto md:text-lg">
             {editingRuleId ? <Save className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
             {editingRuleId ? '保存修改' : '新增规则'}
           </WobblyButton>
@@ -297,7 +333,7 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
                 setEditingRuleId(null);
                 setDraftRule(DEFAULT_RULE);
               }}
-              className="rounded-2xl bg-surface-container-high px-4 py-3 text-sm font-semibold text-on-surface"
+              className="rounded-2xl bg-surface-container-high px-4 py-3 text-sm font-semibold text-on-surface sm:w-auto"
             >
               <X className="mr-2 inline h-4 w-4" />
               取消编辑
@@ -306,7 +342,7 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
         </div>
       </div>
 
-      <div className="rounded-2xl bg-surface-container-highest p-6 shadow-sm">
+      <div className="rounded-2xl bg-surface-container-highest p-4 shadow-sm md:p-6">
         <div className="mb-4 flex items-center gap-3">
           <Search className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-bold text-on-surface">规则列表</h3>
@@ -327,13 +363,14 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
                   </p>
                   <p className="mt-2 text-sm text-outline/80">关键词：{rule.patterns.join('、')}</p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                   <button onClick={() => handleToggleRule(rule)} className="rounded-xl bg-surface px-3 py-2 text-sm font-semibold text-on-surface">
                     {rule.enabled ? '停用' : '启用'}
                   </button>
                   <button
                     onClick={() => handleEditRule(rule)}
                     className="rounded-xl bg-surface px-3 py-2 text-sm font-semibold text-on-surface"
+                    title="编辑规则"
                   >
                     <Edit2 className="h-4 w-4" />
                   </button>
@@ -344,7 +381,7 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
                   >
                     {testingRuleId === rule.id ? '测试中...' : '测试命中'}
                   </button>
-                  <button onClick={() => void handleDeleteRule(rule.id)} className="rounded-xl bg-error-container px-3 py-2 text-sm font-semibold text-on-error-container">
+                  <button onClick={() => void handleDeleteRule(rule.id)} className="rounded-xl bg-error-container px-3 py-2 text-sm font-semibold text-on-error-container" title="删除规则">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -356,7 +393,7 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
       </div>
 
       {localAiConfig && (
-        <div className="rounded-2xl bg-surface-container-highest p-6 shadow-sm">
+        <div className="rounded-2xl bg-surface-container-highest p-4 shadow-sm md:p-6">
           <div className="mb-4 flex items-center gap-3">
             <Bot className="h-5 w-5 text-primary" />
             <h3 className="text-lg font-bold text-on-surface">AI 自动归纳配置</h3>
@@ -374,6 +411,14 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
               </select>
             </label>
             <label className="space-y-2">
+              <span className="text-sm font-medium text-outline">服务商</span>
+              <input
+                value="OpenAI Compatible"
+                disabled
+                className="w-full rounded-xl border-2 border-outline/20 bg-surface-container-high px-4 py-3 text-outline"
+              />
+            </label>
+            <label className="space-y-2">
               <span className="text-sm font-medium text-outline">运行模式</span>
               <select
                 value={localAiConfig.mode}
@@ -384,6 +429,37 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
                 <option value="auto_low_risk">低风险自动应用</option>
                 <option value="full_auto">全自动</option>
               </select>
+            </label>
+            <label className="space-y-2 md:col-span-2">
+              <span className="text-sm font-medium text-outline">API 端点</span>
+              <input
+                value={localAiConfig.apiEndpoint}
+                onChange={(event) => setLocalAiConfig((prev) => prev ? { ...prev, apiEndpoint: event.target.value } : prev)}
+                className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+                placeholder="https://api.openai.com/v1"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-outline">模型</span>
+              <input
+                value={localAiConfig.apiModel}
+                onChange={(event) => setLocalAiConfig((prev) => prev ? { ...prev, apiModel: event.target.value } : prev)}
+                className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+                placeholder="gpt-4.1-mini"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-outline">Token</span>
+              <input
+                type="password"
+                value={aiTokenInput}
+                onChange={(event) => setAiTokenInput(event.target.value)}
+                className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+                placeholder={localAiConfig.hasApiToken ? `已保存：${localAiConfig.apiTokenMasked ?? '******'}` : '输入新的 OpenAI Token'}
+              />
+              <p className="text-xs text-outline/70">
+                {localAiConfig.hasApiToken ? '留空将继续使用当前已保存 Token。' : '当前还没有保存 Token。'}
+              </p>
             </label>
             <label className="space-y-2">
               <span className="text-sm font-medium text-outline">自动应用置信度阈值</span>
@@ -417,8 +493,19 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
               />
             </label>
           </div>
-          <div className="mt-4">
-            <WobblyButton onClick={handleSaveAiConfig} disabled={savingAi}>
+          {aiConnectionSummary && (
+            <p className="mt-4 rounded-xl bg-surface-container-high px-4 py-3 text-sm text-outline">{aiConnectionSummary}</p>
+          )}
+          <div className={`mt-4 flex ${isMobile ? 'flex-col' : 'flex-row flex-wrap'} gap-3`}>
+            <button
+              onClick={() => void handleTestAiConnection()}
+              disabled={testingAiConnection}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-surface-container-high px-4 py-3 text-sm font-semibold text-on-surface disabled:opacity-50 md:w-auto"
+            >
+              {testingAiConnection ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Link2 className="h-5 w-5" />}
+              测试连接
+            </button>
+            <WobblyButton onClick={handleSaveAiConfig} disabled={savingAi} className="w-full text-base md:w-auto md:text-lg">
               {savingAi ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
               保存 AI 配置
             </WobblyButton>

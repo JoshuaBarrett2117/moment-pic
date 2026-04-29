@@ -191,6 +191,11 @@ export type SmartAlbumAiConfigDTO = {
   id: string;
   enabled: boolean;
   mode: SmartAlbumAiModeDTO;
+  provider: "openai";
+  apiEndpoint: string;
+  apiModel: string;
+  hasApiToken: boolean;
+  apiTokenMasked: string | null;
   minConfidenceAutoApply: number;
   minClusterAlbumCount: number;
   maxSuggestionsPerRun: number;
@@ -201,6 +206,14 @@ export type SmartAlbumAiConfigDTO = {
   reviewRequiredBelowConfidence: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type SmartAlbumAiConnectionTestDTO = {
+  success: boolean;
+  message: string;
+  endpoint: string;
+  model: string;
+  latencyMs: number;
 };
 
 export type SmartAlbumRuleTestResultDTO = {

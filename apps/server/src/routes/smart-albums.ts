@@ -8,6 +8,7 @@ import {
   listSmartAlbumRules,
   listSmartAlbums,
   rebuildSmartAlbums,
+  testSmartAlbumAiConnection,
   testSmartAlbumRule,
   updateSmartAlbumAiConfig
 } from "../services/smart-album-service.js";
@@ -88,5 +89,10 @@ export const smartAlbumRoutes: FastifyPluginAsync = async (app) => {
   app.put("/api/v1/smart-album-ai-config", async (request) => {
     const body = request.body as Parameters<typeof updateSmartAlbumAiConfig>[0];
     return ok(await updateSmartAlbumAiConfig(body));
+  });
+
+  app.post("/api/v1/smart-album-ai-config/test", async (request) => {
+    const body = request.body as Parameters<typeof testSmartAlbumAiConnection>[0];
+    return ok(await testSmartAlbumAiConnection(body));
   });
 };

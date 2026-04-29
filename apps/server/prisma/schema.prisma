@@ -248,6 +248,10 @@ model SmartAlbumAiConfig {
   id                       String            @id @default("smart_album_ai_config")
   enabled                  Boolean           @default(false)
   mode                     SmartAlbumAiMode  @default(assist)
+  provider                 String            @default("openai")
+  apiEndpoint              String            @default("https://api.openai.com/v1")
+  apiToken                 String?
+  apiModel                 String            @default("gpt-4.1-mini")
   minConfidenceAutoApply   Float             @default(0.9)
   minClusterAlbumCount     Int               @default(3)
   maxSuggestionsPerRun     Int               @default(50)

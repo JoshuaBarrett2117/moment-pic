@@ -142,6 +142,10 @@ export type SmartAlbumAiConfigRecord = {
   id: string;
   enabled: boolean;
   mode: SmartAlbumAiMode;
+  provider: "openai";
+  apiEndpoint: string;
+  apiToken: string | null;
+  apiModel: string;
   minConfidenceAutoApply: number;
   minClusterAlbumCount: number;
   maxSuggestionsPerRun: number;

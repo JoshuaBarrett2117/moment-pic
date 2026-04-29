@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { api } from '../lib/api';
 import type {
   SmartAlbumAiConfigDTO,
+  SmartAlbumAiConnectionTestDTO,
   SmartAlbumDetailDTO,
   SmartAlbumMemberDTO,
   SmartAlbumMembersListDTO,
@@ -13,7 +14,29 @@ import type {
 } from '../types/api';
 
 type SmartAlbumRuleUpsertInput = Omit<SmartAlbumRuleDTO, 'id' | 'createdAt' | 'updatedAt'>;
-type SmartAlbumAiConfigUpdateInput = Omit<SmartAlbumAiConfigDTO, 'id' | 'createdAt' | 'updatedAt'>;
+type SmartAlbumAiConfigUpdateInput = {
+  enabled: boolean;
+  mode: SmartAlbumAiConfigDTO['mode'];
+  provider: 'openai';
+  apiEndpoint: string;
+  apiModel: string;
+  apiToken?: string | null;
+  minConfidenceAutoApply: number;
+  minClusterAlbumCount: number;
+  maxSuggestionsPerRun: number;
+  allowAliasMerge: boolean;
+  allowCrossRootGrouping: boolean;
+  excludedTokens: string[];
+  preferredScopes: SmartAlbumAiConfigDTO['preferredScopes'];
+  reviewRequiredBelowConfidence: number;
+};
+
+type SmartAlbumAiConnectionTestInput = {
+  provider?: 'openai';
+  apiEndpoint?: string;
+  apiModel?: string;
+  apiToken?: string | null;
+};
 
 export function useSmartAlbums() {
   const [smartAlbums, setSmartAlbums] = useState<SmartAlbumsListDTO | null>(null);
@@ -155,6 +178,16 @@ export function useSmartAlbums() {
     }
   }, []);
 
+  const testAiConnection = useCallback(async (input?: SmartAlbumAiConnectionTestInput) => {
+    setError(null);
+    try {
+      return await api.post<SmartAlbumAiConnectionTestDTO>('/smart-album-ai-config/test', input ?? {});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '测试 AI 连接失败');
+      return null;
+    }
+  }, []);
+
   return {
     smartAlbums,
     smartAlbumDetail,
@@ -172,6 +205,7 @@ export function useSmartAlbums() {
     deleteRule,
     testRule,
     fetchAiConfig,
-    saveAiConfig
+    saveAiConfig,
+    testAiConnection
   };
 }

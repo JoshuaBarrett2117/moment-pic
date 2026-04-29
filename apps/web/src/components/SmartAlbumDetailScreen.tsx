@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ArrowLeft, Layers3, Sparkles } from 'lucide-react';
+import { ArrowLeft, Sparkles } from 'lucide-react';
 import { useSmartAlbums } from '../hooks';
 import { ThrottledImage } from './ThrottledImage';
 
@@ -37,29 +37,18 @@ export const SmartAlbumDetailScreen: React.FC<SmartAlbumDetailScreenProps> = ({ 
       ) : smartAlbumDetail ? (
         <>
           <div className="mb-8 rounded-[2rem] bg-surface-container-highest p-6 shadow-lg">
-            <div className="flex flex-col gap-6 md:flex-row md:items-center">
-              <div className="w-full max-w-xs overflow-hidden rounded-[1.5rem] bg-surface-container-high">
-                {smartAlbumDetail.coverUrl ? (
-                  <ThrottledImage className="aspect-square w-full object-cover" src={smartAlbumDetail.coverUrl} alt={smartAlbumDetail.name} />
-                ) : (
-                  <div className="flex aspect-square items-center justify-center">
-                    <Layers3 className="h-16 w-16 text-outline/20" />
-                  </div>
-                )}
+            <div className="flex flex-col gap-4">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full bg-primary-container px-4 py-2 text-sm font-semibold text-on-primary-container">
+                <Sparkles className="h-4 w-4" />
+                自动整理
               </div>
-              <div className="flex-1">
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-primary-container px-4 py-2 text-sm font-semibold text-on-primary-container">
-                  <Sparkles className="h-4 w-4" />
-                  自动整理
-                </div>
-                <h1 className="text-3xl font-black text-on-surface md:text-5xl">{smartAlbumDetail.name}</h1>
-                <p className="mt-3 text-sm text-outline md:text-base">
-                  共收纳 {smartAlbumDetail.albumCount} 个普通图集，累计 {smartAlbumDetail.assetCount} 张图片
-                </p>
-                {smartAlbumDetail.sourceSummary && (
-                  <p className="mt-3 text-sm text-outline/80">命中摘要：{smartAlbumDetail.sourceSummary}</p>
-                )}
-              </div>
+              <h1 className="text-3xl font-black text-on-surface md:text-5xl">{smartAlbumDetail.name}</h1>
+              <p className="text-sm text-outline md:text-base">
+                共收纳 {smartAlbumDetail.albumCount} 个普通图集，累计 {smartAlbumDetail.assetCount} 张图片
+              </p>
+              {smartAlbumDetail.sourceSummary && (
+                <p className="text-sm text-outline/80">命中摘要：{smartAlbumDetail.sourceSummary}</p>
+              )}
             </div>
           </div>
 

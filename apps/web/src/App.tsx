@@ -8,12 +8,13 @@ import { api } from './lib/api';
 
 const STORAGE_KEY = 'gallery_filters';
 type GalleryViewMode = 'albums' | 'smartAlbums';
+type GallerySortBy = 'name' | 'updatedAt' | 'assetCount' | 'albumCount';
 
 interface GalleryFilters {
   page: number;
   pageSize: number;
   keyword: string;
-  sortBy: 'name' | 'updatedAt' | 'assetCount';
+  sortBy: GallerySortBy;
   sortOrder: 'asc' | 'desc';
   sourceType: '' | 'folder' | 'zip';
   libraryRootId: string;
@@ -47,7 +48,7 @@ const parseFiltersFromUrl = (): Partial<GalleryFilters> => {
   }
 
   const sortBy = params.get('sortBy');
-  if (sortBy === 'name' || sortBy === 'updatedAt' || sortBy === 'assetCount') {
+  if (sortBy === 'name' || sortBy === 'updatedAt' || sortBy === 'assetCount' || sortBy === 'albumCount') {
     result.sortBy = sortBy;
   }
 
@@ -120,6 +121,10 @@ const buildUrl = (
   filters: GalleryFilters,
   navigation: { screen: Screen; selectedAlbumId?: string | null; selectedSmartAlbumId?: string | null; isRecentActive?: boolean; galleryViewMode?: GalleryViewMode }
 ) => {
+  if (navigation.screen === Screen.LOGIN) {
+    return window.location.pathname;
+  }
+
   const params = new URLSearchParams();
   params.set('page', String(filters.page));
   params.set('pageSize', String(filters.pageSize));
@@ -170,13 +175,14 @@ const syncFiltersToUrl = (filters: GalleryFilters, navigation: UrlNavigationStat
   }
 };
 
-const getInitialFilters = (): GalleryFilters => {
+const getInitialFilters = (initialViewMode: GalleryViewMode): GalleryFilters => {
   const urlFilters = parseFiltersFromUrl();
+  const defaultSortBy: GallerySortBy = initialViewMode === 'smartAlbums' ? 'albumCount' : 'updatedAt';
   return {
     page: urlFilters.page || 1,
     pageSize: urlFilters.pageSize || 24,
     keyword: urlFilters.keyword || '',
-    sortBy: urlFilters.sortBy || 'updatedAt',
+    sortBy: urlFilters.sortBy || defaultSortBy,
     sortOrder: urlFilters.sortOrder || 'desc',
     sourceType: urlFilters.sourceType || '',
     libraryRootId: urlFilters.libraryRootId || '',
@@ -198,20 +204,10 @@ const SettingsScreen = lazy(() =>
     default: module.SettingsScreen
   }))
 );
-const SmartAlbumGalleryScreen = lazy(() =>
-  import('./components/SmartAlbumGalleryScreen').then((module) => ({
-    default: module.SmartAlbumGalleryScreen
-  }))
-);
-const SmartAlbumDetailScreen = lazy(() =>
-  import('./components/SmartAlbumDetailScreen').then((module) => ({
-    default: module.SmartAlbumDetailScreen
-  }))
-);
 
 export default function App() {
-  const initialFilters = getInitialFilters();
   const initialNavigation = parseNavigationFromUrl();
+  const initialFilters = getInitialFilters(initialNavigation.galleryViewMode);
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(initialNavigation.selectedAlbumId);
   const [selectedSmartAlbum, setSelectedSmartAlbum] = useState<string | null>(initialNavigation.selectedSmartAlbumId);
@@ -271,12 +267,25 @@ export default function App() {
     [filters, galleryViewMode]
   );
 
+  const resetToLogin = useCallback(() => {
+    localStorage.removeItem('auth_token');
+    setIsAuthenticated(false);
+    setCurrentScreen(Screen.LOGIN);
+    setActiveTab('gallery');
+    setIsRecentActive(false);
+    setGalleryViewMode('albums');
+    setSelectedAlbum(null);
+    setSelectedSmartAlbum(null);
+    setNextAlbumId(null);
+    syncHistory(Screen.LOGIN, { replace: true, isRecentActive: false, galleryViewMode: 'albums' });
+  }, [syncHistory]);
+
   const loadAlbums = useCallback(() => {
     return fetchAlbums({
       page: filters.page,
       pageSize: filters.pageSize,
       keyword: debouncedKeyword || undefined,
-      sortBy: filters.sortBy,
+      sortBy: filters.sortBy === 'albumCount' ? 'updatedAt' : filters.sortBy,
       sortOrder: filters.sortOrder,
       sourceType: filters.sourceType || undefined,
       libraryRootId: filters.libraryRootId || undefined,
@@ -288,7 +297,13 @@ export default function App() {
       page: filters.page,
       pageSize: filters.pageSize,
       keyword: debouncedKeyword || undefined,
-      sortBy: filters.sortBy === 'assetCount' ? 'assetCount' : filters.sortBy === 'name' ? 'name' : 'updatedAt',
+      sortBy: filters.sortBy === 'albumCount'
+        ? 'albumCount'
+        : filters.sortBy === 'assetCount'
+          ? 'assetCount'
+          : filters.sortBy === 'name'
+            ? 'name'
+            : 'updatedAt',
       sortOrder: filters.sortOrder
     });
   }, [debouncedKeyword, fetchSmartAlbums, filters.page, filters.pageSize, filters.sortBy, filters.sortOrder]);
@@ -352,19 +367,24 @@ export default function App() {
   );
 
   useEffect(() => {
-    const initialUrl = buildUrl(initialFilters, {
-      screen: initialNavigation.screen,
-      selectedAlbumId: initialNavigation.selectedAlbumId,
-      isRecentActive: initialNavigation.isRecentActive,
-    });
+    const hasToken = Boolean(localStorage.getItem('auth_token'));
+    const initialScreen = hasToken ? initialNavigation.screen : Screen.LOGIN;
+    const initialUrl = hasToken
+      ? buildUrl(initialFilters, {
+          screen: initialNavigation.screen,
+          selectedAlbumId: initialNavigation.selectedAlbumId,
+          isRecentActive: initialNavigation.isRecentActive,
+        })
+      : window.location.pathname;
+
     window.history.replaceState(
       {
-        screen: currentScreen,
-        selectedAlbum: initialNavigation.selectedAlbumId,
-        selectedSmartAlbum: initialNavigation.selectedSmartAlbumId,
-        activeTab: initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery',
-        isRecentActive: initialNavigation.isRecentActive,
-        galleryViewMode: initialNavigation.galleryViewMode,
+        screen: initialScreen,
+        selectedAlbum: hasToken ? initialNavigation.selectedAlbumId : null,
+        selectedSmartAlbum: hasToken ? initialNavigation.selectedSmartAlbumId : null,
+        activeTab: hasToken && initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery',
+        isRecentActive: hasToken ? initialNavigation.isRecentActive : false,
+        galleryViewMode: hasToken ? initialNavigation.galleryViewMode : 'albums',
       },
       '',
       initialUrl
@@ -374,33 +394,42 @@ export default function App() {
   useEffect(() => {
     const verifyAuth = async () => {
       const token = localStorage.getItem('auth_token');
-      if (token) {
-        try {
-          await api.get('/albums', { page: 1, pageSize: 1 });
-          setIsAuthenticated(true);
-          setSelectedAlbum(initialNavigation.selectedAlbumId);
-          setSelectedSmartAlbum(initialNavigation.selectedSmartAlbumId);
-          setIsRecentActive(initialNavigation.isRecentActive);
-          setGalleryViewMode(initialNavigation.galleryViewMode);
-          setActiveTab(initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery');
-          syncHistory(initialNavigation.screen, {
-            replace: true,
-            selectedAlbumId: initialNavigation.selectedAlbumId,
-            selectedSmartAlbumId: initialNavigation.selectedSmartAlbumId,
-            isRecentActive: initialNavigation.isRecentActive,
-            galleryViewMode: initialNavigation.galleryViewMode,
-          });
-          setCurrentScreen(initialNavigation.screen);
-        } catch {
-          localStorage.removeItem('auth_token');
-          setIsAuthenticated(false);
-          setCurrentScreen(Screen.LOGIN);
-          syncHistory(Screen.LOGIN, { replace: true });
-        }
+      if (!token) {
+        resetToLogin();
+        return;
+      }
+
+      try {
+        await api.get('/albums', { page: 1, pageSize: 1 });
+        setIsAuthenticated(true);
+        setSelectedAlbum(initialNavigation.selectedAlbumId);
+        setSelectedSmartAlbum(initialNavigation.selectedSmartAlbumId);
+        setIsRecentActive(initialNavigation.isRecentActive);
+        setGalleryViewMode(initialNavigation.galleryViewMode);
+        setActiveTab(initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery');
+        syncHistory(initialNavigation.screen, {
+          replace: true,
+          selectedAlbumId: initialNavigation.selectedAlbumId,
+          selectedSmartAlbumId: initialNavigation.selectedSmartAlbumId,
+          isRecentActive: initialNavigation.isRecentActive,
+          galleryViewMode: initialNavigation.galleryViewMode,
+        });
+        setCurrentScreen(initialNavigation.screen);
+      } catch {
+        resetToLogin();
       }
     };
     verifyAuth();
-  }, [initialNavigation.galleryViewMode, initialNavigation.isRecentActive, initialNavigation.screen, initialNavigation.selectedAlbumId, initialNavigation.selectedSmartAlbumId, syncHistory]);
+  }, [initialNavigation.galleryViewMode, initialNavigation.isRecentActive, initialNavigation.screen, initialNavigation.selectedAlbumId, initialNavigation.selectedSmartAlbumId, resetToLogin]);
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      resetToLogin();
+    };
+
+    window.addEventListener('moment-pic-auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('moment-pic-auth-expired', handleAuthExpired);
+  }, [resetToLogin]);
 
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -511,7 +540,7 @@ export default function App() {
       page: nextFilters.page,
       pageSize: nextFilters.pageSize,
       keyword: nextFilters.keyword || undefined,
-      sortBy: nextFilters.sortBy,
+      sortBy: nextFilters.sortBy === 'albumCount' ? 'updatedAt' : nextFilters.sortBy,
       sortOrder: nextFilters.sortOrder,
       sourceType: nextFilters.sourceType || undefined,
       libraryRootId: undefined,
@@ -571,7 +600,7 @@ export default function App() {
         page: nextFilters.page,
         pageSize: nextFilters.pageSize,
         keyword: nextFilters.keyword || undefined,
-        sortBy: nextFilters.sortBy,
+        sortBy: nextFilters.sortBy === 'albumCount' ? 'updatedAt' : nextFilters.sortBy,
         sortOrder: nextFilters.sortOrder,
         sourceType: nextFilters.sourceType || undefined,
         libraryRootId: undefined,
@@ -596,7 +625,7 @@ export default function App() {
     setActiveTab('gallery');
     setIsRecentActive(false);
     setGalleryViewMode('smartAlbums');
-    setFilters(prev => ({ ...prev, libraryRootId: '', page: 1 }));
+    setFilters(prev => ({ ...prev, libraryRootId: '', page: 1, sortBy: 'albumCount', sortOrder: 'desc' }));
     setScrollPosition(0);
     navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'smartAlbums' });
   };
@@ -606,7 +635,7 @@ export default function App() {
     setScrollPosition(0);
   };
 
-  const handleSortByChange = (sortBy: 'name' | 'updatedAt' | 'assetCount') => {
+  const handleSortByChange = (sortBy: GallerySortBy) => {
     setFilters(prev => ({ ...prev, sortBy, page: 1 }));
     setScrollPosition(0);
   };
@@ -642,7 +671,7 @@ export default function App() {
       page: nextFilters.page,
       pageSize: nextFilters.pageSize,
       keyword: nextFilters.keyword || undefined,
-      sortBy: nextFilters.sortBy,
+      sortBy: nextFilters.sortBy === 'albumCount' ? 'updatedAt' : nextFilters.sortBy,
       sortOrder: nextFilters.sortOrder,
       sourceType: nextFilters.sourceType || undefined,
       libraryRootId: nextFilters.libraryRootId || undefined,
@@ -702,71 +731,48 @@ export default function App() {
                 </div>
               }
             >
-              {galleryViewMode === 'smartAlbums' ? (
-                <SmartAlbumGalleryScreen
-                  smartAlbums={smartAlbums?.items || []}
-                  isLoading={isSmartAlbumsLoading}
-                  pagination={smartAlbums?.pagination || null}
-                  libraryRoots={libraryRoots}
-                  onLibraryRootChange={handleLibraryRootChange}
-                  activeTab={activeTab}
-                  onSidebarNavigate={handleSidebarNavigate}
-                  onScanAll={handleRefreshAll}
-                  onScanOne={handleRefreshOne}
-                  isAnyScanning={isAnyScanning}
-                  isScanning={isScanning}
-                  onRecentClick={handleRecentClick}
-                  onSmartAlbumsClick={handleSmartAlbumsClick}
-                  onProfileClick={handleProfileClick}
-                  onNavigateToSmartAlbum={handleNavigateToSmartAlbum}
-                  onPageChange={handlePageChange}
-                  onPageSizeChange={handlePageSizeChange}
-                  onKeywordChange={handleKeywordChange}
-                  onSortByChange={(sortBy) => handleSortByChange(sortBy as 'name' | 'updatedAt' | 'assetCount')}
-                  onSortOrderChange={handleSortOrderChange}
-                  currentPageSize={filters.pageSize}
-                  currentKeyword={filters.keyword}
-                  currentSortBy={filters.sortBy as 'name' | 'updatedAt' | 'albumCount' | 'assetCount'}
-                  currentSortOrder={filters.sortOrder}
-                />
-              ) : (
-                <GalleryScreen 
-                  albums={isRecentActive ? (recentAlbums || []) : (albums?.items || [])}
-                  isLoading={isRecentActive ? isRecentLoading : isLoading}
-                  pagination={isRecentActive ? null : (albums?.pagination || null)}
-                  onNavigateToAlbum={handleNavigateToAlbum}
-                  onProfileClick={handleProfileClick}
-                  onRefresh={isRecentActive ? handleRecentClick : loadAlbums}
-                  onPageChange={handlePageChange}
-                  onSortByChange={handleSortByChange}
-                  onSortOrderChange={handleSortOrderChange}
-                  onPageSizeChange={handlePageSizeChange}
-                  onSourceTypeChange={handleSourceTypeChange}
-                  currentSortBy={filters.sortBy}
-                  currentSortOrder={filters.sortOrder}
-                  currentPageSize={filters.pageSize}
-                  currentSourceType={filters.sourceType}
-                  currentKeyword={filters.keyword}
-                  activeTab={activeTab}
-                  onSidebarNavigate={handleSidebarNavigate}
-                  libraryRoots={libraryRoots}
-                  currentLibraryRootId={filters.libraryRootId}
-                  onLibraryRootChange={handleLibraryRootChange}
-                  onKeywordChange={handleKeywordChange}
-                  onScanAll={handleRefreshAll}
-                  onScanOne={handleRefreshOne}
-                  isAnyScanning={isAnyScanning}
-                  isScanning={isScanning}
-                  scanningLibraryRootId={scanningLibraryRootId}
-                  onAlbumDeleted={loadAlbums}
-                  onRecentClick={handleRecentClick}
-                  isRecentActive={isRecentActive}
-                  scrollPosition={scrollPosition}
-                  onScrollPositionChange={setScrollPosition}
-                  onSmartAlbumsClick={handleSmartAlbumsClick}
-                  isSmartAlbumsActive={false}
-                />
-              )}
+              <GalleryScreen
+                displayMode={galleryViewMode}
+                albums={galleryViewMode === 'smartAlbums'
+                  ? (smartAlbums?.items || [])
+                  : (isRecentActive ? (recentAlbums || []) : (albums?.items || []))}
+                isLoading={galleryViewMode === 'smartAlbums'
+                  ? isSmartAlbumsLoading
+                  : (isRecentActive ? isRecentLoading : isLoading)}
+                pagination={galleryViewMode === 'smartAlbums'
+                  ? (smartAlbums?.pagination || null)
+                  : (isRecentActive ? null : (albums?.pagination || null))}
+                onNavigateToAlbum={galleryViewMode === 'smartAlbums' ? handleNavigateToSmartAlbum : handleNavigateToAlbum}
+                onProfileClick={handleProfileClick}
+                onRefresh={galleryViewMode === 'smartAlbums' ? loadSmartAlbums : (isRecentActive ? handleRecentClick : loadAlbums)}
+                onPageChange={handlePageChange}
+                onSortByChange={handleSortByChange}
+                onSortOrderChange={handleSortOrderChange}
+                onPageSizeChange={handlePageSizeChange}
+                onSourceTypeChange={galleryViewMode === 'smartAlbums' ? undefined : handleSourceTypeChange}
+                currentSortBy={filters.sortBy}
+                currentSortOrder={filters.sortOrder}
+                currentPageSize={filters.pageSize}
+                currentSourceType={filters.sourceType}
+                currentKeyword={filters.keyword}
+                activeTab={activeTab}
+                onSidebarNavigate={handleSidebarNavigate}
+                libraryRoots={libraryRoots}
+                currentLibraryRootId={galleryViewMode === 'smartAlbums' ? '' : filters.libraryRootId}
+                onLibraryRootChange={handleLibraryRootChange}
+                onKeywordChange={handleKeywordChange}
+                onScanAll={handleRefreshAll}
+                onScanOne={handleRefreshOne}
+                isAnyScanning={isAnyScanning}
+                isScanning={isScanning}
+                onAlbumDeleted={loadAlbums}
+                onRecentClick={handleRecentClick}
+                isRecentActive={galleryViewMode === 'smartAlbums' ? false : isRecentActive}
+                scrollPosition={scrollPosition}
+                onScrollPositionChange={setScrollPosition}
+                onSmartAlbumsClick={handleSmartAlbumsClick}
+                isSmartAlbumsActive={galleryViewMode === 'smartAlbums'}
+              />
             </Suspense>
           )}
           {currentScreen === Screen.ALBUM_DETAIL && (
@@ -777,8 +783,9 @@ export default function App() {
                 </div>
               }
             >
-              <AlbumDetailScreen 
-                albumId={selectedAlbum || ''} 
+              <AlbumDetailScreen
+                mode="album"
+                albumId={selectedAlbum || ''}
                 onBack={handleBackToGallery}
                 onRequestNextAlbum={nextAlbumId ? () => handleNavigateToAlbum(nextAlbumId) : undefined}
               />
@@ -806,7 +813,8 @@ export default function App() {
                 </div>
               }
             >
-              <SmartAlbumDetailScreen
+              <AlbumDetailScreen
+                mode="smartAlbum"
                 smartAlbumId={selectedSmartAlbum}
                 onBack={handleBackToGallery}
                 onNavigateToAlbum={handleNavigateToAlbum}

@@ -11,6 +11,9 @@ interface ViewerGalleryProps {
   isOpen: boolean;
   onClose: () => void;
   onRequestNextAlbum?: () => void;
+  onRequestMoreItems?: () => Promise<boolean>;
+  hasMoreItems?: boolean;
+  isLoadingMoreItems?: boolean;
   initialIndex?: number;
   defaultQualityPreset?: ImageQualityPreset;
   preloadBefore?: number;
@@ -22,6 +25,9 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   isOpen,
   onClose,
   onRequestNextAlbum,
+  onRequestMoreItems,
+  hasMoreItems = false,
+  isLoadingMoreItems = false,
   initialIndex = 0,
   defaultQualityPreset = 'original',
   preloadBefore = 0,
@@ -83,6 +89,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const [showEndPrompt, setShowEndPrompt] = useState(false);
   const [qualityPreset, setQualityPreset] = useState<ImageQualityPreset>(defaultQualityPreset);
   const [showQualityPanel, setShowQualityPanel] = useState(false);
+  const [isRequestingMoreItems, setIsRequestingMoreItems] = useState(false);
+  const [pendingAdvanceAfterLoad, setPendingAdvanceAfterLoad] = useState(false);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
   const lastTouchDistance = useRef<number>(0);
@@ -107,7 +115,15 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       setShowQualityPanel(false);
       setShowEndPrompt(false);
     }
-  }, [defaultQualityPreset, initialIndex, isOpen, images.length, readSessionQualityPreset, resetView]);
+  }, [defaultQualityPreset, initialIndex, isOpen, readSessionQualityPreset, resetView]);
+
+  useEffect(() => {
+    if (images.length === 0) {
+      return;
+    }
+
+    setActiveIndex((prev) => Math.min(prev, images.length - 1));
+  }, [images.length]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -178,19 +194,44 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     resetView();
   }, [images.length, resetView]);
 
-  const goToNext = useCallback(() => {
+  const goToNext = useCallback(async () => {
     if (images.length === 0) {
       return;
     }
 
-    if (activeIndex >= images.length - 1) {
-      setShowEndPrompt(true);
+    if (activeIndex < images.length - 1) {
+      setActiveIndex((prev) => prev + 1);
+      resetView();
       return;
     }
 
-    setActiveIndex((prev) => prev + 1);
-    resetView();
-  }, [activeIndex, images.length, resetView]);
+    if (hasMoreItems && onRequestMoreItems) {
+      if (isLoadingMoreItems || isRequestingMoreItems) {
+        return;
+      }
+
+      setPendingAdvanceAfterLoad(true);
+      setIsRequestingMoreItems(true);
+      setShowEndPrompt(false);
+
+      try {
+        const didLoadMore = await onRequestMoreItems();
+        if (!didLoadMore) {
+          setPendingAdvanceAfterLoad(false);
+          setShowEndPrompt(true);
+        }
+      } catch {
+        setPendingAdvanceAfterLoad(false);
+        setShowEndPrompt(true);
+      } finally {
+        setIsRequestingMoreItems(false);
+      }
+
+      return;
+    }
+
+    setShowEndPrompt(true);
+  }, [activeIndex, hasMoreItems, images.length, isLoadingMoreItems, isRequestingMoreItems, onRequestMoreItems, resetView]);
 
   const handleClose = useCallback(() => {
     setActiveIndex(0);
@@ -281,6 +322,18 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       setShowQualityPanel(false);
     }
   }, [showControls]);
+
+  useEffect(() => {
+    if (!pendingAdvanceAfterLoad) {
+      return;
+    }
+
+    if (activeIndex < images.length - 1) {
+      setPendingAdvanceAfterLoad(false);
+      setActiveIndex((prev) => Math.min(prev + 1, images.length - 1));
+      resetView();
+    }
+  }, [activeIndex, images.length, pendingAdvanceAfterLoad, resetView]);
 
   const handleZoomIn = useCallback(() => {
     setScale((prev) => Math.min(prev * 1.2, 6));

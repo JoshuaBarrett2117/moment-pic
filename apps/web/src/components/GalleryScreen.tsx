@@ -1,27 +1,30 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Plus, ArrowRight, ChevronLeft, ChevronRight, Search, X, Images } from 'lucide-react';
+import { Plus, ArrowRight, ChevronLeft, ChevronRight, Search, X, Images, Layers3, SlidersHorizontal } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { ThrottledImage } from './ThrottledImage';
 import { useMobile, useSystemConfig, useWideMobile } from '../hooks';
-import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO } from '../types/api';
+import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO, SmartAlbumListItemDTO } from '../types/api';
+
+type GalleryDisplayMode = 'albums' | 'smartAlbums';
 
 interface GalleryScreenProps {
-  albums: AlbumListItemDTO[];
+  displayMode?: GalleryDisplayMode;
+  albums: Array<AlbumListItemDTO | SmartAlbumListItemDTO>;
   isLoading: boolean;
   pagination: PaginationDTO | null;
   onNavigateToAlbum: (albumId: string) => void;
   onProfileClick: () => void;
   onRefresh: () => void;
   onPageChange: (page: number) => void;
-  onSortByChange: (sortBy: 'name' | 'updatedAt' | 'assetCount') => void;
+  onSortByChange: (sortBy: 'name' | 'updatedAt' | 'assetCount' | 'albumCount') => void;
   onSortOrderChange: (sortOrder: 'asc' | 'desc') => void;
   onPageSizeChange: (pageSize: number) => void;
-  onSourceTypeChange: (sourceType: 'folder' | 'zip' | '') => void;
-  currentSortBy: 'name' | 'updatedAt' | 'assetCount';
+  onSourceTypeChange?: (sourceType: 'folder' | 'zip' | '') => void;
+  currentSortBy: 'name' | 'updatedAt' | 'assetCount' | 'albumCount';
   currentSortOrder: 'asc' | 'desc';
   currentPageSize: number;
-  currentSourceType: 'folder' | 'zip' | '';
+  currentSourceType?: 'folder' | 'zip' | '';
   currentKeyword: string;
   activeTab: 'gallery' | 'settings';
   onSidebarNavigate: (tab: 'gallery' | 'settings') => void;
@@ -51,7 +54,10 @@ const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP = 300;
 const RENDER_CHUNK_SIZE = 72;
 
+const isStandardAlbum = (album: AlbumListItemDTO | SmartAlbumListItemDTO): album is AlbumListItemDTO => 'sourceType' in album;
+
 export const GalleryScreen: React.FC<GalleryScreenProps> = ({
+  displayMode = 'albums',
   albums,
   isLoading,
   pagination,
@@ -66,7 +72,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   currentSortBy,
   currentSortOrder,
   currentPageSize,
-  currentSourceType,
+  currentSourceType = '',
   currentKeyword,
   activeTab,
   onSidebarNavigate,
@@ -92,15 +98,17 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
+  const isSmartAlbumsMode = displayMode === 'smartAlbums';
 
   const totalPages = pagination ? Math.ceil(pagination.total / pagination.pageSize) : 1;
   const currentPage = pagination?.page || 1;
   const renderedAlbums = useMemo(() => albums.slice(0, visibleCount), [albums, visibleCount]);
   const hasActiveFilters =
-    Boolean(currentKeyword || currentSourceType || currentLibraryRootId) ||
+    Boolean(currentKeyword) ||
     currentSortBy !== 'updatedAt' ||
     currentSortOrder !== 'desc' ||
-    currentPageSize !== 24;
+    currentPageSize !== 24 ||
+    (!isSmartAlbumsMode && Boolean(currentSourceType || currentLibraryRootId));
   const albumListItemMinWidth = isMobile
     ? (isWideMobile
       ? (systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP)
@@ -111,6 +119,35 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     ? `relative z-10 mb-4 flex w-auto items-center justify-between bg-surface/92 py-3 ${isWideMobile ? '-mx-6 px-6' : '-mx-4 px-4'}`
     : 'relative z-10 -mx-4 mb-4 flex w-auto items-center justify-between bg-surface/92 px-4 py-3 md:mx-0 md:mb-8 md:bg-transparent md:px-0 md:py-0';
   const gridGapClass = isWideMobile ? 'gap-5' : 'gap-4 md:gap-6';
+  const sortOptions = isSmartAlbumsMode
+    ? [
+        { value: 'updatedAt', label: '更新时间' },
+        { value: 'name', label: '名称' },
+        { value: 'albumCount', label: '图集数' },
+        { value: 'assetCount', label: '图片数' },
+      ]
+    : [
+        { value: 'name', label: '名称' },
+        { value: 'updatedAt', label: '更新时间' },
+        { value: 'assetCount', label: '图片数量' },
+      ];
+  const pageSizeOptions = [12, 24, 48, 96];
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.05 },
+    },
+  };
+  const itemVariants = {
+    hidden: { opacity: 0, y: 30, scale: 0.95 },
+    show: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: { type: 'spring', stiffness: 260, damping: 20 },
+    },
+  };
 
   React.useLayoutEffect(() => {
     if (scrollPosition !== undefined && mainRef.current) {
@@ -168,39 +205,13 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     onNavigateToAlbum(albumId);
   };
 
-  const sortOptions = [
-    { value: 'name', label: '名称' },
-    { value: 'updatedAt', label: '更新时间' },
-    { value: 'assetCount', label: '图片数量' },
-  ];
-
-  const pageSizeOptions = [12, 24, 48, 96];
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.05 },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 30, scale: 0.95 },
-    show: {
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: { type: 'spring', stiffness: 260, damping: 20 },
-    },
-  };
-
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden">
       <Sidebar
         activeTab={activeTab}
         onNavigate={onSidebarNavigate}
         libraryRoots={libraryRoots}
-        currentLibraryRootId={currentLibraryRootId}
+        currentLibraryRootId={isSmartAlbumsMode ? '' : currentLibraryRootId}
         onLibraryRootChange={onLibraryRootChange}
         onScanAll={onScanAll}
         onScanOne={onScanOne}
@@ -220,10 +231,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         <header className={headerClass}>
           <div className="flex flex-col gap-1">
             <h1 className={`font-script font-bold leading-tight tracking-tighter text-on-surface ${isWideMobile ? 'text-3xl' : 'text-2xl md:text-6xl'}`}>
-              瞬间图库
+              {isSmartAlbumsMode ? '自动整理' : '瞬间图库'}
             </h1>
             <p className={`font-body text-base text-outline/70 ${isMobile ? 'block text-sm' : 'hidden md:block md:text-xl'}`}>
-              更懂你的，也更懂你如何整理回忆
+              {isSmartAlbumsMode ? '让归纳好的系列图集自己浮现出来' : '更懂你的，也更懂你如何整理回忆'}
             </p>
           </div>
           <button
@@ -244,6 +255,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             onClick={() => setIsFilterExpanded(!isFilterExpanded)}
             className="flex items-center gap-2 rounded-lg bg-surface-container-high px-4 py-2 text-sm md:hidden"
           >
+            {isSmartAlbumsMode ? <SlidersHorizontal className="h-4 w-4" /> : null}
             <span>筛选</span>
             <ChevronRight className={`h-4 w-4 transition-transform ${isFilterExpanded ? 'rotate-90' : ''}`} />
           </button>
@@ -253,7 +265,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               <div className="relative mb-3 w-full">
                 <input
                   className="w-full rounded-full border-2 border-outline/30 bg-surface-container-high py-2 pl-10 pr-10 text-sm outline-none placeholder:text-outline/50 focus:border-transparent focus:ring-2 focus:ring-primary-container"
-                  placeholder="搜索相册名称"
+                  placeholder={isSmartAlbumsMode ? '搜索自动整理名称' : '搜索相册名称'}
                   type="text"
                   value={currentKeyword}
                   onChange={(e) => onKeywordChange(e.target.value)}
@@ -271,24 +283,26 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               </div>
 
               <div className="flex flex-wrap items-center gap-2 md:gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="hidden text-sm text-outline sm:inline">来源:</span>
-                  <select
-                    value={currentSourceType}
-                    onChange={(e) => onSourceTypeChange(e.target.value as 'folder' | 'zip' | '')}
-                    className="cursor-pointer rounded-lg bg-surface-container-high px-2 py-2 text-sm outline-none md:px-3"
-                  >
-                    <option value="">全部</option>
-                    <option value="folder">文件夹</option>
-                    <option value="zip">压缩包</option>
-                  </select>
-                </div>
+                {!isSmartAlbumsMode && onSourceTypeChange && (
+                  <div className="flex items-center gap-2">
+                    <span className="hidden text-sm text-outline sm:inline">来源:</span>
+                    <select
+                      value={currentSourceType}
+                      onChange={(e) => onSourceTypeChange(e.target.value as 'folder' | 'zip' | '')}
+                      className="cursor-pointer rounded-lg bg-surface-container-high px-2 py-2 text-sm outline-none md:px-3"
+                    >
+                      <option value="">全部</option>
+                      <option value="folder">文件夹</option>
+                      <option value="zip">压缩包</option>
+                    </select>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-2">
                   <span className="hidden text-sm text-outline sm:inline">排序:</span>
                   <select
                     value={currentSortBy}
-                    onChange={(e) => onSortByChange(e.target.value as 'name' | 'updatedAt' | 'assetCount')}
+                    onChange={(e) => onSortByChange(e.target.value as 'name' | 'updatedAt' | 'assetCount' | 'albumCount')}
                     className="cursor-pointer rounded-lg bg-surface-container-high px-2 py-2 text-sm outline-none md:px-3"
                   >
                     {sortOptions.map((opt) => (
@@ -324,7 +338,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 <button
                   onClick={() => {
                     onKeywordChange('');
-                    onSourceTypeChange('');
+                    onSourceTypeChange?.('');
                     onSortByChange('updatedAt');
                     onSortOrderChange('desc');
                     onPageSizeChange(24);
@@ -387,17 +401,68 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               </div>
               <div className="space-y-2 text-center">
                 <p className="font-headline text-2xl font-bold tracking-tight text-on-surface">
-                  {hasActiveFilters ? '没有找到匹配的相册' : '这里还是一片空白'}
+                  {hasActiveFilters
+                    ? (isSmartAlbumsMode ? '没有找到匹配的自动整理' : '没有找到匹配的相册')
+                    : (isSmartAlbumsMode ? '还没有生成自动整理' : '这里还是一片空白')}
                 </p>
                 <p className="text-sm text-outline/80">
                   {hasActiveFilters
                     ? '试试清空筛选条件，或者换一个关键词。'
-                    : '去左侧边栏找到“设置”，导入你的第一个瞬间图库吧。'}
+                    : (isSmartAlbumsMode
+                      ? '先到设置里的“智能归纳”新增规则，再重建一次自动整理。'
+                      : '去左侧边栏找到“设置”，导入你的第一个瞬间图库吧。')}
                 </p>
               </div>
             </motion.div>
           ) : (
             renderedAlbums.map((album, idx) => {
+              if (isSmartAlbumsMode && !isStandardAlbum(album)) {
+                return (
+                  <motion.div
+                    key={album.id}
+                    variants={itemVariants}
+                    whileHover={isMobile ? undefined : { scale: 1.015, rotate: idx % 2 === 0 ? 0.35 : -0.35, zIndex: 10 }}
+                    className="group cursor-pointer"
+                  >
+                    <button
+                      onClick={() => handleNavigateToAlbum(album.id)}
+                      className="relative w-full rounded-xl bg-surface-container-highest p-4 text-left shadow-lg transition-all duration-300 hover:shadow-xl"
+                    >
+                      <div className="absolute -top-3 -right-2 z-10 rounded-full border border-black/5 bg-primary-container px-4 py-1 text-xs font-bold text-on-primary-container shadow-sm rotate-12">
+                        {album.albumCount} 套图集
+                      </div>
+                      <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-xl">
+                        {album.coverUrl ? (
+                          <ThrottledImage
+                            key="cover"
+                            className="col-span-3 h-full w-full object-cover"
+                            src={album.coverUrl}
+                            alt={album.name}
+                          />
+                        ) : (
+                          <div className="col-span-3 flex h-full items-center justify-center bg-surface-container-high">
+                            <Layers3 className="h-12 w-12 text-outline/20" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-4 px-2 pb-2">
+                        <h3 className="mb-1 truncate font-headline text-lg font-bold leading-tight text-on-surface" title={album.name}>
+                          {album.name}
+                        </h3>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold uppercase tracking-wider text-outline">{album.assetCount} 张</span>
+                          <ArrowRight className="h-4 w-4 text-outline/30 transition-all group-hover:translate-x-1 group-hover:text-primary" />
+                        </div>
+                      </div>
+                    </button>
+                  </motion.div>
+                );
+              }
+
+              if (!isStandardAlbum(album)) {
+                return null;
+              }
+
               const colorScheme = tagColors[album.sourceType] || tagColors.folder;
 
               return (
@@ -510,9 +575,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             </span>
           </div>
         )}
-
       </main>
     </div>
   );
 };
-

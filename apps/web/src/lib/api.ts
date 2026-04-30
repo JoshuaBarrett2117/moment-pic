@@ -33,7 +33,7 @@ class ApiClient {
         if (error.response?.status === 401) {
           localStorage.removeItem('auth_token');
           document.cookie = 'moment_pic_auth=; Max-Age=0; Path=/; HttpOnly';
-          window.location.href = '/';
+          window.dispatchEvent(new Event('moment-pic-auth-expired'));
         }
         return Promise.reject(error);
       }

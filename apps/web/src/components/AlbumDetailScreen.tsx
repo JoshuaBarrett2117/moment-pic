@@ -35,11 +35,16 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   const [visibleRenderCount, setVisibleRenderCount] = useState(RENDER_CHUNK_SIZE);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
+  const loadedItemsRef = useRef<AssetListItemDTO[]>([]);
+
+  useEffect(() => {
+    loadedItemsRef.current = loadedItems;
+  }, [loadedItems]);
 
   const loadPage = useCallback(
-    async (targetPage: number, append: boolean) => {
+    async (targetPage: number, append: boolean): Promise<boolean> => {
       if (!albumId) {
-        return;
+        return false;
       }
 
       if (append) {
@@ -48,29 +53,42 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
 
       const result = await fetchAssets(albumId, { page: targetPage, pageSize: PAGE_SIZE });
 
-      if (result) {
-        setCurrentPage(result.pagination.page);
-        setTotalItems(result.pagination.total);
-        setLoadedItems((prev) => {
-          if (!append) {
-            return result.items;
-          }
-
-          const existingIds = new Set(prev.map((item) => item.id));
-          const nextItems = result.items.filter((item) => !existingIds.has(item.id));
-          return [...prev, ...nextItems];
-        });
+      if (!result) {
+        if (append) {
+          setIsLoadingMore(false);
+        }
+        return false;
       }
+
+      const existingIds = append ? new Set(loadedItemsRef.current.map((item) => item.id)) : new Set<string>();
+      const nextItems = append
+        ? result.items.filter((item) => !existingIds.has(item.id))
+        : result.items;
+
+      setCurrentPage(result.pagination.page);
+      setTotalItems(result.pagination.total);
+      setLoadedItems((prev) => {
+        if (!append) {
+          return result.items;
+        }
+
+        const prevIds = new Set(prev.map((item) => item.id));
+        const deduplicatedNextItems = result.items.filter((item) => !prevIds.has(item.id));
+        return [...prev, ...deduplicatedNextItems];
+      });
 
       if (append) {
         setIsLoadingMore(false);
       }
+
+      return nextItems.length > 0;
     },
     [albumId, fetchAssets]
   );
 
   useEffect(() => {
     setLoadedItems([]);
+    loadedItemsRef.current = [];
     setCurrentPage(0);
     setTotalItems(0);
     setVisibleRenderCount(RENDER_CHUNK_SIZE);
@@ -161,6 +179,14 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     toast('图集已重新扫描', 'success');
     setIsRescanningAlbum(false);
   }, [albumId, isRescanningAlbum, loadPage, toast]);
+
+  const handleLoadMoreForViewer = useCallback(async (): Promise<boolean> => {
+    if (isLoadingMore || loadedItems.length >= totalItems) {
+      return false;
+    }
+
+    return loadPage(currentPage + 1, true);
+  }, [currentPage, isLoadingMore, loadedItems.length, loadPage, totalItems]);
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-surface">
@@ -324,6 +350,9 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           initialIndex={selectedImageIndex}
           onClose={() => setSelectedImageIndex(null)}
           onRequestNextAlbum={onRequestNextAlbum}
+          onRequestMoreItems={handleLoadMoreForViewer}
+          hasMoreItems={hasMore}
+          isLoadingMoreItems={isLoadingMore}
           defaultQualityPreset={systemConfig?.defaultImageQualityPreset ?? 'original'}
           preloadBefore={preloadBefore}
           preloadAfter={preloadAfter}

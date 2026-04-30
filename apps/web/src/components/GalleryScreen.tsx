@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Plus, ArrowRight, ChevronLeft, ChevronRight, Search, X, Images, Layers3, SlidersHorizontal } from 'lucide-react';
+import { Plus, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Search, X, Images, Layers3, SlidersHorizontal } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { ThrottledImage } from './ThrottledImage';
 import { useMobile, useSystemConfig, useWideMobile } from '../hooks';
@@ -43,6 +43,11 @@ interface GalleryScreenProps {
   onScrollPositionChange?: (position: number) => void;
   onSmartAlbumsClick: () => void;
   isSmartAlbumsActive: boolean;
+  headerTitle?: string;
+  headerDescription?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  onBack?: () => void;
 }
 
 const tagColors: Record<string, { bg: string; text: string }> = {
@@ -90,6 +95,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onScrollPositionChange,
   onSmartAlbumsClick,
   isSmartAlbumsActive,
+  headerTitle,
+  headerDescription,
+  emptyTitle,
+  emptyDescription,
+  onBack,
 }) => {
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
@@ -131,6 +141,16 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         { value: 'updatedAt', label: '更新时间' },
         { value: 'assetCount', label: '图片数量' },
       ];
+  const resolvedHeaderTitle = headerTitle ?? (isSmartAlbumsMode ? '自动整理' : '瞬间图库');
+  const resolvedHeaderDescription = headerDescription ?? (isSmartAlbumsMode ? '让归纳好的系列图集自己浮现出来' : '更懂你的，也更懂你如何整理回忆');
+  const resolvedEmptyTitle = emptyTitle ?? (hasActiveFilters
+    ? (isSmartAlbumsMode ? '没有找到匹配的自动整理' : '没有找到匹配的相册')
+    : (isSmartAlbumsMode ? '还没有生成自动整理' : '这里还是一片空白'));
+  const resolvedEmptyDescription = emptyDescription ?? (hasActiveFilters
+    ? '试试清空筛选条件，或者换一个关键词。'
+    : (isSmartAlbumsMode
+      ? '先到设置里的“智能归纳”新增规则，再重建一次自动整理。'
+      : '去左侧边栏找到“设置”，导入你的第一个瞬间图库吧。'));
   const pageSizeOptions = [12, 24, 48, 96];
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -229,12 +249,21 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         className={`relative h-full flex-1 overflow-y-auto bg-surface custom-scrollbar ${mainPaddingClass}`}
       >
         <header className={headerClass}>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="flex w-fit items-center gap-1 rounded-full bg-surface-container-high px-3 py-1.5 text-sm text-outline transition-colors hover:text-on-surface"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                返回
+              </button>
+            )}
             <h1 className={`font-script font-bold leading-tight tracking-tighter text-on-surface ${isWideMobile ? 'text-3xl' : 'text-2xl md:text-6xl'}`}>
-              {isSmartAlbumsMode ? '自动整理' : '瞬间图库'}
+              {resolvedHeaderTitle}
             </h1>
             <p className={`font-body text-base text-outline/70 ${isMobile ? 'block text-sm' : 'hidden md:block md:text-xl'}`}>
-              {isSmartAlbumsMode ? '让归纳好的系列图集自己浮现出来' : '更懂你的，也更懂你如何整理回忆'}
+              {resolvedHeaderDescription}
             </p>
           </div>
           <button
@@ -400,18 +429,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
                 </motion.div>
               </div>
               <div className="space-y-2 text-center">
-                <p className="font-headline text-2xl font-bold tracking-tight text-on-surface">
-                  {hasActiveFilters
-                    ? (isSmartAlbumsMode ? '没有找到匹配的自动整理' : '没有找到匹配的相册')
-                    : (isSmartAlbumsMode ? '还没有生成自动整理' : '这里还是一片空白')}
-                </p>
-                <p className="text-sm text-outline/80">
-                  {hasActiveFilters
-                    ? '试试清空筛选条件，或者换一个关键词。'
-                    : (isSmartAlbumsMode
-                      ? '先到设置里的“智能归纳”新增规则，再重建一次自动整理。'
-                      : '去左侧边栏找到“设置”，导入你的第一个瞬间图库吧。')}
-                </p>
+                <p className="font-headline text-2xl font-bold tracking-tight text-on-surface">{resolvedEmptyTitle}</p>
+                <p className="text-sm text-outline/80">{resolvedEmptyDescription}</p>
               </div>
             </motion.div>
           ) : (

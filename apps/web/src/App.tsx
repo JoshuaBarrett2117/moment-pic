@@ -5,6 +5,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { PaperGrain } from './components/PaperGrain';
 import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan, useRecentAlbums, recordAlbumView, useSmartAlbums } from './hooks';
 import { api } from './lib/api';
+import type { AlbumListItemDTO } from './types/api';
 
 const STORAGE_KEY = 'gallery_filters';
 type GalleryViewMode = 'albums' | 'smartAlbums';
@@ -224,8 +225,11 @@ export default function App() {
   const { albums, isLoading, error, fetchAlbums } = useAlbums();
   const {
     smartAlbums,
+    smartAlbumDetail,
+    smartAlbumMembers,
     isLoading: isSmartAlbumsLoading,
-    fetchSmartAlbums
+    fetchSmartAlbums,
+    fetchSmartAlbumDetail
   } = useSmartAlbums();
   const { recentAlbums, isLoading: isRecentLoading, fetchRecentAlbums } = useRecentAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
@@ -485,6 +489,14 @@ export default function App() {
   }, [isAuthenticated, currentScreen, loadAlbums, loadSmartAlbums, galleryViewMode]);
 
   useEffect(() => {
+    if (!isAuthenticated || currentScreen !== Screen.SMART_ALBUM_DETAIL || !selectedSmartAlbum) {
+      return;
+    }
+
+    void fetchSmartAlbumDetail(selectedSmartAlbum);
+  }, [currentScreen, fetchSmartAlbumDetail, isAuthenticated, selectedSmartAlbum]);
+
+  useEffect(() => {
     if (currentScreen === Screen.GALLERY && isAuthenticated) {
       syncFiltersToUrl(filters, {
         screen: Screen.GALLERY,
@@ -687,6 +699,40 @@ export default function App() {
     await scan(libraryRootId);
   };
 
+  const smartAlbumMemberSortBy = filters.sortBy === 'albumCount' ? 'updatedAt' : filters.sortBy;
+  const smartAlbumMemberAlbums = ((smartAlbumMembers || []).map((member) => ({
+    id: member.albumId,
+    name: member.name,
+    sourceType: member.sourceType,
+    assetCount: member.assetCount,
+    coverUrl: member.coverUrl,
+    updatedAt: member.updatedAt,
+  })) as AlbumListItemDTO[])
+    .filter((album) => {
+      if (filters.sourceType && album.sourceType !== filters.sourceType) {
+        return false;
+      }
+
+      if (!filters.keyword.trim()) {
+        return true;
+      }
+
+      return album.name.toLowerCase().includes(filters.keyword.trim().toLowerCase());
+    })
+    .sort((left, right) => {
+      const direction = filters.sortOrder === 'asc' ? 1 : -1;
+
+      if (smartAlbumMemberSortBy === 'name') {
+        return left.name.localeCompare(right.name, 'zh-CN') * direction;
+      }
+
+      if (smartAlbumMemberSortBy === 'assetCount') {
+        return (left.assetCount - right.assetCount) * direction;
+      }
+
+      return (new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime()) * direction;
+    });
+
   const variants = {
     enter: (direction: number) => ({
       x: direction > 0 ? '100%' : '-100%',
@@ -813,11 +859,50 @@ export default function App() {
                 </div>
               }
             >
-              <AlbumDetailScreen
-                mode="smartAlbum"
-                smartAlbumId={selectedSmartAlbum}
-                onBack={handleBackToGallery}
+              <GalleryScreen
+                displayMode="albums"
+                albums={smartAlbumMemberAlbums}
+                isLoading={isSmartAlbumsLoading}
+                pagination={null}
                 onNavigateToAlbum={handleNavigateToAlbum}
+                onProfileClick={handleProfileClick}
+                onRefresh={() => {
+                  void fetchSmartAlbumDetail(selectedSmartAlbum);
+                }}
+                onPageChange={() => {}}
+                onSortByChange={handleSortByChange}
+                onSortOrderChange={handleSortOrderChange}
+                onPageSizeChange={handlePageSizeChange}
+                onSourceTypeChange={handleSourceTypeChange}
+                currentSortBy={smartAlbumMemberSortBy}
+                currentSortOrder={filters.sortOrder}
+                currentPageSize={filters.pageSize}
+                currentSourceType={filters.sourceType}
+                currentKeyword={filters.keyword}
+                activeTab={activeTab}
+                onSidebarNavigate={handleSidebarNavigate}
+                libraryRoots={libraryRoots}
+                currentLibraryRootId=""
+                onLibraryRootChange={handleLibraryRootChange}
+                onKeywordChange={handleKeywordChange}
+                onScanAll={handleRefreshAll}
+                onScanOne={handleRefreshOne}
+                isAnyScanning={isAnyScanning}
+                isScanning={isScanning}
+                onAlbumDeleted={loadAlbums}
+                onRecentClick={handleRecentClick}
+                isRecentActive={false}
+                scrollPosition={scrollPosition}
+                onScrollPositionChange={setScrollPosition}
+                onSmartAlbumsClick={handleSmartAlbumsClick}
+                isSmartAlbumsActive
+                headerTitle={smartAlbumDetail?.name || '分类图集'}
+                headerDescription={smartAlbumDetail
+                  ? `当前自动整理共收纳 ${smartAlbumDetail.albumCount} 个分类图集，继续进入后才是图集内部图片。`
+                  : '正在加载分类图集...'}
+                emptyTitle="这个自动整理下还没有分类图集"
+                emptyDescription="请先重建自动整理，或者调整当前筛选条件。"
+                onBack={handleBackToGallery}
               />
             </Suspense>
           )}

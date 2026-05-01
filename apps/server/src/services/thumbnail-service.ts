@@ -7,8 +7,8 @@ import sharp from "sharp";
 
 import { env } from "../config/env.js";
 import type { AssetRecord } from "../types/store.js";
-import { findAssetByIdDb, findThumbnailByAssetIdDb, listAlbumCoverAssetIdsDb, makeId, updateAssetMetadataDb, upsertThumbnailDb } from "./sqlite-store.js";
 import { openArchiveEntryBody, readArchiveEntryBuffer } from "./archive.js";
+import { getGalleryRepository } from "./storage-provider.js";
 
 const DEFAULT_THUMBNAIL_WIDTH = 360;
 const DEFAULT_THUMBNAIL_HEIGHT = 360;
@@ -168,8 +168,10 @@ const normalizeMetadataDimensions = (metadata: sharp.Metadata): { width: number 
   };
 };
 
+const findAsset = async (assetId: string) => await getGalleryRepository().findAssetById(assetId);
+
 const syncAssetDimensions = async (input: {
-  asset: ReturnType<typeof findAssetByIdDb> extends infer T ? (T extends null ? never : T) : never;
+  asset: AssetRecord;
   buffer?: Buffer;
 }) => {
   const { asset } = input;
@@ -185,7 +187,7 @@ const syncAssetDimensions = async (input: {
   }
 
   if (asset.width !== normalized.width || asset.height !== normalized.height) {
-    updateAssetMetadataDb(asset.id, {
+    await getGalleryRepository().updateAssetMetadata(asset.id, {
       width: normalized.width,
       height: normalized.height,
       thumbnailKey: asset.thumbnailKey,
@@ -197,7 +199,7 @@ const syncAssetDimensions = async (input: {
 };
 
 const readOriginalBuffer = async (assetId: string) => {
-  const asset = findAssetByIdDb(assetId);
+  const asset = await findAsset(assetId);
 
   if (!asset) {
     throw new AssetNotFoundError(assetId);
@@ -275,7 +277,7 @@ const ensureThumbnailWithResolvedInput = async (input: {
   cacheKey: string;
   quality: number;
 }) => {
-  const asset = findAssetByIdDb(input.assetId);
+  const asset = await findAsset(input.assetId);
   if (!asset) {
     throw new AssetNotFoundError(input.assetId);
   }
@@ -284,7 +286,7 @@ const ensureThumbnailWithResolvedInput = async (input: {
   const canUseDbRecord = isDefaultSize && input.format === "jpeg";
   const fileExt = input.format === "webp" ? "webp" : "jpg";
   const filePath = path.join(env.cacheDir, `${input.cacheKey}.${fileExt}`);
-  const existing = canUseDbRecord ? findThumbnailByAssetIdDb(asset.id) : null;
+  const existing = canUseDbRecord ? await getGalleryRepository().findThumbnailByAssetId(asset.id) : null;
 
   if (existing?.cacheKey === input.cacheKey) {
     try {
@@ -308,14 +310,14 @@ const ensureThumbnailWithResolvedInput = async (input: {
     await syncAssetDimensions({ asset });
     if (canUseDbRecord && existing?.cacheKey !== input.cacheKey) {
       const updatedAt = new Date().toISOString();
-      updateAssetMetadataDb(asset.id, {
+      await getGalleryRepository().updateAssetMetadata(asset.id, {
         width: asset.width,
         height: asset.height,
         thumbnailKey: input.cacheKey,
         updatedAt
       });
-      upsertThumbnailDb({
-        id: existing?.id ?? makeId("thumb"),
+      await getGalleryRepository().upsertThumbnail({
+        id: existing?.id ?? getGalleryRepository().makeId("thumb"),
         assetId: asset.id,
         cacheKey: input.cacheKey,
         format: "jpeg",
@@ -398,15 +400,15 @@ const ensureThumbnailWithResolvedInput = async (input: {
       const metadata = await createSharp(buffer).metadata();
       const normalized = normalizeMetadataDimensions(metadata);
       const updatedAt = new Date().toISOString();
-      updateAssetMetadataDb(asset.id, {
+      await getGalleryRepository().updateAssetMetadata(asset.id, {
         width: normalized.width,
         height: normalized.height,
         thumbnailKey: finalCacheKey,
         updatedAt
       });
 
-      upsertThumbnailDb({
-        id: existing?.id ?? makeId("thumb"),
+      await getGalleryRepository().upsertThumbnail({
+        id: existing?.id ?? getGalleryRepository().makeId("thumb"),
         assetId: asset.id,
         cacheKey: finalCacheKey,
         format: "jpeg",
@@ -439,7 +441,7 @@ export const ensureThumbnail = async (
   }
 ) => {
   await ensureCacheDir();
-  const asset = findAssetByIdDb(assetId);
+  const asset = await findAsset(assetId);
   if (!asset) {
     throw new AssetNotFoundError(assetId);
   }
@@ -486,7 +488,7 @@ export const ensurePreview = async (
   }
 ) => {
   await ensureCacheDir();
-  const asset = findAssetByIdDb(assetId);
+  const asset = await findAsset(assetId);
   if (!asset) {
     throw new AssetNotFoundError(assetId);
   }
@@ -591,7 +593,7 @@ export const readOriginalImage = async (assetId: string) => {
 };
 
 export const openOriginalImage = async (assetId: string) => {
-  const asset = findAssetByIdDb(assetId);
+  const asset = await findAsset(assetId);
 
   if (!asset) {
     throw new AssetNotFoundError(assetId);
@@ -607,7 +609,7 @@ export const warmupCoverThumbnails = async (input?: {
   recentLimit?: number;
 }) => {
   const targetConcurrency = Math.max(1, Math.min(input?.concurrency ?? 3, 8));
-  const assetIds = listAlbumCoverAssetIdsDb(input?.libraryRootId, input?.limit ?? 2000);
+  const assetIds = await getGalleryRepository().listAlbumCoverAssetIds(input?.libraryRootId, input?.limit ?? 2000);
   const recentLimit = Math.max(1, Math.min(input?.recentLimit ?? 80, assetIds.length || 1));
   const recentAssetIds = assetIds.slice(0, recentLimit);
   const remainingAssetIds = assetIds.slice(recentLimit);

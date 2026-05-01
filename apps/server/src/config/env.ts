@@ -3,6 +3,22 @@ const toNumber = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const toBoolean = (value: string | undefined, fallback: boolean): boolean => {
+  if (!value) {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+};
+
 const splitLibraryRoots = (value: string | undefined): string[] => {
   if (!value?.trim()) {
     return [];
@@ -32,5 +48,11 @@ export const env = {
   cacheDir: process.env.CACHE_DIR ?? "./data/cache",
   indexFilePath: process.env.INDEX_FILE_PATH ?? "./data/index.json",
   sqlitePath: process.env.SQLITE_PATH ?? "./data/gallery.sqlite",
-  publicDir: process.env.PUBLIC_DIR ?? "./dist/public"
+  publicDir: process.env.PUBLIC_DIR ?? "./dist/public",
+  storageProfile: process.env.STORAGE_PROFILE ?? "auto",
+  databaseUrl: process.env.DATABASE_URL ?? `file:${process.env.SQLITE_PATH ?? "./data/gallery.sqlite"}`,
+  redisUrl: process.env.REDIS_URL?.trim() || "",
+  autoMigrateToPostgres: toBoolean(process.env.AUTO_MIGRATE_TO_POSTGRES, true),
+  autoImportLegacyJson: toBoolean(process.env.AUTO_IMPORT_LEGACY_JSON, true),
+  storageMigrationStrategy: process.env.STORAGE_MIGRATION_STRATEGY ?? "fail-fast"
 };

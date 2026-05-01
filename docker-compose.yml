@@ -1,26 +1,97 @@
 services:
   gallery:
     build: .
-    image: moment-pic:latest
+
+    # 容器名称，可按需修改
     container_name: moment-pic
-    ports:
-      - "${PORT:-3210}:3210"
-    environment:
-      HOST: "0.0.0.0"
-      PORT: "3210"
-      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
-      LIBRARY_ROOTS: "${LIBRARY_ROOTS:-/data/library}"
-      CACHE_DIR: "${CACHE_DIR:-/data/cache}"
-      SQLITE_PATH: "${SQLITE_PATH:-/data/gallery.sqlite}"
-      INDEX_FILE_PATH: "${INDEX_FILE_PATH:-/data/index.json}"
-      DATABASE_URL: "${DATABASE_URL:-file:/data/gallery.sqlite}"
-      LOG_LEVEL: "${LOG_LEVEL:-info}"
-    volumes:
-      - gallery-data:/data
-      - "C:/Users/a3875/Pictures/test:/test"
-      - "C:/Users/a3875/Pictures/test2:/test2"
-      - "Y:/其他/PIC:/test1"
+
+    # 构建后的本地镜像名
+    image: moment-pic:latest
+
+    # 开机自启，除非手动停止
     restart: unless-stopped
 
-volumes:
-  gallery-data:
+    ports:
+      # 宿主机端口:容器端口
+      # 左边的 3210 可以改成你想暴露的端口
+      - "3210:3210"
+
+    environment:
+      # 容器时区，影响日志时间
+      TZ: "Asia/Shanghai"
+
+      # 运行环境，生产部署建议保持 production
+      NODE_ENV: "production"
+
+      # 服务监听地址，Docker 中固定 0.0.0.0 即可
+      HOST: "0.0.0.0"
+
+      # 容器内监听端口，建议不要改
+      PORT: "3210"
+
+      # 后台登录密码，部署后请务必修改
+      ADMIN_PASSWORD: "admin"
+
+      # 图库根目录列表，和 volumes 中的容器内挂载路径保持一致
+      LIBRARY_ROOTS: "/library/main"
+
+      # 缩略图缓存目录
+      CACHE_DIR: "/data/cache"
+
+      # 轻量模式默认使用 SQLite；如需增强模式，可改成 PostgreSQL URL
+      DATABASE_URL: "file:/data/gallery.sqlite"
+
+      # 增强模式 Redis 地址；留空时保持轻量模式
+      REDIS_URL: ""
+
+      # auto: 自动判定；lite: 强制轻量模式；enhanced: 强制增强模式
+      STORAGE_PROFILE: "auto"
+
+      # 启动时自动把当前 SQLite 数据迁移到 PostgreSQL
+      AUTO_MIGRATE_TO_POSTGRES: "true"
+
+      # SQLite 不存在但 index.json 存在时，允许导入历史索引
+      AUTO_IMPORT_LEGACY_JSON: "true"
+
+      # 默认迁移失败直接阻止启动，避免误以为已经切到增强模式
+      STORAGE_MIGRATION_STRATEGY: "fail-fast"
+
+      # 日志级别，当前版本保留该变量，通常保持 info
+      LOG_LEVEL: "info"
+
+    volumes:
+      # 程序数据目录
+      # 内含数据库、缩略图缓存、索引文件
+      - "./data/docker:/data"
+
+      # 第一个宿主机图片目录 -> 容器内图库目录
+      # Windows 示例：D:/Pictures:/library/main:ro
+      # Linux 示例：/mnt/photos:/library/main:ro
+      - "./data/library-example:/library/main:ro"
+
+      # 如果要挂载多个目录，继续按下面格式追加即可
+      # - "D:/Comic:/library/comic:ro"
+      # - "E:/Archive:/library/archive:ro"
+
+  postgres:
+    profiles: ["enhanced"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: moment_pic
+      POSTGRES_USER: moment_pic
+      POSTGRES_PASSWORD: moment_pic
+      TZ: "Asia/Shanghai"
+    ports:
+      - "5432:5432"
+    volumes:
+      - "./data/postgres:/var/lib/postgresql/data"
+
+  redis:
+    profiles: ["enhanced"]
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - "./data/redis:/data"

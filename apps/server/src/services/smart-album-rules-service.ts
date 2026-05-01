@@ -1,6 +1,7 @@
 import type { SmartAlbumRuleDTO } from "../types/dto.js";
 import type { SmartAlbumRuleRecord } from "../types/store.js";
-import { deleteSmartAlbumRuleDb, findSmartAlbumRuleByIdDb, makeId, upsertSmartAlbumRuleDb } from "./sqlite-store.js";
+import { getGalleryRepository } from "./storage-provider.js";
+import { clearSmartAlbumQueryCaches, clearSmartAlbumRulesCache } from "./smart-album-service.js";
 
 type SmartAlbumRuleInput = Omit<SmartAlbumRuleDTO, "id" | "createdAt" | "updatedAt">;
 
@@ -27,7 +28,7 @@ const toRuleDto = (rule: SmartAlbumRuleRecord): SmartAlbumRuleDTO => ({
 export const createSmartAlbumRule = async (input: SmartAlbumRuleInput): Promise<SmartAlbumRuleDTO> => {
   const timestamp = new Date().toISOString();
   const record: SmartAlbumRuleRecord = {
-    id: makeId("sar"),
+    id: getGalleryRepository().makeId("sar"),
     name: input.name,
     enabled: input.enabled,
     priority: input.priority,
@@ -43,11 +44,14 @@ export const createSmartAlbumRule = async (input: SmartAlbumRuleInput): Promise<
     createdAt: timestamp,
     updatedAt: timestamp
   };
-  return toRuleDto(upsertSmartAlbumRuleDb(record));
+  const saved = await getGalleryRepository().upsertSmartAlbumRule(record);
+  await clearSmartAlbumRulesCache();
+  await clearSmartAlbumQueryCaches();
+  return toRuleDto(saved);
 };
 
 export const updateSmartAlbumRule = async (ruleId: string, input: Partial<SmartAlbumRuleInput>): Promise<SmartAlbumRuleDTO | null> => {
-  const existing = findSmartAlbumRuleByIdDb(ruleId);
+  const existing = await getGalleryRepository().findSmartAlbumRuleById(ruleId);
   if (!existing) {
     return null;
   }
@@ -67,7 +71,17 @@ export const updateSmartAlbumRule = async (ruleId: string, input: Partial<SmartA
     minConfidence: input.minConfidence ?? existing.minConfidence,
     updatedAt: new Date().toISOString()
   };
-  return toRuleDto(upsertSmartAlbumRuleDb(record));
+  const saved = await getGalleryRepository().upsertSmartAlbumRule(record);
+  await clearSmartAlbumRulesCache();
+  await clearSmartAlbumQueryCaches();
+  return toRuleDto(saved);
 };
 
-export const deleteSmartAlbumRule = async (ruleId: string): Promise<boolean> => deleteSmartAlbumRuleDb(ruleId);
+export const deleteSmartAlbumRule = async (ruleId: string): Promise<boolean> => {
+  const deleted = await getGalleryRepository().deleteSmartAlbumRule(ruleId);
+  if (deleted) {
+    await clearSmartAlbumRulesCache();
+    await clearSmartAlbumQueryCaches();
+  }
+  return deleted;
+};

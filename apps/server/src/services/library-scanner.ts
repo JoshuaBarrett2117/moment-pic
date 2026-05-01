@@ -6,20 +6,9 @@ import { isSupportedImageExtension } from "../lib/image-formats.js";
 import { normalizeExtension, toPosixPath } from "../lib/paths.js";
 import { nowIso } from "../lib/time.js";
 import type { AlbumRecord, AssetRecord, LibraryRootRecord, SourceType } from "../types/store.js";
-import {
-  applyLibraryRootScanDiffDb,
-  findAlbumByIdDb,
-  findLibraryRootByIdDb,
-  listAlbumsByLibraryRootIdDb,
-  listAlbumsDb,
-  listAssetsByAlbumIdDb,
-  listLibraryRootsDb,
-  makeId,
-  updateAlbumScanMetadataDb,
-  upsertLibraryRootDb
-} from "./sqlite-store.js";
 import { isArchiveFile, listRootImageEntries } from "./archive.js";
 import { rebuildSmartAlbums } from "./smart-album-service.js";
+import { getGalleryRepository } from "./storage-provider.js";
 
 type ScannedAlbum = {
   name: string;
@@ -105,7 +94,7 @@ const sortNames = (left: string, right: string): number =>
   left.localeCompare(right, "zh-Hans-CN-u-kn-true");
 
 const getScanRoots = async (input?: ScanLibraryInput): Promise<LibraryRootRecord[]> => {
-  const enabledRoots = listLibraryRootsDb().filter((root) => root.enabled);
+  const enabledRoots = (await getGalleryRepository().listLibraryRoots()).filter((root) => root.enabled);
   if (!input?.libraryRootId) {
     return enabledRoots;
   }
@@ -368,11 +357,11 @@ export const buildStableAssetId = (asset: {
   return `ast_${hash.slice(0, 32)}`;
 };
 
-const shouldReplaceAlbum = (
+const shouldReplaceAlbum = async (
   existingAlbum: AlbumRecord,
   discoveredAlbum: ScannedAlbum,
   nextAssets: AssetRecord[]
-): boolean => {
+): Promise<boolean> => {
   if (discoveredAlbum.reuseExisting) {
     return false;
   }
@@ -385,7 +374,7 @@ const shouldReplaceAlbum = (
     return true;
   }
 
-  const existingAssets = listAssetsByAlbumIdDb(existingAlbum.id);
+  const existingAssets = await getGalleryRepository().listAssetsByAlbumId(existingAlbum.id);
   if (existingAssets.length !== nextAssets.length) {
     return true;
   }
@@ -423,7 +412,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
 
   for (let rootIndex = 0; rootIndex < libraryRoots.length; rootIndex += 1) {
     const libraryRoot = libraryRoots[rootIndex];
-    const existingAlbums = listAlbumsByLibraryRootIdDb(libraryRoot.id);
+    const existingAlbums = await getGalleryRepository().listAlbumsByLibraryRootId(libraryRoot.id);
     const existingBySourcePath = new Map(existingAlbums.map((album) => [album.sourcePath, album]));
     const discoveredSourcePaths = new Set<string>();
     const replacedBatch: Array<{
@@ -449,7 +438,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
       if (replacedBatch.length === 0) {
         return;
       }
-      applyLibraryRootScanDiffDb({
+      void getGalleryRepository().applyLibraryRootScanDiff({
         removedAlbumIds: [],
         replacedAlbums: replacedBatch.splice(0, replacedBatch.length)
       });
@@ -465,7 +454,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
       if (discoveredAlbum.reuseExisting && existingAlbum) {
         continue;
       }
-      const albumId = existingAlbum?.id ?? makeId("alb");
+      const albumId = existingAlbum?.id ?? getGalleryRepository().makeId("alb");
       const assets = discoveredAlbum.assets.map((asset) => toAssetRecord(albumId, timestamp, asset));
       const assetsFingerprint = buildAssetsFingerprint(discoveredAlbum.assets);
 
@@ -477,7 +466,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
         existingAlbum.assetsFingerprint === assetsFingerprint
       ) {
         if (existingAlbum.sourceMtime !== discoveredAlbum.sourceMtime) {
-          updateAlbumScanMetadataDb(existingAlbum.id, {
+          await getGalleryRepository().updateAlbumScanMetadata(existingAlbum.id, {
             sourceMtime: discoveredAlbum.sourceMtime,
             assetsFingerprint,
             updatedAt: timestamp
@@ -487,7 +476,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
       }
 
       if (existingAlbum && !shouldReplaceAlbum(existingAlbum, discoveredAlbum, assets)) {
-        updateAlbumScanMetadataDb(existingAlbum.id, {
+        await getGalleryRepository().updateAlbumScanMetadata(existingAlbum.id, {
           sourceMtime: discoveredAlbum.sourceMtime,
           assetsFingerprint,
           updatedAt: timestamp
@@ -539,13 +528,13 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
       .filter((album) => !discoveredSourcePaths.has(album.sourcePath))
       .map((album) => album.id);
     if (removedAlbumIds.length > 0) {
-      applyLibraryRootScanDiffDb({
+      await getGalleryRepository().applyLibraryRootScanDiff({
         removedAlbumIds,
         replacedAlbums: []
       });
     }
 
-    upsertLibraryRootDb({
+    await getGalleryRepository().upsertLibraryRoot({
       ...libraryRoot,
       lastScannedAt: timestamp,
       updatedAt: timestamp
@@ -572,12 +561,12 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
 };
 
 export const rescanAlbum = async (albumId: string) => {
-  const existingAlbum = findAlbumByIdDb(albumId);
+  const existingAlbum = await getGalleryRepository().findAlbumById(albumId);
   if (!existingAlbum) {
     throw new ScanAlbumNotFoundError(albumId);
   }
 
-  const libraryRoot = findLibraryRootByIdDb(existingAlbum.libraryRootId);
+  const libraryRoot = await getGalleryRepository().findLibraryRootById(existingAlbum.libraryRootId);
   if (!libraryRoot) {
     throw new ScanLibraryRootNotFoundError(existingAlbum.libraryRootId);
   }
@@ -612,7 +601,7 @@ export const rescanAlbum = async (albumId: string) => {
     updatedAt: timestamp
   };
 
-  applyLibraryRootScanDiffDb({
+  await getGalleryRepository().applyLibraryRootScanDiff({
     removedAlbumIds: [],
     replacedAlbums: [
       {
@@ -633,12 +622,12 @@ export const rescanAlbum = async (albumId: string) => {
 };
 
 export const ensureScannedLibrary = async () => {
-  const existingRoots = listLibraryRootsDb();
+  const existingRoots = await getGalleryRepository().listLibraryRoots();
   if (existingRoots.length === 0) {
     return;
   }
 
-  const existing = listAlbumsDb(1, 1);
+  const existing = await getGalleryRepository().listAlbums(1, 1);
   if (existing.total > 0) {
     return;
   }
@@ -646,4 +635,4 @@ export const ensureScannedLibrary = async () => {
   await scanLibrary();
 };
 
-export const listExistingLibraryRoots = () => listLibraryRootsDb();
+export const listExistingLibraryRoots = async () => getGalleryRepository().listLibraryRoots();

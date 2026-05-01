@@ -2,9 +2,10 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
 import { nowIso } from "../lib/time.js";
+import { getCacheStore } from "../services/storage-provider.js";
 import { scanLibrary } from "../services/library-scanner.js";
 import { warmupCoverThumbnails } from "../services/thumbnail-service.js";
-import { clearAlbumListCache } from "../services/album-service.js";
+import { clearAlbumListCache, clearRecentAlbumsCache } from "../services/album-service.js";
 
 type ScanTaskStatus = "pending" | "running" | "completed" | "failed";
 type WarmupTaskStatus = "pending" | "running" | "completed" | "failed" | "skipped";
@@ -43,20 +44,44 @@ type ScanTaskRecord = {
   };
 };
 
-const scanTasks = new Map<string, ScanTaskRecord>();
+const SCAN_TASK_CACHE_PREFIX = "task:scan:";
+const SCAN_TASK_INDEX_KEY = `${SCAN_TASK_CACHE_PREFIX}index`;
+const SCAN_TASK_TTL_SECONDS = 7200;
+const SCAN_TASK_INDEX_TTL_SECONDS = 7200;
+const SCAN_TASK_INDEX_LIMIT = 50;
+
+const buildScanTaskCacheKey = (taskId: string) => `${SCAN_TASK_CACHE_PREFIX}${taskId}`;
+
+const getScanTask = async (taskId: string): Promise<ScanTaskRecord | null> =>
+  await getCacheStore().get<ScanTaskRecord>(buildScanTaskCacheKey(taskId));
+
+const saveScanTask = async (task: ScanTaskRecord): Promise<void> => {
+  await getCacheStore().set(buildScanTaskCacheKey(task.id), task, SCAN_TASK_TTL_SECONDS);
+};
+
+const getScanTaskIndex = async (): Promise<string[]> =>
+  (await getCacheStore().get<string[]>(SCAN_TASK_INDEX_KEY)) ?? [];
+
+const addScanTaskToIndex = async (taskId: string): Promise<void> => {
+  const existing = await getScanTaskIndex();
+  const next = [taskId, ...existing.filter((current) => current !== taskId)].slice(0, SCAN_TASK_INDEX_LIMIT);
+  await getCacheStore().set(SCAN_TASK_INDEX_KEY, next, SCAN_TASK_INDEX_TTL_SECONDS);
+};
 
 export const scanRoutes: FastifyPluginAsync = async (app) => {
   const runScanTask = async (taskId: string) => {
-    const task = scanTasks.get(taskId);
+    const task = await getScanTask(taskId);
     if (!task) {
       return;
     }
 
     task.status = "running";
     task.startedAt = nowIso();
+    await saveScanTask(task);
     const heartbeatTimer = setInterval(() => {
       if (task.status === "running") {
         task.progress.updatedAt = nowIso();
+        void saveScanTask(task);
       }
     }, 1000);
 
@@ -73,6 +98,7 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
             totalRoots: progress.totalRoots,
             updatedAt: nowIso()
           };
+          void saveScanTask(task);
         }
       });
       task.status = "completed";
@@ -86,12 +112,14 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
         assetsDiscovered: result.assetsDiscovered,
         updatedAt: nowIso()
       };
-      clearAlbumListCache();
+      await clearAlbumListCache();
+      await clearRecentAlbumsCache();
       task.finishedAt = nowIso();
       task.warmup.status = "running";
       task.warmup.startedAt = nowIso();
       task.warmup.finishedAt = null;
       task.warmup.error = null;
+      await saveScanTask(task);
 
       void warmupCoverThumbnails({
         libraryRootId: task.libraryRootId ?? undefined,
@@ -101,6 +129,7 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
           task.warmup.status = "completed";
           task.warmup.finishedAt = nowIso();
           task.warmup.result = warmupResult;
+          void saveScanTask(task);
           app.log.info(
             {
               taskId,
@@ -114,6 +143,7 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
           task.warmup.status = "failed";
           task.warmup.finishedAt = nowIso();
           task.warmup.error = error instanceof Error ? error.message : String(error);
+          void saveScanTask(task);
           app.log.warn(
             {
               taskId,
@@ -132,6 +162,7 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       task.warmup.finishedAt = nowIso();
       task.warmup.error = "scan failed, warmup skipped";
       task.warmup.result = null;
+      await saveScanTask(task);
     } finally {
       clearInterval(heartbeatTimer);
     }
@@ -174,9 +205,9 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       }
     };
 
-    scanTasks.set(taskId, task);
-
-    runScanTask(taskId);
+    await saveScanTask(task);
+    await addScanTaskToIndex(taskId);
+    void runScanTask(taskId);
 
     return ok({
       taskId,
@@ -188,7 +219,7 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/scan/:taskId", async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
-    const task = scanTasks.get(taskId);
+    const task = await getScanTask(taskId);
     if (!task) {
       return reply.status(404).send({
         code: 4004,
@@ -216,9 +247,11 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/api/v1/scan", async (_request, _reply) => {
-    const tasks = Array.from(scanTasks.values())
+    const taskIds = await getScanTaskIndex();
+    const tasks = (await Promise.all(taskIds.map(async (taskId) => await getScanTask(taskId))))
+      .filter((task): task is ScanTaskRecord => task !== null)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 50);
+      .slice(0, SCAN_TASK_INDEX_LIMIT);
 
     return ok(tasks.map(task => ({
       taskId: task.id,

@@ -123,10 +123,37 @@ test("smart album routes rebuild grouped albums from rules", async () => {
     });
     assert.equal(rebuildResponse.statusCode, 200);
     const rebuildPayload = rebuildResponse.json() as {
-      data: { smartAlbumsDiscovered: number; membersDiscovered: number };
+      data: { taskId: string; status: "pending" | "running" | "completed" | "failed" };
     };
-    assert.equal(rebuildPayload.data.smartAlbumsDiscovered >= 1, true);
-    assert.equal(rebuildPayload.data.membersDiscovered >= 2, true);
+    assert.equal(Boolean(rebuildPayload.data.taskId), true);
+
+    let rebuildStatusPayload:
+      | {
+          data: {
+            taskId: string;
+            status: "pending" | "running" | "completed" | "failed";
+            error: string | null;
+            result: { smartAlbumsDiscovered: number; membersDiscovered: number } | null;
+          };
+        }
+      | undefined;
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const statusResponse = await app.inject({
+        method: "GET",
+        url: `/api/v1/smart-albums/rebuild/${rebuildPayload.data.taskId}`
+      });
+      assert.equal(statusResponse.statusCode, 200);
+      rebuildStatusPayload = statusResponse.json();
+      if (rebuildStatusPayload?.data.status === "completed" || rebuildStatusPayload?.data.status === "failed") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    assert.equal(rebuildStatusPayload?.data.status, "completed");
+    assert.equal((rebuildStatusPayload?.data.result?.smartAlbumsDiscovered ?? 0) >= 1, true);
+    assert.equal((rebuildStatusPayload?.data.result?.membersDiscovered ?? 0) >= 2, true);
 
     const listResponse = await app.inject({
       method: "GET",

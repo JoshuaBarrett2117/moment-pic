@@ -4,7 +4,7 @@ import { listExistingLibraryRoots } from "./library-scanner.js";
 import { scanLibrary } from "./library-scanner.js";
 import { nowIso } from "../lib/time.js";
 import { wsService } from "./websocket-service.js";
-import { getSystemConfigDb } from "./sqlite-store.js";
+import { getGalleryRepository } from "./storage-provider.js";
 
 type WatchEventType = "add" | "change" | "unlink";
 
@@ -19,18 +19,19 @@ type WatchCallback = (event: FileChangeEvent) => void;
 
 class DirectoryWatcherService {
   private watchers: Map<string, FSWatcher> = new Map();
+  private watchedRootPaths: Map<string, string> = new Map();
   private callbacks: Set<WatchCallback> = new Set();
   private debounceTimersByRoot: Map<string, NodeJS.Timeout> = new Map();
   private incrementalScanStates: Map<string, { running: boolean; pending: boolean }> = new Map();
   private readonly DEBOUNCE_MS = 2000;
 
   async startWatching(libraryRootId?: string): Promise<void> {
-    const roots = listExistingLibraryRoots();
+    const roots = await listExistingLibraryRoots();
     const targetRoots = libraryRootId
       ? roots.filter((r) => r.id === libraryRootId)
       : roots.filter((r) => r.enabled);
 
-    const config = getSystemConfigDb();
+    const config = await getGalleryRepository().getSystemConfig();
     const usePolling = config.enablePolling;
     const pollingInterval = config.pollingInterval;
 
@@ -75,6 +76,7 @@ class DirectoryWatcherService {
         .on("unlinkDir", (dirPath) => this.handleFileEvent("unlink", dirPath, root.id));
 
       this.watchers.set(root.id, watcher);
+      this.watchedRootPaths.set(root.id, root.path);
     }
   }
 
@@ -168,6 +170,7 @@ class DirectoryWatcherService {
         watcher.close();
         this.watchers.delete(libraryRootId);
       }
+      this.watchedRootPaths.delete(libraryRootId);
       const timer = this.debounceTimersByRoot.get(libraryRootId);
       if (timer) {
         clearTimeout(timer);
@@ -181,6 +184,7 @@ class DirectoryWatcherService {
       watcher.close();
     }
     this.watchers.clear();
+    this.watchedRootPaths.clear();
 
     for (const timer of this.debounceTimersByRoot.values()) {
       clearTimeout(timer);
@@ -202,10 +206,7 @@ class DirectoryWatcherService {
   }
 
   getWatchedPaths(): string[] {
-    const roots = listExistingLibraryRoots();
-    return roots
-      .filter((r) => this.watchers.has(r.id))
-      .map((r) => r.path);
+    return Array.from(this.watchedRootPaths.values());
   }
 
   isWatching(libraryRootId: string): boolean {

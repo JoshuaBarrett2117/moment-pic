@@ -305,10 +305,11 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
                       <div className="flex items-center gap-3">
                         <select
                           value={defaultImageQualityPreset}
-                          onChange={(event) => setDefaultImageQualityPreset(event.target.value as 'low' | 'balanced' | 'high' | 'original')}
-                          onBlur={async () => {
+                          onChange={async (event) => {
+                            const nextPreset = event.target.value as 'low' | 'balanced' | 'high' | 'original';
+                            setDefaultImageQualityPreset(nextPreset);
                             if (systemConfig) {
-                              await saveConfig({ defaultImageQualityPreset });
+                              await saveConfig({ defaultImageQualityPreset: nextPreset });
                             }
                           }}
                           disabled={isSavingConfig}

@@ -567,6 +567,7 @@ export const getSystemConfigDb = (): SystemConfigRecord => {
     preloadAfter: row.preload_after,
     defaultImageQualityPreset:
       row.default_image_quality_preset === "low" ||
+      row.default_image_quality_preset === "balanced" ||
       row.default_image_quality_preset === "high" ||
       row.default_image_quality_preset === "original"
         ? row.default_image_quality_preset

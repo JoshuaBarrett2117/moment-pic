@@ -18,6 +18,7 @@ import {
 import { WobblyButton } from './WobblyButton';
 import { useToast } from './Toast';
 import { useLibraryRoots, useLibraryScan, useSystemConfig } from '../hooks';
+import { VIEWER_QUALITY_SESSION_KEY } from '../lib/viewer-quality';
 import { SmartAlbumSettingsPanel } from './SmartAlbumSettingsPanel';
 
 interface SettingsScreenProps {
@@ -309,7 +310,10 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
                             const nextPreset = event.target.value as 'low' | 'balanced' | 'high' | 'original';
                             setDefaultImageQualityPreset(nextPreset);
                             if (systemConfig) {
-                              await saveConfig({ defaultImageQualityPreset: nextPreset });
+                              const didSave = await saveConfig({ defaultImageQualityPreset: nextPreset });
+                              if (didSave && typeof window !== 'undefined') {
+                                window.sessionStorage.removeItem(VIEWER_QUALITY_SESSION_KEY);
+                              }
                             }
                           }}
                           disabled={isSavingConfig}

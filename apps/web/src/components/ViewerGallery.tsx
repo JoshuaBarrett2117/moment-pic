@@ -1,10 +1,8 @@
 ﻿import { type FC, type MouseEvent, type TouchEvent, type TouchList, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize2, X, SlidersHorizontal } from 'lucide-react';
 import { useMobile } from '../hooks';
+import { VIEWER_QUALITY_SESSION_KEY, type ImageQualityPreset } from '../lib/viewer-quality';
 import type { AssetListItemDTO } from '../types/api';
-
-type ImageQualityPreset = 'low' | 'balanced' | 'high' | 'original';
-const VIEWER_QUALITY_SESSION_KEY = 'moment_pic_viewer_quality_preset';
 
 interface ViewerGalleryProps {
   items: AssetListItemDTO[];
@@ -93,8 +91,12 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const [pendingAdvanceAfterLoad, setPendingAdvanceAfterLoad] = useState(false);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
+  const lastTouchX = useRef<number>(0);
+  const lastTouchY = useRef<number>(0);
   const lastTouchDistance = useRef<number>(0);
   const isZooming = useRef<boolean>(false);
+  const isTouchPanning = useRef<boolean>(false);
+  const hasTouchMoved = useRef<boolean>(false);
   const preloadedImagesRef = useRef<HTMLImageElement[]>([]);
 
   const resetView = useCallback(() => {
@@ -392,12 +394,20 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     if (e.touches.length === 1) {
       touchStartX.current = e.touches[0].clientX;
       touchStartY.current = e.touches[0].clientY;
+      lastTouchX.current = e.touches[0].clientX;
+      lastTouchY.current = e.touches[0].clientY;
       isZooming.current = false;
+      isTouchPanning.current = scale > 1;
+      hasTouchMoved.current = false;
+      setIsDragging(scale > 1);
     } else if (e.touches.length === 2) {
       isZooming.current = true;
+      isTouchPanning.current = false;
       lastTouchDistance.current = getTouchDistance(e.touches);
+      hasTouchMoved.current = true;
+      setIsDragging(false);
     }
-  }, [showEndPrompt]);
+  }, [scale, showEndPrompt]);
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (showEndPrompt) {
@@ -414,6 +424,26 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       }
       lastTouchDistance.current = distance;
     } else if (e.touches.length === 1) {
+      if (scale > 1 && isTouchPanning.current) {
+        e.preventDefault();
+        const nextTouchX = e.touches[0].clientX;
+        const nextTouchY = e.touches[0].clientY;
+        const deltaX = nextTouchX - lastTouchX.current;
+        const deltaY = nextTouchY - lastTouchY.current;
+
+        if (Math.abs(deltaX) > 0 || Math.abs(deltaY) > 0) {
+          hasTouchMoved.current = true;
+        }
+
+        setPosition((prev) => ({
+          x: prev.x + deltaX,
+          y: prev.y + deltaY,
+        }));
+        lastTouchX.current = nextTouchX;
+        lastTouchY.current = nextTouchY;
+        return;
+      }
+
       const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current);
       const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current);
 
@@ -429,6 +459,22 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     }
 
     lastTouchDistance.current = 0;
+    setIsDragging(false);
+
+    if (e.touches.length === 1) {
+      lastTouchX.current = e.touches[0].clientX;
+      lastTouchY.current = e.touches[0].clientY;
+      isTouchPanning.current = scale > 1;
+      return;
+    }
+
+    if (isTouchPanning.current) {
+      isTouchPanning.current = false;
+      if (hasTouchMoved.current) {
+        hasTouchMoved.current = false;
+        return;
+      }
+    }
 
     if (e.touches.length > 0 || isZooming.current || !e.changedTouches?.[0]) {
       return;
@@ -454,7 +500,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     if (useTouchInteractions) {
       setShowControls((prev) => !prev);
     }
-  }, [goToNext, goToPrev, showEndPrompt, useTouchInteractions]);
+  }, [goToNext, goToPrev, scale, showEndPrompt, useTouchInteractions]);
 
   if (!isOpen || images.length === 0) {
     return null;

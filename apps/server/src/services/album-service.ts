@@ -12,18 +12,14 @@ import {
   countAssetsByAlbumIdDb,
   deleteAlbumDb,
   deleteAssetDb,
-  deleteLibraryRootDb,
   findAlbumByIdDb,
   findAssetByIdDb,
   listAlbumsDb,
   listAssetsByAlbumIdDb,
-  listLibraryRootsDb,
-  makeId,
-  upsertLibraryRootDb,
-  updateLibraryRootDb,
-  recordAlbumViewDb,
-  getRecentAlbumIdsDb
-} from "./sqlite-store.js";
+} from "../repositories/album-repository.js";
+import { listLibraryRootsDb, deleteLibraryRootDb, upsertLibraryRootDb, updateLibraryRootDb } from "../repositories/library-root-repository.js";
+import { makeId } from "../repositories/ids.js";
+import { recordAlbumViewDb, getRecentAlbumIdsDb } from "../repositories/system-config-repository.js";
 
 const toAssetUrls = (assetId: string) => ({
   thumbnailUrl: `/api/v1/assets/${assetId}/thumbnail`,

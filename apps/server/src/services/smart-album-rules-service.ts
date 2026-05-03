@@ -1,6 +1,7 @@
 import type { SmartAlbumRuleDTO } from "../types/dto.js";
 import type { SmartAlbumRuleRecord } from "../types/store.js";
-import { deleteSmartAlbumRuleDb, findSmartAlbumRuleByIdDb, makeId, upsertSmartAlbumRuleDb } from "./sqlite-store.js";
+import { deleteSmartAlbumRuleDb, findSmartAlbumRuleByIdDb, upsertSmartAlbumRuleDb } from "../repositories/smart-album-repository.js";
+import { makeId } from "../repositories/ids.js";
 
 type SmartAlbumRuleInput = Omit<SmartAlbumRuleDTO, "id" | "createdAt" | "updatedAt">;
 

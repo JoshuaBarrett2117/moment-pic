@@ -21,18 +21,20 @@ import type {
 import { createOpenAiChatCompletion, normalizeOpenAiEndpoint, parseJsonFromModelText } from "./openai-compatible-service.js";
 import {
   findAlbumByIdDb,
-  findSmartAlbumByIdDb,
-  findSmartAlbumRuleByIdDb,
-  getSmartAlbumAiConfigDb,
   listAlbumsForSmartRuleScopeDb,
-  listAssetNamesByAlbumIdDb,
+  listAssetNamesByAlbumIdDb
+} from "../repositories/album-repository.js";
+import {
+  getSmartAlbumAiConfigDb,
   listSmartAlbumMembersDb,
   listSmartAlbumRulesDb,
   listSmartAlbumsDb,
-  makeId,
   replaceSmartAlbumsDb,
+  findSmartAlbumRuleByIdDb,
+  findSmartAlbumByIdDb,
   updateSmartAlbumAiConfigDb
-} from "./sqlite-store.js";
+} from "../repositories/smart-album-repository.js";
+import { makeId } from "../repositories/ids.js";
 
 type SmartAlbumRuleInput = Omit<SmartAlbumRuleDTO, "id" | "createdAt" | "updatedAt">;
 type SmartAlbumAiConfigInput = {

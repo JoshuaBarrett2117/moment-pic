@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
-import { getSystemConfigDb, updateSystemConfigDb } from "../services/sqlite-store.js";
+import { getSystemConfigDb, updateSystemConfigDb } from "../repositories/system-config-repository.js";
 import { directoryWatcher } from "../services/directory-watcher.js";
 
 export const systemConfigRoutes: FastifyPluginAsync = async (app) => {

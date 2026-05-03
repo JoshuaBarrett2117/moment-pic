@@ -4,7 +4,7 @@ import { listExistingLibraryRoots } from "./library-scanner.js";
 import { scanLibrary } from "./library-scanner.js";
 import { nowIso } from "../lib/time.js";
 import { wsService } from "./websocket-service.js";
-import { getSystemConfigDb } from "./sqlite-store.js";
+import { getSystemConfigDb } from "../repositories/system-config-repository.js";
 
 type WatchEventType = "add" | "change" | "unlink";
 

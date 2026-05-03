@@ -9,15 +9,13 @@ import type { AlbumRecord, AssetRecord, LibraryRootRecord, SourceType } from "..
 import {
   applyLibraryRootScanDiffDb,
   findAlbumByIdDb,
-  findLibraryRootByIdDb,
-  listAlbumsByLibraryRootIdDb,
   listAlbumsDb,
   listAssetsByAlbumIdDb,
-  listLibraryRootsDb,
-  makeId,
   updateAlbumScanMetadataDb,
-  upsertLibraryRootDb
-} from "./sqlite-store.js";
+  listAlbumsByLibraryRootIdDb
+} from "../repositories/album-repository.js";
+import { findLibraryRootByIdDb, listLibraryRootsDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
+import { makeId } from "../repositories/ids.js";
 import { isArchiveFile, listRootImageEntries } from "./archive.js";
 import { rebuildSmartAlbums } from "./smart-album-service.js";
 

@@ -7,7 +7,14 @@ import sharp from "sharp";
 
 import { env } from "../config/env.js";
 import type { AssetRecord } from "../types/store.js";
-import { findAssetByIdDb, findThumbnailByAssetIdDb, listAlbumCoverAssetIdsDb, makeId, updateAssetMetadataDb, upsertThumbnailDb } from "./sqlite-store.js";
+import {
+  findAssetByIdDb,
+  findThumbnailByAssetIdDb,
+  listAlbumCoverAssetIdsDb,
+  updateAssetMetadataDb,
+  upsertThumbnailDb
+} from "../repositories/album-repository.js";
+import { makeId } from "../repositories/ids.js";
 import { openArchiveEntryBody, readArchiveEntryBuffer } from "./archive.js";
 
 const DEFAULT_THUMBNAIL_WIDTH = 360;

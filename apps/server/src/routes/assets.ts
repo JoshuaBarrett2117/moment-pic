@@ -4,6 +4,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
 import { deleteAsset, getAssetDetail } from "../services/album-service.js";
+import { ThumbnailRequestGate } from "../services/thumbnail-request-gate.js";
 import {
   AssetNotFoundError,
   ensurePreview,
@@ -12,71 +13,49 @@ import {
   OriginalAssetSourceMissingError
 } from "../services/thumbnail-service.js";
 
+const thumbnailRequestGate = new ThumbnailRequestGate({
+  maxActive: 24,
+  maxQueue: 320,
+  queueTimeoutMs: 8000
+});
+
+const normalizeHeader = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+
+const resolvePreferredFormat = (
+  requestedFormat: "webp" | "jpeg" | undefined,
+  acceptHeader: string
+): "webp" | "jpeg" => {
+  if (requestedFormat === "webp" || requestedFormat === "jpeg") {
+    return requestedFormat;
+  }
+
+  return acceptHeader.includes("image/webp") ? "webp" : "jpeg";
+};
+
+const applyVariantCacheHeaders = async (
+  reply: any,
+  input: {
+    etagPrefix: "thumb" | "preview";
+    cacheKey: string;
+    filePath: string;
+    mimeType: string;
+  },
+  ifNoneMatch: string | undefined
+) => {
+  const etag = `"${input.etagPrefix}-${input.cacheKey}"`;
+  if (ifNoneMatch === etag) {
+    return reply.status(304).send();
+  }
+
+  const stat = await fs.promises.stat(input.filePath);
+  reply.header("ETag", etag);
+  reply.header("Last-Modified", stat.mtime.toUTCString());
+  reply.header("Cache-Control", "private, max-age=86400, must-revalidate");
+  reply.type(input.mimeType);
+  return reply.send(fs.createReadStream(input.filePath));
+};
+
 export const assetRoutes: FastifyPluginAsync = async (app) => {
-  const THUMBNAIL_REQUEST_MAX_ACTIVE = 24;
-  const THUMBNAIL_REQUEST_MAX_QUEUE = 320;
-  const THUMBNAIL_REQUEST_QUEUE_TIMEOUT_MS = 8000;
-  let activeThumbnailRequests = 0;
-  const thumbnailWaitQueue: Array<{
-    resolve: () => void;
-    timeout: NodeJS.Timeout;
-  }> = [];
-
-  const getThumbnailQueueStats = () => ({
-    active: activeThumbnailRequests,
-    queued: thumbnailWaitQueue.length
-  });
-
-  const tryWakeNextThumbnailRequest = () => {
-    const next = thumbnailWaitQueue.shift();
-    if (!next) {
-      return;
-    }
-    clearTimeout(next.timeout);
-    activeThumbnailRequests += 1;
-    next.resolve();
-  };
-
-  const acquireThumbnailRequestSlot = async (): Promise<(() => void) | null> => {
-    if (activeThumbnailRequests < THUMBNAIL_REQUEST_MAX_ACTIVE) {
-      activeThumbnailRequests += 1;
-    } else {
-      if (thumbnailWaitQueue.length >= THUMBNAIL_REQUEST_MAX_QUEUE) {
-        return null;
-      }
-      const acquired = await new Promise<boolean>((resolve) => {
-        const timeout = setTimeout(() => {
-          const index = thumbnailWaitQueue.findIndex((item) => item.timeout === timeout);
-          if (index >= 0) {
-            thumbnailWaitQueue.splice(index, 1);
-          }
-          resolve(false);
-        }, THUMBNAIL_REQUEST_QUEUE_TIMEOUT_MS);
-
-        thumbnailWaitQueue.push({
-          timeout,
-          resolve: () => resolve(true)
-        });
-      });
-
-      if (!acquired) {
-        return null;
-      }
-    }
-
-    let released = false;
-    return () => {
-      if (released) {
-        return;
-      }
-      released = true;
-      activeThumbnailRequests = Math.max(0, activeThumbnailRequests - 1);
-      tryWakeNextThumbnailRequest();
-    };
-  };
-
-  const normalizeHeader = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
-
   const sendAssetNotFound = (reply: any) =>
     reply.status(404).send({
       code: 4002,
@@ -116,15 +95,10 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     const requestedWidth = query.w ? Number(query.w) : undefined;
     const requestedHeight = query.h ? Number(query.h) : undefined;
     const acceptHeader = normalizeHeader(request.headers.accept) ?? "";
-    const preferredFormat =
-      query.format === "webp" || query.format === "jpeg"
-        ? query.format
-        : acceptHeader.includes("image/webp")
-          ? "webp"
-          : "jpeg";
-    const releaseSlot = await acquireThumbnailRequestSlot();
+    const preferredFormat = resolvePreferredFormat(query.format, acceptHeader);
+    const releaseSlot = await thumbnailRequestGate.acquire();
     if (!releaseSlot) {
-      const stats = getThumbnailQueueStats();
+      const stats = thumbnailRequestGate.getStats();
       reply.header("Retry-After", "1");
       reply.header("X-Thumb-Active", String(stats.active));
       reply.header("X-Thumb-Queued", String(stats.queued));
@@ -133,7 +107,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         message: "thumbnail service busy, retry later"
       });
     }
-    const slotStats = getThumbnailQueueStats();
+    const slotStats = thumbnailRequestGate.getStats();
     reply.header("X-Thumb-Active", String(slotStats.active));
     reply.header("X-Thumb-Queued", String(slotStats.queued));
 
@@ -144,18 +118,13 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
           height: requestedHeight,
           format: preferredFormat
         });
-        const etag = `"thumb-${thumbnail.cacheKey}"`;
         const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);
-        if (ifNoneMatch === etag) {
-          return reply.status(304).send();
-        }
-
-        const stat = await fs.promises.stat(thumbnail.filePath);
-        reply.header("ETag", etag);
-        reply.header("Last-Modified", stat.mtime.toUTCString());
-        reply.header("Cache-Control", "private, max-age=86400, must-revalidate");
-        reply.type(thumbnail.mimeType);
-        return reply.send(fs.createReadStream(thumbnail.filePath));
+        return applyVariantCacheHeaders(reply, {
+          etagPrefix: "thumb",
+          cacheKey: thumbnail.cacheKey,
+          filePath: thumbnail.filePath,
+          mimeType: thumbnail.mimeType
+        }, ifNoneMatch);
       } catch (error) {
         if (error instanceof AssetNotFoundError) {
           return sendAssetNotFound(reply);
@@ -207,15 +176,10 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     const { assetId } = request.params as { assetId: string };
     const query = request.query as { preset?: "low" | "balanced" | "high"; format?: "webp" | "jpeg" };
     const acceptHeader = normalizeHeader(request.headers.accept) ?? "";
-    const preferredFormat =
-      query.format === "webp" || query.format === "jpeg"
-        ? query.format
-        : acceptHeader.includes("image/webp")
-          ? "webp"
-          : "jpeg";
-    const releaseSlot = await acquireThumbnailRequestSlot();
+    const preferredFormat = resolvePreferredFormat(query.format, acceptHeader);
+    const releaseSlot = await thumbnailRequestGate.acquire();
     if (!releaseSlot) {
-      const stats = getThumbnailQueueStats();
+      const stats = thumbnailRequestGate.getStats();
       reply.header("Retry-After", "1");
       reply.header("X-Thumb-Active", String(stats.active));
       reply.header("X-Thumb-Queued", String(stats.queued));
@@ -224,7 +188,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         message: "thumbnail service busy, retry later"
       });
     }
-    const slotStats = getThumbnailQueueStats();
+    const slotStats = thumbnailRequestGate.getStats();
     reply.header("X-Thumb-Active", String(slotStats.active));
     reply.header("X-Thumb-Queued", String(slotStats.queued));
 
@@ -234,18 +198,13 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
           preset: query.preset,
           format: preferredFormat
         });
-        const etag = `"preview-${preview.cacheKey}"`;
         const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);
-        if (ifNoneMatch === etag) {
-          return reply.status(304).send();
-        }
-
-        const stat = await fs.promises.stat(preview.filePath);
-        reply.header("ETag", etag);
-        reply.header("Last-Modified", stat.mtime.toUTCString());
-        reply.header("Cache-Control", "private, max-age=86400, must-revalidate");
-        reply.type(preview.mimeType);
-        return reply.send(fs.createReadStream(preview.filePath));
+        return applyVariantCacheHeaders(reply, {
+          etagPrefix: "preview",
+          cacheKey: preview.cacheKey,
+          filePath: preview.filePath,
+          mimeType: preview.mimeType
+        }, ifNoneMatch);
       } catch (error) {
         if (error instanceof AssetNotFoundError) {
           return sendAssetNotFound(reply);

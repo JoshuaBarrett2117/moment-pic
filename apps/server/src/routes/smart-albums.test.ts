@@ -317,3 +317,202 @@ test("smart album routes persist ai generated rules and reuse them after ai is d
     await app.close();
   }
 });
+
+test("smart album routes allow editing ai generated rules into manual rules", async () => {
+  const app = Fastify();
+  const suffix = crypto.randomUUID().replace(/-/g, "");
+  const timestamp = new Date().toISOString();
+  const ruleId = makeId("sar");
+
+  clearLibraryCatalogDb();
+  clearSmartAlbumDataDb();
+
+  upsertSmartAlbumRuleDb({
+    id: ruleId,
+    name: `AI生成：小恩 R18 写真-${suffix}`,
+    enabled: true,
+    sourceEngine: "ai",
+    priority: 20,
+    scope: "sourcePath",
+    matchMode: "contains",
+    patternsJson: JSON.stringify(["volume4", "video", "pic", "r18", "vip"]),
+    normalizeOptionsJson: JSON.stringify({
+      trimSpaces: true,
+      normalizeCase: true,
+      stripSequenceNo: true,
+      stripDate: true,
+      stripPageStats: true,
+      stripSizeStats: true
+    }),
+    action: "assignSmartAlbum",
+    targetName: "小恩 R18 写真",
+    targetNameTemplate: null,
+    minAlbumCount: 5,
+    minConfidence: 0.97,
+    generatedNormalizedKey: "小恩 r18 写真",
+    generatedConfidence: 0.97,
+    generatedReason: `generated from ai run ${suffix}`,
+    generatedRunId: `srun_${suffix}`,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+
+  try {
+    await app.register(smartAlbumRoutes);
+    await app.ready();
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/v1/smart-album-rules/${ruleId}`,
+      payload: {
+        name: "手动修正：小恩写真",
+        patterns: ["小恩", "r18"],
+        targetName: "小恩写真",
+        minAlbumCount: 2
+      }
+    });
+    assert.equal(updateResponse.statusCode, 200);
+
+    const updatePayload = updateResponse.json() as {
+      data: {
+        sourceEngine: "ai" | "manual";
+        patterns: string[];
+        targetName: string | null;
+        generatedReason: string | null;
+      };
+    };
+    assert.equal(updatePayload.data.sourceEngine, "manual");
+    assert.deepEqual(updatePayload.data.patterns, ["小恩", "r18"]);
+    assert.equal(updatePayload.data.targetName, "小恩写真");
+    assert.equal(updatePayload.data.generatedReason, null);
+
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/smart-album-rules"
+    });
+    assert.equal(listResponse.statusCode, 200);
+    const listPayload = listResponse.json() as {
+      data: {
+        items: Array<{
+          id: string;
+          sourceEngine: "ai" | "manual";
+          patterns: string[];
+          targetName: string | null;
+        }>;
+      };
+    };
+    const updatedRule = listPayload.data.items.find((item) => item.id === ruleId);
+    assert.ok(updatedRule);
+    assert.equal(updatedRule.sourceEngine, "manual");
+    assert.deepEqual(updatedRule.patterns, ["小恩", "r18"]);
+    assert.equal(updatedRule.targetName, "小恩写真");
+  } finally {
+    await app.close();
+  }
+});
+
+test("smart album rebuild replaces stale ai rules with freshly generated rules when ai is enabled", async () => {
+  const app = Fastify();
+  const suffix = crypto.randomUUID().replace(/-/g, "");
+  const libraryRootId = `root_refresh_${suffix}`;
+  const timestamp = new Date().toISOString();
+  const token = `小恩-${suffix}`;
+
+  clearLibraryCatalogDb();
+  clearSmartAlbumDataDb();
+  upsertLibraryRootDb({
+    id: libraryRootId,
+    name: `smart-root-refresh-${suffix}`,
+    path: `C:/smart-refresh/${suffix}`,
+    enabled: true,
+    lastScannedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+
+  seedAlbum({
+    libraryRootId,
+    sourcePath: `C:/smart-refresh/${suffix}/video/pic/vip/volume4/${token}/R18/001`,
+    name: `${token} 写真 NO.001`
+  });
+  seedAlbum({
+    libraryRootId,
+    sourcePath: `D:/smart-refresh/${suffix}/video/pic/vip/volume4/${token}/R18/002`,
+    name: `${token} 写真 NO.002`
+  });
+
+  upsertSmartAlbumRuleDb({
+    id: makeId("sar"),
+    name: `AI生成：${token}`,
+    enabled: true,
+    sourceEngine: "ai",
+    priority: 20,
+    scope: "sourcePath",
+    matchMode: "contains",
+    patternsJson: JSON.stringify(["volume4", "video", "pic", "vip"]),
+    normalizeOptionsJson: JSON.stringify({
+      trimSpaces: true,
+      normalizeCase: true,
+      stripSequenceNo: true,
+      stripDate: true,
+      stripPageStats: true,
+      stripSizeStats: true
+    }),
+    action: "assignSmartAlbum",
+    targetName: `${token} R18 写真`,
+    targetNameTemplate: null,
+    minAlbumCount: 2,
+    minConfidence: 0.95,
+    generatedNormalizedKey: `${token.toLowerCase()} r18 写真`,
+    generatedConfidence: 0.95,
+    generatedReason: `generated from ai run stale_${suffix}`,
+    generatedRunId: `srun_stale_${suffix}`,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+
+  try {
+    await app.register(smartAlbumRoutes);
+    await app.ready();
+
+    await updateSmartAlbumAiConfig({
+      enabled: true,
+      mode: "assist",
+      provider: "openai",
+      apiEndpoint: "https://api.openai.com/v1",
+      apiModel: "gpt-4.1-mini",
+      minConfidenceAutoApply: 0.9,
+      minClusterAlbumCount: 2,
+      maxSuggestionsPerRun: 20,
+      allowAliasMerge: true,
+      allowCrossRootGrouping: true,
+      excludedTokens: [],
+      preferredScopes: ["albumName", "sourcePath"],
+      reviewRequiredBelowConfidence: 0.9
+    });
+
+    await rebuildSmartAlbums();
+
+    const rulesResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/smart-album-rules"
+    });
+    assert.equal(rulesResponse.statusCode, 200);
+    const rulesPayload = rulesResponse.json() as {
+      data: {
+        items: Array<{
+          sourceEngine: "ai" | "manual";
+          patterns: string[];
+          targetName: string | null;
+        }>;
+      };
+    };
+    const aiRules = rulesPayload.data.items.filter((item) => item.sourceEngine === "ai");
+    assert.equal(aiRules.length >= 1, true);
+    assert.equal(aiRules.some((item) => item.patterns.includes("小恩")), true);
+    assert.equal(aiRules.some((item) => item.patterns.includes("volume4")), false);
+    assert.equal(aiRules.some((item) => item.patterns.includes("video")), false);
+  } finally {
+    await app.close();
+  }
+});

@@ -8,6 +8,7 @@ import type { SmartAlbumAiConfigDTO, SmartAlbumRuleDTO } from '../types/api';
 const DEFAULT_RULE: Omit<SmartAlbumRuleDTO, 'id' | 'createdAt' | 'updatedAt'> = {
   name: '',
   enabled: true,
+  sourceEngine: 'manual',
   priority: 100,
   scope: 'albumName',
   matchMode: 'contains',
@@ -24,7 +25,11 @@ const DEFAULT_RULE: Omit<SmartAlbumRuleDTO, 'id' | 'createdAt' | 'updatedAt'> = 
   targetName: null,
   targetNameTemplate: '{{token}}',
   minAlbumCount: 2,
-  minConfidence: 1
+  minConfidence: 1,
+  generatedNormalizedKey: null,
+  generatedConfidence: null,
+  generatedReason: null,
+  generatedRunId: null
 };
 
 interface SmartAlbumSettingsPanelProps {
@@ -157,7 +162,12 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
       targetName: rule.targetName,
       targetNameTemplate: rule.targetNameTemplate,
       minAlbumCount: rule.minAlbumCount,
-      minConfidence: rule.minConfidence
+      minConfidence: rule.minConfidence,
+      sourceEngine: 'manual',
+      generatedNormalizedKey: null,
+      generatedConfidence: null,
+      generatedReason: null,
+      generatedRunId: null
     });
   };
 
@@ -333,6 +343,15 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
             />
           </label>
           <label className="space-y-2">
+            <span className="text-sm font-medium text-outline">目标名称</span>
+            <input
+              value={draftRule.targetName ?? ''}
+              onChange={(event) => setDraftRule((prev) => ({ ...prev, targetName: event.target.value.trim() ? event.target.value : null }))}
+              className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+              placeholder="留空时使用下方模板或命中词"
+            />
+          </label>
+          <label className="space-y-2">
             <span className="text-sm font-medium text-outline">目标名称模板</span>
             <input
               value={draftRule.targetNameTemplate ?? ''}
@@ -387,11 +406,22 @@ export const SmartAlbumSettingsPanel: React.FC<SmartAlbumSettingsPanelProps> = (
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${rule.enabled ? 'bg-primary-container text-on-primary-container' : 'bg-outline/10 text-outline'}`}>
                       {rule.enabled ? '已启用' : '已停用'}
                     </span>
+                    <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-outline">
+                      {rule.sourceEngine === 'ai' ? 'AI 生成' : '手动规则'}
+                    </span>
                   </div>
                   <p className="mt-2 text-sm text-outline">
                     范围：{rule.scope} · 方式：{rule.matchMode} · 最少命中：{rule.minAlbumCount}
                   </p>
+                  <p className="mt-2 text-sm text-outline/80">
+                    目标名称：{rule.targetName?.trim() || '未固定'}{rule.targetNameTemplate ? ` · 模板：${rule.targetNameTemplate}` : ''}
+                  </p>
                   <p className="mt-2 text-sm text-outline/80">关键词：{rule.patterns.join('、')}</p>
+                  {rule.generatedReason ? (
+                    <p className="mt-2 text-xs text-outline/70">
+                      来源：{rule.generatedReason}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                   <button onClick={() => handleToggleRule(rule)} className="rounded-xl bg-surface px-3 py-2 text-sm font-semibold text-on-surface">

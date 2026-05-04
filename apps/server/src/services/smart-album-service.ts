@@ -368,7 +368,17 @@ const buildScopeTokenSet = (
   return tokens;
 };
 
-const deriveAiRuleScope = (albums: SmartAlbumScopeAlbum[]): SmartAlbumRuleScopeDTO => {
+const getPreferredAiScopes = (config?: SmartAlbumAiConfigRecord): SmartAlbumRuleScopeDTO[] => {
+  const configuredScopes = config
+    ? parseJsonArray(config.preferredScopesJson).filter(
+        (item): item is SmartAlbumRuleScopeDTO => item === "albumName" || item === "sourcePath" || item === "parentPath"
+      )
+    : [];
+  const fallbackScopes: SmartAlbumRuleScopeDTO[] = ["albumName", "sourcePath", "parentPath"];
+  return [...configuredScopes, ...fallbackScopes].filter((scope, index, list) => list.indexOf(scope) === index);
+};
+
+const deriveAiRuleScope = (albums: SmartAlbumScopeAlbum[], config?: SmartAlbumAiConfigRecord): SmartAlbumRuleScopeDTO => {
   const normalizeOptions: SmartAlbumRuleNormalizeOptions = {
     trimSpaces: true,
     normalizeCase: true,
@@ -377,7 +387,7 @@ const deriveAiRuleScope = (albums: SmartAlbumScopeAlbum[]): SmartAlbumRuleScopeD
     stripPageStats: true,
     stripSizeStats: true
   };
-  const scopes: SmartAlbumRuleScopeDTO[] = ["albumName", "sourcePath", "parentPath"];
+  const scopes = getPreferredAiScopes(config);
   let bestScope: SmartAlbumRuleScopeDTO = "albumName";
   let bestScore = -1;
 
@@ -390,6 +400,9 @@ const deriveAiRuleScope = (albums: SmartAlbumScopeAlbum[]): SmartAlbumRuleScopeD
     }
 
     const score = Array.from(tokenCounts.values()).filter((count) => count >= 2).length;
+    if (score > 0 && scope === scopes[0]) {
+      return scope;
+    }
     if (score > bestScore) {
       bestScope = scope;
       bestScore = score;
@@ -399,10 +412,11 @@ const deriveAiRuleScope = (albums: SmartAlbumScopeAlbum[]): SmartAlbumRuleScopeD
   return bestScope;
 };
 
-const buildRulePatternsFromAlbums = (
+export const buildRulePatternsFromAlbums = (
   albums: SmartAlbumScopeAlbum[],
   scope: SmartAlbumRuleScopeDTO,
-  config: SmartAlbumAiConfigRecord
+  config: SmartAlbumAiConfigRecord,
+  targetName?: string
 ): string[] => {
   const genericNormalizeOptions: SmartAlbumRuleNormalizeOptions = {
     trimSpaces: true,
@@ -424,6 +438,10 @@ const buildRulePatternsFromAlbums = (
     ].filter(Boolean)
   );
   const tokenToAlbums = new Map<string, Set<string>>();
+  const targetTokens = targetName
+    ? tokenizeNormalizedText(normalizeText(targetName, genericNormalizeOptions))
+        .filter((token) => token.length >= 2 && !/^\d+$/.test(token) && !excludedTokens.has(token))
+    : [];
 
   for (const album of albums) {
     for (const token of buildScopeTokenSet(album, scope, genericNormalizeOptions)) {
@@ -436,14 +454,28 @@ const buildRulePatternsFromAlbums = (
     }
   }
 
+  const prioritizedTargetTokens = targetTokens
+    .filter((token, index, list) => list.indexOf(token) === index)
+    .filter((token) => (tokenToAlbums.get(token)?.size ?? 0) >= config.minClusterAlbumCount)
+
+  if (prioritizedTargetTokens.length > 0) {
+    return prioritizedTargetTokens;
+  }
+
   return Array.from(tokenToAlbums.entries())
     .filter(([, albumIds]) => albumIds.size >= config.minClusterAlbumCount)
-    .map(([token]) => token)
-    .sort((left, right) => right.length - left.length);
+    .sort((left, right) => {
+      const coverageDiff = right[1].size - left[1].size;
+      if (coverageDiff !== 0) {
+        return coverageDiff;
+      }
+      return right[0].length - left[0].length;
+    })
+    .map(([token]) => token);
 };
 
 const buildHeuristicAiCandidates = (config: SmartAlbumAiConfigRecord, albums: SmartAlbumScopeAlbum[]): CandidateRecord[] => {
-  const scope = deriveAiRuleScope(albums);
+  const scope = deriveAiRuleScope(albums, config);
   const genericNormalizeOptions: SmartAlbumRuleNormalizeOptions = {
     trimSpaces: true,
     normalizeCase: true,
@@ -696,11 +728,11 @@ const buildSmartAlbumRuleRecords = (
       return [];
     }
 
-    const scope = deriveAiRuleScope(albumRows);
-    const patterns = buildRulePatternsFromAlbums(albumRows, scope, config).slice(0, 5);
-    const normalizedPatterns = patterns.length > 0 ? patterns : [items[0]?.smartAlbumName?.trim() || normalizedKey];
-    const confidence = Math.max(0, Math.min(1, Number(items.reduce((sum, item) => sum + item.confidence, 0) / items.length) || 0));
+    const scope = deriveAiRuleScope(albumRows, config);
     const targetName = items[0]?.smartAlbumName?.trim() || normalizedKey;
+    const patterns = buildRulePatternsFromAlbums(albumRows, scope, config, targetName).slice(0, 5);
+    const normalizedPatterns = patterns.length > 0 ? patterns : [targetName];
+    const confidence = Math.max(0, Math.min(1, Number(items.reduce((sum, item) => sum + item.confidence, 0) / items.length) || 0));
 
     return [{
       id: makeId("sar"),
@@ -739,18 +771,21 @@ const collectCandidateAlbumIds = (candidates: CandidateRecord[]): Set<string> =>
 export const rebuildSmartAlbums = async (): Promise<{ smartAlbumsDiscovered: number; membersDiscovered: number }> => {
   const albums = listAlbumsForSmartRuleScopeDb();
   const rules = listSmartAlbumRulesDb().filter((rule) => rule.enabled && rule.action === "assignSmartAlbum");
-  const baseRuleDtos = rules.map(toRuleDto);
+  const baseRules = rules.filter((rule) => rule.sourceEngine !== "ai");
+  const baseRuleDtos = baseRules.map(toRuleDto);
   const baseCandidates = baseRuleDtos.flatMap((rule) => buildRuleCandidates(rule, albums));
   const coveredAlbumIds = collectCandidateAlbumIds(baseCandidates);
   const remainingAlbums = albums.filter((album) => !coveredAlbumIds.has(album.id));
   const aiConfig = getSmartAlbumAiConfigDb();
 
-  if (aiConfig.enabled && remainingAlbums.length >= aiConfig.minClusterAlbumCount) {
-    const aiCandidates = await buildAiCandidates(remainingAlbums);
-    if (aiCandidates.length > 0) {
-      const aiRules = buildSmartAlbumRuleRecords(aiCandidates, remainingAlbums, makeId("srun"), aiConfig);
-      replaceSmartAlbumRulesBySourceEngineDb("ai", aiRules);
-    }
+  if (aiConfig.enabled) {
+    const aiCandidates = remainingAlbums.length >= aiConfig.minClusterAlbumCount
+      ? await buildAiCandidates(remainingAlbums)
+      : [];
+    const aiRules = aiCandidates.length > 0
+      ? buildSmartAlbumRuleRecords(aiCandidates, remainingAlbums, makeId("srun"), aiConfig)
+      : [];
+    replaceSmartAlbumRulesBySourceEngineDb("ai", aiRules);
   }
 
   const refreshedRules = listSmartAlbumRulesDb().filter((rule) => rule.enabled && rule.action === "assignSmartAlbum");

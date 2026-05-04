@@ -91,16 +91,19 @@ export const upsertSmartAlbumRuleDb = (rule: SmartAlbumRuleRecord): SmartAlbumRu
   const db = getDb();
   db.prepare(`
     INSERT INTO smart_album_rules (
-      id, name, enabled, priority, scope, match_mode, patterns_json, normalize_options_json,
-      action, target_name, target_name_template, min_album_count, min_confidence, created_at, updated_at
+      id, name, enabled, source_engine, priority, scope, match_mode, patterns_json, normalize_options_json,
+      action, target_name, target_name_template, min_album_count, min_confidence,
+      generated_normalized_key, generated_confidence, generated_reason, generated_run_id, created_at, updated_at
     )
     VALUES (
-      @id, @name, @enabled, @priority, @scope, @matchMode, @patternsJson, @normalizeOptionsJson,
-      @action, @targetName, @targetNameTemplate, @minAlbumCount, @minConfidence, @createdAt, @updatedAt
+      @id, @name, @enabled, @sourceEngine, @priority, @scope, @matchMode, @patternsJson, @normalizeOptionsJson,
+      @action, @targetName, @targetNameTemplate, @minAlbumCount, @minConfidence,
+      @generatedNormalizedKey, @generatedConfidence, @generatedReason, @generatedRunId, @createdAt, @updatedAt
     )
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       enabled = excluded.enabled,
+      source_engine = excluded.source_engine,
       priority = excluded.priority,
       scope = excluded.scope,
       match_mode = excluded.match_mode,
@@ -111,6 +114,10 @@ export const upsertSmartAlbumRuleDb = (rule: SmartAlbumRuleRecord): SmartAlbumRu
       target_name_template = excluded.target_name_template,
       min_album_count = excluded.min_album_count,
       min_confidence = excluded.min_confidence,
+      generated_normalized_key = excluded.generated_normalized_key,
+      generated_confidence = excluded.generated_confidence,
+      generated_reason = excluded.generated_reason,
+      generated_run_id = excluded.generated_run_id,
       updated_at = excluded.updated_at
   `).run({
     ...rule,
@@ -118,6 +125,47 @@ export const upsertSmartAlbumRuleDb = (rule: SmartAlbumRuleRecord): SmartAlbumRu
   });
 
   return rule;
+};
+
+export const replaceSmartAlbumRulesBySourceEngineDb = (sourceEngine: "manual" | "ai", rules: SmartAlbumRuleRecord[]) => {
+  const db = getDb();
+  const deleteRules = db.prepare("DELETE FROM smart_album_rules WHERE source_engine = ?");
+  const insertRule = db.prepare(`
+    INSERT INTO smart_album_rules (
+      id, name, enabled, source_engine, priority, scope, match_mode, patterns_json, normalize_options_json,
+      action, target_name, target_name_template, min_album_count, min_confidence,
+      generated_normalized_key, generated_confidence, generated_reason, generated_run_id, created_at, updated_at
+    )
+    VALUES (
+      @id, @name, @enabled, @sourceEngine, @priority, @scope, @matchMode, @patternsJson, @normalizeOptionsJson,
+      @action, @targetName, @targetNameTemplate, @minAlbumCount, @minConfidence,
+      @generatedNormalizedKey, @generatedConfidence, @generatedReason, @generatedRunId, @createdAt, @updatedAt
+    )
+  `);
+
+  const transaction = db.transaction(() => {
+    deleteRules.run(sourceEngine);
+    for (const rule of rules) {
+      insertRule.run({
+        ...rule,
+        enabled: rule.enabled ? 1 : 0
+      });
+    }
+  });
+
+  transaction();
+};
+
+export const clearSmartAlbumDataDb = () => {
+  const db = getDb();
+  const transaction = db.transaction(() => {
+    db.prepare("DELETE FROM smart_album_members").run();
+    db.prepare("DELETE FROM smart_album_match_records").run();
+    db.prepare("DELETE FROM smart_albums").run();
+    db.prepare("DELETE FROM smart_album_rules").run();
+  });
+
+  transaction();
 };
 
 export const deleteSmartAlbumRuleDb = (ruleId: string): boolean => {

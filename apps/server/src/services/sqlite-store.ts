@@ -6,7 +6,8 @@ export {
   upsertLibraryRootDb,
   deleteLibraryRootDb,
   updateLibraryRootDb,
-  clearLibraryDataDb
+  clearLibraryDataDb,
+  clearLibraryCatalogDb
 } from "../repositories/library-root-repository.js";
 export {
   type AlbumSortBy,
@@ -44,6 +45,8 @@ export {
   listSmartAlbumRulesDb,
   findSmartAlbumRuleByIdDb,
   upsertSmartAlbumRuleDb,
+  replaceSmartAlbumRulesBySourceEngineDb,
+  clearSmartAlbumDataDb,
   deleteSmartAlbumRuleDb,
   getSmartAlbumAiConfigDb,
   updateSmartAlbumAiConfigDb,

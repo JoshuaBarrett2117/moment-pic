@@ -137,6 +137,7 @@ const bootstrap = (db: Database.Database) => {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
+      source_engine TEXT NOT NULL DEFAULT 'manual',
       priority INTEGER NOT NULL DEFAULT 100,
       scope TEXT NOT NULL,
       match_mode TEXT NOT NULL,
@@ -147,6 +148,10 @@ const bootstrap = (db: Database.Database) => {
       target_name_template TEXT,
       min_album_count INTEGER NOT NULL DEFAULT 1,
       min_confidence REAL NOT NULL DEFAULT 1,
+      generated_normalized_key TEXT,
+      generated_confidence REAL,
+      generated_reason TEXT,
+      generated_run_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -222,6 +227,21 @@ const bootstrap = (db: Database.Database) => {
   try {
     db.exec("ALTER TABLE smart_album_ai_configs ADD COLUMN api_model TEXT NOT NULL DEFAULT 'gpt-4.1-mini'");
   } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN source_engine TEXT NOT NULL DEFAULT 'manual'");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN generated_normalized_key TEXT");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN generated_confidence REAL");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN generated_reason TEXT");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN generated_run_id TEXT");
+  } catch (e) {}
 
   try {
     db.exec(`
@@ -294,6 +314,14 @@ const bootstrap = (db: Database.Database) => {
         datetime('now'),
         datetime('now')
       );
+    `);
+  } catch (e) {}
+
+  try {
+    db.exec(`
+      UPDATE smart_album_rules
+      SET source_engine = COALESCE(source_engine, 'manual')
+      WHERE source_engine IS NULL OR TRIM(source_engine) = '';
     `);
   } catch (e) {}
 };

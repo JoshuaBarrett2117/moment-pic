@@ -124,6 +124,7 @@ export type SmartAlbumRuleRecord = {
   id: string;
   name: string;
   enabled: boolean;
+  sourceEngine: "manual" | "ai";
   priority: number;
   scope: SmartAlbumRuleScope;
   matchMode: SmartAlbumRuleMatchMode;
@@ -134,6 +135,10 @@ export type SmartAlbumRuleRecord = {
   targetNameTemplate: string | null;
   minAlbumCount: number;
   minConfidence: number;
+  generatedNormalizedKey: string | null;
+  generatedConfidence: number | null;
+  generatedReason: string | null;
+  generatedRunId: string | null;
   createdAt: string;
   updatedAt: string;
 };

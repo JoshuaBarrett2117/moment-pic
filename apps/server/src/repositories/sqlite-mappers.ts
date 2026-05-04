@@ -125,6 +125,7 @@ export const rowToSmartAlbumRule = (row: Record<string, unknown>): SmartAlbumRul
   id: String(row.id),
   name: String(row.name),
   enabled: Number(row.enabled) === 1,
+  sourceEngine: row.source_engine === "ai" ? "ai" : "manual",
   priority: Number(row.priority),
   scope:
     row.scope === "sourcePath"
@@ -156,6 +157,10 @@ export const rowToSmartAlbumRule = (row: Record<string, unknown>): SmartAlbumRul
   targetNameTemplate: row.target_name_template ? String(row.target_name_template) : null,
   minAlbumCount: Number(row.min_album_count),
   minConfidence: Number(row.min_confidence),
+  generatedNormalizedKey: row.generated_normalized_key ? String(row.generated_normalized_key) : null,
+  generatedConfidence: row.generated_confidence === null || row.generated_confidence === undefined ? null : Number(row.generated_confidence),
+  generatedReason: row.generated_reason ? String(row.generated_reason) : null,
+  generatedRunId: row.generated_run_id ? String(row.generated_run_id) : null,
   createdAt: String(row.created_at),
   updatedAt: String(row.updated_at)
 });

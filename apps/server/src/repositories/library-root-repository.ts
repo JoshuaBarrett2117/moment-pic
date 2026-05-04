@@ -99,3 +99,15 @@ export const clearLibraryDataDb = (libraryRootId: string) => {
   });
   transaction();
 };
+
+export const clearLibraryCatalogDb = () => {
+  const db = getDb();
+  const transaction = db.transaction(() => {
+    db.prepare("DELETE FROM album_views").run();
+    db.prepare("DELETE FROM thumbnails").run();
+    db.prepare("DELETE FROM assets").run();
+    db.prepare("DELETE FROM albums").run();
+    db.prepare("DELETE FROM library_roots").run();
+  });
+  transaction();
+};

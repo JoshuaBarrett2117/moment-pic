@@ -117,6 +117,7 @@ export type SmartAlbumRuleDTO = {
   id: string;
   name: string;
   enabled: boolean;
+  sourceEngine: "manual" | "ai";
   priority: number;
   scope: SmartAlbumRuleScopeDTO;
   matchMode: SmartAlbumRuleMatchModeDTO;
@@ -134,6 +135,10 @@ export type SmartAlbumRuleDTO = {
   targetNameTemplate: string | null;
   minAlbumCount: number;
   minConfidence: number;
+  generatedNormalizedKey: string | null;
+  generatedConfidence: number | null;
+  generatedReason: string | null;
+  generatedRunId: string | null;
   createdAt: string;
   updatedAt: string;
 };

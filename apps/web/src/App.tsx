@@ -6,7 +6,7 @@ import { PaperGrain } from './components/PaperGrain';
 import { useRecentAlbums, recordAlbumView } from './hooks';
 import { api } from './lib/api';
 import type { AlbumListItemDTO } from './types/api';
-import { useGalleryAppState } from './app/gallery-navigation';
+import { buildUrl, useGalleryAppState } from './app/gallery-navigation';
 import { useGalleryDataController } from './app/use-gallery-data-controller';
 
 const GalleryScreen = lazy(() =>
@@ -33,12 +33,12 @@ export default function App() {
     direction,
     filters,
     galleryViewMode,
+    initialFilters,
     initialNavigation,
     isAuthenticated,
     isRecentActive,
     navigate,
     nextAlbumId,
-    resetToLogin,
     scrollPosition,
     selectedAlbum,
     selectedSmartAlbum,
@@ -52,7 +52,6 @@ export default function App() {
     setScrollPosition,
     setSelectedAlbum,
     setSelectedSmartAlbum,
-    syncHistory,
   } = useGalleryAppState();
 
   const {
@@ -88,7 +87,16 @@ export default function App() {
     const verifyAuth = async () => {
       const token = localStorage.getItem('auth_token');
       if (!token) {
-        resetToLogin();
+        localStorage.removeItem('auth_token');
+        setIsAuthenticated(false);
+        setCurrentScreen(Screen.LOGIN);
+        setActiveTab('gallery');
+        setIsRecentActive(false);
+        setGalleryViewMode('albums');
+        setSelectedAlbum(null);
+        setSelectedSmartAlbum(null);
+        setNextAlbumId(null);
+        window.history.replaceState(null, '', window.location.pathname);
         return;
       }
 
@@ -100,37 +108,57 @@ export default function App() {
         setIsRecentActive(initialNavigation.isRecentActive);
         setGalleryViewMode(initialNavigation.galleryViewMode);
         setActiveTab(initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery');
-        syncHistory(initialNavigation.screen, {
-          replace: true,
-          selectedAlbumId: initialNavigation.selectedAlbumId,
-          selectedSmartAlbumId: initialNavigation.selectedSmartAlbumId,
-          isRecentActive: initialNavigation.isRecentActive,
-          galleryViewMode: initialNavigation.galleryViewMode,
-        });
+        window.history.replaceState(
+          {
+            screen: initialNavigation.screen,
+            selectedAlbum: initialNavigation.selectedAlbumId,
+            selectedSmartAlbum: initialNavigation.selectedSmartAlbumId,
+            activeTab: initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery',
+            isRecentActive: initialNavigation.isRecentActive,
+            galleryViewMode: initialNavigation.galleryViewMode,
+          },
+          '',
+          buildUrl(initialFilters, {
+            screen: initialNavigation.screen,
+            selectedAlbumId: initialNavigation.selectedAlbumId,
+            selectedSmartAlbumId: initialNavigation.selectedSmartAlbumId,
+            isRecentActive: initialNavigation.isRecentActive,
+            galleryViewMode: initialNavigation.galleryViewMode,
+          })
+        );
         setCurrentScreen(initialNavigation.screen);
       } catch {
-        resetToLogin();
+        localStorage.removeItem('auth_token');
+        setIsAuthenticated(false);
+        setCurrentScreen(Screen.LOGIN);
+        setActiveTab('gallery');
+        setIsRecentActive(false);
+        setGalleryViewMode('albums');
+        setSelectedAlbum(null);
+        setSelectedSmartAlbum(null);
+        setNextAlbumId(null);
+        window.history.replaceState(null, '', window.location.pathname);
       }
     };
 
     void verifyAuth();
   }, [
+    initialFilters,
     initialNavigation,
-    resetToLogin,
     setActiveTab,
     setCurrentScreen,
     setGalleryViewMode,
     setIsAuthenticated,
     setIsRecentActive,
+    setNextAlbumId,
     setSelectedAlbum,
     setSelectedSmartAlbum,
-    syncHistory,
   ]);
 
   const handleLogin = useCallback(() => {
     const nextFilters = { ...filters, libraryRootId: '', page: 1 };
-    setIsAuthenticated(true);
     localStorage.setItem('auth_token', 'authenticated');
+    setIsAuthenticated(true);
     setFilters(nextFilters);
     setGalleryViewMode('albums');
     void api.get('/albums', { page: nextFilters.page, pageSize: 1 });

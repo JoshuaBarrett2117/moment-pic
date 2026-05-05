@@ -279,6 +279,109 @@ const buildTargetName = (rule: SmartAlbumRuleDTO, matchedToken: string): string 
 const tokenizeNormalizedText = (value: string): string[] =>
   Array.from(new Set(value.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}A-Za-z0-9]+/gu) ?? []));
 
+const normalizePathSegment = (value: string): string => value.replace(/\\/g, "/").replace(/\/+$/, "").trim();
+
+const AI_TARGET_SUFFIXES = ["系列", "作品", "合集", "写真", "图集", "相关", "主题", "套图"] as const;
+
+const expandAiSemanticTokens = (tokens: string[]): string[] => {
+  const expanded = new Set<string>();
+  for (const token of tokens) {
+    if (!token) {
+      continue;
+    }
+
+    let candidate = token.trim();
+    let trimmedAny = false;
+    while (candidate) {
+      let trimmed = false;
+      for (const suffix of AI_TARGET_SUFFIXES) {
+        if (!candidate.endsWith(suffix) || candidate.length <= suffix.length + 1) {
+          continue;
+        }
+        candidate = candidate.slice(0, -suffix.length).trim();
+        if (candidate) {
+          expanded.add(candidate);
+        }
+        trimmed = true;
+        trimmedAny = true;
+        break;
+      }
+      if (!trimmed) {
+        break;
+      }
+    }
+
+    if (!trimmedAny) {
+      expanded.add(token);
+    }
+  }
+
+  return Array.from(expanded).filter(Boolean);
+};
+
+const buildAiTargetTokens = (targetName: string, normalizeOptions: SmartAlbumRuleNormalizeOptions): string[] => {
+  const normalizedTargetName = normalizeText(targetName, normalizeOptions);
+  return expandAiSemanticTokens(
+    tokenizeNormalizedText(normalizedTargetName).filter((token) => token.length >= 2 && !/^\d+$/.test(token))
+  );
+};
+
+const buildAiPathSegments = (sourcePath: string): string[] => {
+  const segments = normalizePathSegment(sourcePath).split("/").filter(Boolean);
+  let currentIndex = -1;
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index] ?? "";
+    if (!segment || /^\d+$/.test(segment)) {
+      continue;
+    }
+    currentIndex = index;
+    break;
+  }
+
+  if (currentIndex < 0) {
+    return [];
+  }
+
+  const currentSegment = segments[currentIndex] ?? "";
+  const parentSegment = currentIndex > 0 ? (segments[currentIndex - 1] ?? "") : "";
+  return [currentSegment, parentSegment].filter(Boolean);
+};
+
+const extractAiScopeTexts = (scope: SmartAlbumRuleScopeDTO, album: SmartAlbumScopeAlbum): string[] => {
+  if (scope === "albumName") {
+    return [album.name];
+  }
+  if (scope === "sourcePath") {
+    return buildAiPathSegments(album.sourcePath);
+  }
+  if (scope === "parentPath") {
+    return buildAiPathSegments(album.sourcePath).slice(1, 2);
+  }
+  return [];
+};
+
+export const areAiRulePatternsAligned = (patterns: string[], targetName: string): boolean => {
+  const normalizeOptions: SmartAlbumRuleNormalizeOptions = {
+    trimSpaces: true,
+    normalizeCase: true,
+    stripSequenceNo: true,
+    stripDate: true,
+    stripPageStats: true,
+    stripSizeStats: true
+  };
+  const normalizedTargetName = normalizeText(targetName, normalizeOptions);
+  if (!normalizedTargetName) {
+    return false;
+  }
+
+  const targetTokens = new Set(buildAiTargetTokens(targetName, normalizeOptions));
+
+  return patterns.length > 0 && patterns.every((pattern) => {
+    const normalizedPattern = normalizeText(pattern, normalizeOptions);
+    return Boolean(normalizedPattern) && (normalizedPattern === normalizedTargetName || targetTokens.has(normalizedPattern));
+  });
+};
+
 const matchPattern = (mode: SmartAlbumRuleDTO["matchMode"], haystack: string, pattern: string): boolean => {
   if (mode === "equals") {
     return haystack === pattern;
@@ -368,6 +471,27 @@ const buildScopeTokenSet = (
   return tokens;
 };
 
+const buildAiScopeTokenSet = (
+  album: SmartAlbumScopeAlbum,
+  scope: SmartAlbumRuleScopeDTO,
+  normalizeOptions: SmartAlbumRuleNormalizeOptions
+): Set<string> => {
+  const texts = extractAiScopeTexts(scope, album);
+  const tokens = new Set<string>();
+
+  for (const text of texts) {
+    const normalized = normalizeText(text, normalizeOptions);
+    for (const token of expandAiSemanticTokens(tokenizeNormalizedText(normalized))) {
+      if (/^\d+$/.test(token) || token.length < 2) {
+        continue;
+      }
+      tokens.add(token);
+    }
+  }
+
+  return tokens;
+};
+
 const getPreferredAiScopes = (config?: SmartAlbumAiConfigRecord): SmartAlbumRuleScopeDTO[] => {
   const configuredScopes = config
     ? parseJsonArray(config.preferredScopesJson).filter(
@@ -394,7 +518,7 @@ const deriveAiRuleScope = (albums: SmartAlbumScopeAlbum[], config?: SmartAlbumAi
   for (const scope of scopes) {
     const tokenCounts = new Map<string, number>();
     for (const album of albums) {
-      for (const token of buildScopeTokenSet(album, scope, normalizeOptions)) {
+      for (const token of buildAiScopeTokenSet(album, scope, normalizeOptions)) {
         tokenCounts.set(token, (tokenCounts.get(token) ?? 0) + 1);
       }
     }
@@ -439,12 +563,12 @@ export const buildRulePatternsFromAlbums = (
   );
   const tokenToAlbums = new Map<string, Set<string>>();
   const targetTokens = targetName
-    ? tokenizeNormalizedText(normalizeText(targetName, genericNormalizeOptions))
-        .filter((token) => token.length >= 2 && !/^\d+$/.test(token) && !excludedTokens.has(token))
+    ? buildAiTargetTokens(targetName, genericNormalizeOptions)
+        .filter((token) => !excludedTokens.has(token))
     : [];
 
   for (const album of albums) {
-    for (const token of buildScopeTokenSet(album, scope, genericNormalizeOptions)) {
+    for (const token of buildAiScopeTokenSet(album, scope, genericNormalizeOptions)) {
       if (excludedTokens.has(token)) {
         continue;
       }
@@ -498,7 +622,7 @@ const buildHeuristicAiCandidates = (config: SmartAlbumAiConfigRecord, albums: Sm
   const tokenToAlbums = new Map<string, Set<string>>();
 
   for (const album of albums) {
-    const tokens = Array.from(buildScopeTokenSet(album, scope, genericNormalizeOptions)).filter((token) => !excludedTokens.has(token));
+    const tokens = Array.from(buildAiScopeTokenSet(album, scope, genericNormalizeOptions)).filter((token) => !excludedTokens.has(token));
     for (const token of tokens) {
       const bucket = tokenToAlbums.get(token) ?? new Set<string>();
       bucket.add(album.id);
@@ -706,7 +830,7 @@ const buildSmartAlbumRecords = (candidates: CandidateRecord[], runId: string) =>
   return { smartAlbums, members, matchRecords };
 };
 
-const buildSmartAlbumRuleRecords = (
+export const buildSmartAlbumRuleRecords = (
   candidates: CandidateRecord[],
   albums: SmartAlbumScopeAlbum[],
   runId: string,
@@ -722,7 +846,7 @@ const buildSmartAlbumRuleRecords = (
   const albumMap = new Map(albums.map((album) => [album.id, album]));
   const timestamp = new Date().toISOString();
 
-  return Array.from(grouped.entries()).flatMap(([normalizedKey, items]) => {
+  const rawRules = Array.from(grouped.entries()).flatMap(([normalizedKey, items]) => {
     const albumRows = Array.from(new Set(items.map((item) => item.albumId))).map((albumId) => albumMap.get(albumId)).filter((item): item is SmartAlbumScopeAlbum => Boolean(item));
     if (albumRows.length < 2) {
       return [];
@@ -732,9 +856,12 @@ const buildSmartAlbumRuleRecords = (
     const targetName = items[0]?.smartAlbumName?.trim() || normalizedKey;
     const patterns = buildRulePatternsFromAlbums(albumRows, scope, config, targetName).slice(0, 5);
     const normalizedPatterns = patterns.length > 0 ? patterns : [targetName];
+    if (!areAiRulePatternsAligned(normalizedPatterns, targetName)) {
+      return [];
+    }
     const confidence = Math.max(0, Math.min(1, Number(items.reduce((sum, item) => sum + item.confidence, 0) / items.length) || 0));
 
-    return [{
+    const createdRule: SmartAlbumRuleRecord = {
       id: makeId("sar"),
       name: `AI生成：${targetName}`,
       enabled: true,
@@ -762,8 +889,34 @@ const buildSmartAlbumRuleRecords = (
       generatedRunId: runId,
       createdAt: timestamp,
       updatedAt: timestamp
-    }];
+    };
+
+    return [createdRule];
   });
+
+  const mergedRules = new Map<string, SmartAlbumRuleRecord>();
+  for (const rule of rawRules) {
+    const patterns = parseJsonArray(rule.patternsJson);
+    const mergeKey = JSON.stringify([...patterns].sort());
+    const existing = mergedRules.get(mergeKey);
+    if (!existing) {
+      mergedRules.set(mergeKey, rule);
+      continue;
+    }
+
+    const shouldReplace = rule.minAlbumCount > existing.minAlbumCount
+      || (rule.minAlbumCount === existing.minAlbumCount && rule.minConfidence > existing.minConfidence)
+      || (
+        rule.minAlbumCount === existing.minAlbumCount
+        && rule.minConfidence === existing.minConfidence
+        && (rule.targetName?.length ?? 0) < (existing.targetName?.length ?? 0)
+      );
+    if (shouldReplace) {
+      mergedRules.set(mergeKey, rule);
+    }
+  }
+
+  return Array.from(mergedRules.values());
 };
 
 const collectCandidateAlbumIds = (candidates: CandidateRecord[]): Set<string> => new Set(candidates.map((candidate) => candidate.albumId));

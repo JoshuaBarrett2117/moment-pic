@@ -318,6 +318,125 @@ test("smart album routes persist ai generated rules and reuse them after ai is d
   }
 });
 
+test("smart album rebuild replaces stale ai rules with the regenerated result set", async () => {
+  const app = Fastify();
+  const suffix = crypto.randomUUID().replace(/-/g, "");
+  const libraryRootId = `root_ai_replace_${suffix}`;
+  const timestamp = new Date().toISOString();
+
+  clearLibraryCatalogDb();
+  clearSmartAlbumDataDb();
+  upsertLibraryRootDb({
+    id: libraryRootId,
+    name: `smart-root-ai-replace-${suffix}`,
+    path: `C:/smart-test-ai-replace/${suffix}`,
+    enabled: true,
+    lastScannedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+
+  seedAlbum({
+    libraryRootId,
+    sourcePath: `C:/smart-test-ai-replace/${suffix}/星之迟迟作品/001`,
+    name: `星之迟迟作品-${suffix}-A`
+  });
+  seedAlbum({
+    libraryRootId,
+    sourcePath: `C:/smart-test-ai-replace/${suffix}/星之迟迟作品/002`,
+    name: `星之迟迟作品-${suffix}-B`
+  });
+
+  upsertSmartAlbumRuleDb({
+    id: makeId("sar"),
+    name: "AI生成：尖耳国度系列",
+    enabled: true,
+    sourceEngine: "ai",
+    priority: 20,
+    scope: "sourcePath",
+    matchMode: "contains",
+    patternsJson: JSON.stringify(["蠢沐沐"]),
+    normalizeOptionsJson: JSON.stringify({
+      trimSpaces: true,
+      normalizeCase: true,
+      stripSequenceNo: true,
+      stripDate: true,
+      stripPageStats: true,
+      stripSizeStats: true
+    }),
+    action: "assignSmartAlbum",
+    targetName: "尖耳国度系列",
+    targetNameTemplate: null,
+    minAlbumCount: 2,
+    minConfidence: 0.96,
+    generatedNormalizedKey: "尖耳国度系列",
+    generatedConfidence: 0.96,
+    generatedReason: `generated from ai run stale_${suffix}`,
+    generatedRunId: `srun_stale_${suffix}`,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+
+  try {
+    await app.register(smartAlbumRoutes);
+    await app.ready();
+
+    await updateSmartAlbumAiConfig({
+      enabled: true,
+      mode: "assist",
+      provider: "openai",
+      apiEndpoint: "https://api.openai.com/v1",
+      apiModel: "gpt-4.1-mini",
+      minConfidenceAutoApply: 0.9,
+      minClusterAlbumCount: 2,
+      maxSuggestionsPerRun: 20,
+      allowAliasMerge: true,
+      allowCrossRootGrouping: true,
+      excludedTokens: [],
+      preferredScopes: ["albumName", "sourcePath"],
+      reviewRequiredBelowConfidence: 0.9
+    });
+
+    const rebuildResponse = await app.inject({
+      method: "POST",
+      url: "/api/v1/smart-albums/rebuild"
+    });
+    assert.equal(rebuildResponse.statusCode, 200);
+    const rebuildPayload = rebuildResponse.json() as {
+      data: { taskId: string };
+    };
+
+    let rebuildStatus: { data: { status: string } } | null = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/smart-albums/rebuild/${rebuildPayload.data.taskId}`
+      });
+      rebuildStatus = response.json() as { data: { status: string } };
+      if (rebuildStatus.data.status === "completed" || rebuildStatus.data.status === "failed") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    assert.equal(rebuildStatus?.data.status, "completed");
+
+    const rulesResponse = await app.inject({
+      method: "GET",
+      url: "/api/v1/smart-album-rules"
+    });
+    assert.equal(rulesResponse.statusCode, 200);
+    const rulesPayload = rulesResponse.json() as {
+      data: { items: Array<{ name: string; sourceEngine: "manual" | "ai"; patterns: string[]; targetName: string | null }> };
+    };
+    const aiRules = rulesPayload.data.items.filter((item) => item.sourceEngine === "ai");
+    assert.equal(aiRules.some((item) => item.name === "AI生成：尖耳国度系列"), false);
+    assert.equal(aiRules.some((item) => item.patterns.length === 1 && item.patterns[0] === "星之迟迟"), true);
+  } finally {
+    await app.close();
+  }
+});
+
 test("smart album routes allow editing ai generated rules into manual rules", async () => {
   const app = Fastify();
   const suffix = crypto.randomUUID().replace(/-/g, "");

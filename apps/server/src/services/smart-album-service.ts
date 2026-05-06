@@ -283,6 +283,27 @@ const normalizePathSegment = (value: string): string => value.replace(/\\/g, "/"
 
 const AI_TARGET_SUFFIXES = ["系列", "作品", "合集", "写真", "图集", "相关", "主题", "套图"] as const;
 
+const isValidAiKeywordPattern = (value: string): boolean => {
+  const normalized = value.trim();
+  if (!normalized || /^\d+$/.test(normalized)) {
+    return false;
+  }
+
+  if (/^\p{Script=Han}+$/u.test(normalized)) {
+    return Array.from(normalized).length >= 2;
+  }
+
+  if (/^[A-Za-z]+(?:\s+[A-Za-z]+)+$/.test(normalized)) {
+    return normalized.split(/\s+/).filter(Boolean).length >= 2;
+  }
+
+  if (/^[A-Za-z]+$/.test(normalized)) {
+    return normalized.length >= 4;
+  }
+
+  return normalized.length >= 2;
+};
+
 const expandAiSemanticTokens = (tokens: string[]): string[] => {
   const expanded = new Set<string>();
   for (const token of tokens) {
@@ -322,7 +343,7 @@ const expandAiSemanticTokens = (tokens: string[]): string[] => {
 const buildAiTargetTokens = (targetName: string, normalizeOptions: SmartAlbumRuleNormalizeOptions): string[] => {
   const normalizedTargetName = normalizeText(targetName, normalizeOptions);
   return expandAiSemanticTokens(
-    tokenizeNormalizedText(normalizedTargetName).filter((token) => token.length >= 2 && !/^\d+$/.test(token))
+    tokenizeNormalizedText(normalizedTargetName).filter((token) => isValidAiKeywordPattern(token))
   );
 };
 
@@ -378,7 +399,8 @@ export const areAiRulePatternsAligned = (patterns: string[], targetName: string)
 
   return patterns.length > 0 && patterns.every((pattern) => {
     const normalizedPattern = normalizeText(pattern, normalizeOptions);
-    return Boolean(normalizedPattern) && (normalizedPattern === normalizedTargetName || targetTokens.has(normalizedPattern));
+    return isValidAiKeywordPattern(normalizedPattern)
+      && (normalizedPattern === normalizedTargetName || targetTokens.has(normalizedPattern));
   });
 };
 
@@ -461,7 +483,7 @@ const buildScopeTokenSet = (
   for (const text of texts) {
     const normalized = normalizeText(text, normalizeOptions);
     for (const token of tokenizeNormalizedText(normalized)) {
-      if (/^\d+$/.test(token) || token.length < 2) {
+      if (!isValidAiKeywordPattern(token)) {
         continue;
       }
       tokens.add(token);
@@ -482,7 +504,7 @@ const buildAiScopeTokenSet = (
   for (const text of texts) {
     const normalized = normalizeText(text, normalizeOptions);
     for (const token of expandAiSemanticTokens(tokenizeNormalizedText(normalized))) {
-      if (/^\d+$/.test(token) || token.length < 2) {
+      if (!isValidAiKeywordPattern(token)) {
         continue;
       }
       tokens.add(token);
@@ -855,7 +877,7 @@ export const buildSmartAlbumRuleRecords = (
     const scope = deriveAiRuleScope(albumRows, config);
     const targetName = items[0]?.smartAlbumName?.trim() || normalizedKey;
     const patterns = buildRulePatternsFromAlbums(albumRows, scope, config, targetName).slice(0, 5);
-    const normalizedPatterns = patterns.length > 0 ? patterns : [targetName];
+    const normalizedPatterns = (patterns.length > 0 ? patterns : [targetName]).filter((pattern) => isValidAiKeywordPattern(pattern));
     if (!areAiRulePatternsAligned(normalizedPatterns, targetName)) {
       return [];
     }

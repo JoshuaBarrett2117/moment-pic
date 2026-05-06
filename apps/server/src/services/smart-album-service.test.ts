@@ -84,11 +84,41 @@ test("buildRulePatternsFromAlbums strips noisy target suffixes and ignores top-l
   assert.equal(patterns.includes("星之迟迟作品"), false);
 });
 
+test("buildRulePatternsFromAlbums filters too-short chinese and english ai keywords", () => {
+  const patterns = buildRulePatternsFromAlbums(
+    [
+      {
+        id: "alb_1",
+        name: "set-1",
+        sourcePath: "/volume4/AI/阿/abc/blue/001",
+        assetCount: 12,
+        sourceType: "folder"
+      },
+      {
+        id: "alb_2",
+        name: "set-2",
+        sourcePath: "/volume4/AI/阿/abc/blue/002",
+        assetCount: 16,
+        sourceType: "folder"
+      }
+    ],
+    "sourcePath",
+    createAiConfig()
+  );
+
+  assert.equal(patterns.includes("阿"), false);
+  assert.equal(patterns.includes("abc"), false);
+  assert.equal(patterns.includes("blue"), true);
+});
+
 test("areAiRulePatternsAligned accepts target-name tokens and full-name patterns", () => {
   assert.equal(areAiRulePatternsAligned(["小恩", "r18"], "小恩 R18 写真"), true);
   assert.equal(areAiRulePatternsAligned(["艾米利亚 - 蠢沐沐"], "艾米利亚 - 蠢沐沐"), true);
   assert.equal(areAiRulePatternsAligned(["尖耳国度"], "尖耳国度系列"), true);
   assert.equal(areAiRulePatternsAligned(["星之迟迟"], "星之迟迟作品"), true);
+  assert.equal(areAiRulePatternsAligned(["yu gi"], "yu gi"), true);
+  assert.equal(areAiRulePatternsAligned(["abc"], "abc"), false);
+  assert.equal(areAiRulePatternsAligned(["阿"], "阿"), false);
   assert.equal(areAiRulePatternsAligned(["蠢沐沐"], "尖耳国度系列"), false);
 });
 
@@ -139,6 +169,105 @@ test("buildSmartAlbumRuleRecords skips ai rules when extracted patterns do not a
   );
 
   assert.deepEqual(rules, []);
+});
+
+test("buildSmartAlbumRuleRecords skips ai rules when only short keywords are available", () => {
+  const rules = buildSmartAlbumRuleRecords(
+    [
+      {
+        albumId: "alb_1",
+        normalizedKey: "abc",
+        smartAlbumName: "abc",
+        confidence: 0.98,
+        sourceEngine: "ai",
+        ruleId: null,
+        matchedScopes: ["albumName"],
+        matchedTokens: ["abc"],
+        reason: "matched by openai"
+      },
+      {
+        albumId: "alb_2",
+        normalizedKey: "abc",
+        smartAlbumName: "abc",
+        confidence: 0.98,
+        sourceEngine: "ai",
+        ruleId: null,
+        matchedScopes: ["albumName"],
+        matchedTokens: ["abc"],
+        reason: "matched by openai"
+      }
+    ],
+    [
+      {
+        id: "alb_1",
+        name: "001",
+        sourcePath: "/tmp/001",
+        assetCount: 40,
+        sourceType: "zip"
+      },
+      {
+        id: "alb_2",
+        name: "002",
+        sourcePath: "/tmp/002",
+        assetCount: 40,
+        sourceType: "zip"
+      }
+    ],
+    "srun_test",
+    createAiConfig()
+  );
+
+  assert.deepEqual(rules, []);
+});
+
+test("buildSmartAlbumRuleRecords allows ai english phrases with two words", () => {
+  const rules = buildSmartAlbumRuleRecords(
+    [
+      {
+        albumId: "alb_1",
+        normalizedKey: "yu gi",
+        smartAlbumName: "yu gi",
+        confidence: 0.98,
+        sourceEngine: "ai",
+        ruleId: null,
+        matchedScopes: ["albumName"],
+        matchedTokens: ["yu gi"],
+        reason: "matched by openai"
+      },
+      {
+        albumId: "alb_2",
+        normalizedKey: "yu gi",
+        smartAlbumName: "yu gi",
+        confidence: 0.98,
+        sourceEngine: "ai",
+        ruleId: null,
+        matchedScopes: ["albumName"],
+        matchedTokens: ["yu gi"],
+        reason: "matched by openai"
+      }
+    ],
+    [
+      {
+        id: "alb_1",
+        name: "001",
+        sourcePath: "/tmp/001",
+        assetCount: 40,
+        sourceType: "zip"
+      },
+      {
+        id: "alb_2",
+        name: "002",
+        sourcePath: "/tmp/002",
+        assetCount: 40,
+        sourceType: "zip"
+      }
+    ],
+    "srun_test",
+    createAiConfig()
+  );
+
+  assert.equal(rules.length, 1);
+  assert.deepEqual(JSON.parse(rules[0]?.patternsJson ?? "[]"), ["yu gi"]);
 });
 
 test("buildSmartAlbumRuleRecords merges ai rules that resolve to the same keyword set", () => {

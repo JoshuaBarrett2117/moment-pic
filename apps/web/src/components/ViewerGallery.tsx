@@ -93,6 +93,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const [pendingAdvanceAfterLoad, setPendingAdvanceAfterLoad] = useState(false);
   const touchStartX = useRef<number>(0);
   const touchStartY = useRef<number>(0);
+  const touchDragStartX = useRef<number>(0);
+  const touchDragStartY = useRef<number>(0);
   const lastTouchDistance = useRef<number>(0);
   const isZooming = useRef<boolean>(false);
   const preloadedImagesRef = useRef<HTMLImageElement[]>([]);
@@ -392,12 +394,16 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     if (e.touches.length === 1) {
       touchStartX.current = e.touches[0].clientX;
       touchStartY.current = e.touches[0].clientY;
+      touchDragStartX.current = e.touches[0].clientX - position.x;
+      touchDragStartY.current = e.touches[0].clientY - position.y;
       isZooming.current = false;
+      setIsDragging(scale > 1);
     } else if (e.touches.length === 2) {
       isZooming.current = true;
+      setIsDragging(false);
       lastTouchDistance.current = getTouchDistance(e.touches);
     }
-  }, [showEndPrompt]);
+  }, [position, scale, showEndPrompt]);
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (showEndPrompt) {
@@ -417,7 +423,17 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       const deltaX = Math.abs(e.touches[0].clientX - touchStartX.current);
       const deltaY = Math.abs(e.touches[0].clientY - touchStartY.current);
 
-      if (deltaY > deltaX && scale <= 1) {
+      if (scale > 1) {
+        e.preventDefault();
+        setPosition({
+          x: e.touches[0].clientX - touchDragStartX.current,
+          y: e.touches[0].clientY - touchDragStartY.current,
+        });
+
+        if (deltaX > 2 || deltaY > 2) {
+          isZooming.current = true;
+        }
+      } else if (deltaY > deltaX) {
         isZooming.current = true;
       }
     }
@@ -430,7 +446,18 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
 
     lastTouchDistance.current = 0;
 
-    if (e.touches.length > 0 || isZooming.current || !e.changedTouches?.[0]) {
+    if (e.touches.length === 1) {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+      touchDragStartX.current = e.touches[0].clientX - position.x;
+      touchDragStartY.current = e.touches[0].clientY - position.y;
+      setIsDragging(scale > 1);
+      return;
+    }
+
+    setIsDragging(false);
+
+    if (isZooming.current || !e.changedTouches?.[0]) {
       return;
     }
 
@@ -454,7 +481,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     if (useTouchInteractions) {
       setShowControls((prev) => !prev);
     }
-  }, [goToNext, goToPrev, showEndPrompt, useTouchInteractions]);
+  }, [goToNext, goToPrev, position, scale, showEndPrompt, useTouchInteractions]);
 
   if (!isOpen || images.length === 0) {
     return null;

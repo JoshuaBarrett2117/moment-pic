@@ -1,13 +1,26 @@
 import { useState, useCallback } from 'react';
 import { api } from '../lib/api';
-import type { SystemConfigDTO } from '../types/api';
+import type { PageTransitionModeDTO, SystemConfigDTO } from '../types/api';
+
+type SystemConfigUpdates = {
+  enablePolling?: boolean;
+  pollingInterval?: number;
+  preloadBefore?: number;
+  preloadAfter?: number;
+  defaultImageQualityPreset?: "low" | "balanced" | "high" | "original";
+  pageTransitionMode?: PageTransitionModeDTO;
+  albumListItemMinWidthMobile?: number;
+  albumListItemMinWidthDesktop?: number;
+  albumDetailItemMinWidthMobile?: number;
+  albumDetailItemMinWidthDesktop?: number;
+};
 
 interface UseSystemConfigReturn {
   systemConfig: SystemConfigDTO | null;
   isLoading: boolean;
   error: string | null;
   fetchSystemConfig: () => Promise<void>;
-  updateSystemConfig: (updates: { enablePolling?: boolean; pollingInterval?: number; preloadBefore?: number; preloadAfter?: number; defaultImageQualityPreset?: "low" | "balanced" | "high" | "original"; albumListItemMinWidthMobile?: number; albumListItemMinWidthDesktop?: number; albumDetailItemMinWidthMobile?: number; albumDetailItemMinWidthDesktop?: number }) => Promise<SystemConfigDTO | null>;
+  updateSystemConfig: (updates: SystemConfigUpdates) => Promise<SystemConfigDTO | null>;
 }
 
 export function useSystemConfig(): UseSystemConfigReturn {
@@ -28,7 +41,7 @@ export function useSystemConfig(): UseSystemConfigReturn {
     }
   }, []);
 
-  const updateSystemConfig = useCallback(async (updates: { enablePolling?: boolean; pollingInterval?: number; preloadBefore?: number; preloadAfter?: number; defaultImageQualityPreset?: "low" | "balanced" | "high" | "original"; albumListItemMinWidthMobile?: number; albumListItemMinWidthDesktop?: number; albumDetailItemMinWidthMobile?: number; albumDetailItemMinWidthDesktop?: number }): Promise<SystemConfigDTO | null> => {
+  const updateSystemConfig = useCallback(async (updates: SystemConfigUpdates): Promise<SystemConfigDTO | null> => {
     setError(null);
     try {
       const result = await api.patch<SystemConfigDTO>('/system-config', updates);

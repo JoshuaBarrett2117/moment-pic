@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { VIEWER_QUALITY_SESSION_KEY } from '../lib/viewer-quality';
 import { useSystemConfig } from './useSystemConfig';
+import type { PageTransitionModeDTO } from '../types/api';
 
 const VIEWER_PRELOAD_BEFORE_KEY = 'moment_pic_viewer_preload_before';
 const VIEWER_PRELOAD_AFTER_KEY = 'moment_pic_viewer_preload_after';
@@ -11,6 +12,7 @@ const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP = 300;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
 const DEFAULT_IMAGE_QUALITY_PRESET = 'original';
+const DEFAULT_PAGE_TRANSITION_MODE: PageTransitionModeDTO = 'page';
 
 const clampPreloadRadius = (value: number): number => {
   if (!Number.isFinite(value)) {
@@ -29,10 +31,11 @@ const clampGridWidth = (value: number): number => {
 };
 
 export const useSettingsConfigForm = () => {
-  const { systemConfig, updateSystemConfig, ...rest } = useSystemConfig();
+  const { systemConfig, fetchSystemConfig, updateSystemConfig, ...rest } = useSystemConfig();
   const [preloadBefore, setPreloadBefore] = useState(DEFAULT_PRELOAD_BEFORE);
   const [preloadAfter, setPreloadAfter] = useState(DEFAULT_PRELOAD_AFTER);
   const [defaultImageQualityPreset, setDefaultImageQualityPreset] = useState<'low' | 'balanced' | 'high' | 'original'>(DEFAULT_IMAGE_QUALITY_PRESET);
+  const [pageTransitionMode, setPageTransitionMode] = useState<PageTransitionModeDTO>(DEFAULT_PAGE_TRANSITION_MODE);
   const [albumListItemMinWidthMobile, setAlbumListItemMinWidthMobile] = useState(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE);
   const [albumListItemMinWidthDesktop, setAlbumListItemMinWidthDesktop] = useState(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
   const [albumDetailItemMinWidthMobile, setAlbumDetailItemMinWidthMobile] = useState(DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE);
@@ -41,10 +44,15 @@ export const useSettingsConfigForm = () => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   useEffect(() => {
+    void fetchSystemConfig();
+  }, [fetchSystemConfig]);
+
+  useEffect(() => {
     if (systemConfig) {
       setPreloadBefore(clampPreloadRadius(systemConfig.preloadBefore));
       setPreloadAfter(clampPreloadRadius(systemConfig.preloadAfter));
       setDefaultImageQualityPreset(systemConfig.defaultImageQualityPreset);
+      setPageTransitionMode(systemConfig.pageTransitionMode);
       setAlbumListItemMinWidthMobile(clampGridWidth(systemConfig.albumListItemMinWidthMobile));
       setAlbumListItemMinWidthDesktop(clampGridWidth(systemConfig.albumListItemMinWidthDesktop));
       setAlbumDetailItemMinWidthMobile(clampGridWidth(systemConfig.albumDetailItemMinWidthMobile));
@@ -57,6 +65,7 @@ export const useSettingsConfigForm = () => {
     setPreloadBefore(clampPreloadRadius(Number(savedBefore ?? DEFAULT_PRELOAD_BEFORE)));
     setPreloadAfter(clampPreloadRadius(Number(savedAfter ?? DEFAULT_PRELOAD_AFTER)));
     setDefaultImageQualityPreset(DEFAULT_IMAGE_QUALITY_PRESET);
+    setPageTransitionMode(DEFAULT_PAGE_TRANSITION_MODE);
     setAlbumListItemMinWidthMobile(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE);
     setAlbumListItemMinWidthDesktop(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
     setAlbumDetailItemMinWidthMobile(DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE);
@@ -106,6 +115,15 @@ export const useSettingsConfigForm = () => {
     return didSave;
   };
 
+  const savePageTransitionMode = async (nextMode: PageTransitionModeDTO) => {
+    setPageTransitionMode(nextMode);
+    if (!systemConfig) {
+      return false;
+    }
+
+    return saveConfig({ pageTransitionMode: nextMode });
+  };
+
   const handleViewerPreloadRadiusChange = (value: string, type: 'before' | 'after') => {
     const nextValue = clampPreloadRadius(Number(value));
     if (type === 'before') {
@@ -127,10 +145,12 @@ export const useSettingsConfigForm = () => {
     defaultImageQualityPreset,
     handleViewerPreloadRadiusChange,
     isSavingConfig,
+    pageTransitionMode,
     preloadAfter,
     preloadBefore,
     saveConfig,
     saveDefaultImageQualityPreset,
+    savePageTransitionMode,
     saveStatus,
     setAlbumDetailItemMinWidthDesktop,
     setAlbumDetailItemMinWidthMobile,

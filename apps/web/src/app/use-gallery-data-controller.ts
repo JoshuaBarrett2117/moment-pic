@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan, useRecentAlbums, useSmartAlbums } from '../hooks';
+import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan, useRecentAlbums, useSmartAlbums, useDirectoryAlbums } from '../hooks';
 import { Screen } from '../types';
 import type { GalleryFilters, GalleryViewMode } from './gallery-navigation';
 
@@ -32,6 +32,11 @@ export const useGalleryDataController = ({
     fetchSmartAlbumDetail
   } = useSmartAlbums();
   const { recentAlbums, isLoading: isRecentLoading, fetchRecentAlbums } = useRecentAlbums();
+  const {
+    directoryAlbums,
+    isLoading: isDirectoryAlbumsLoading,
+    fetchDirectoryAlbums
+  } = useDirectoryAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
 
   const loadAlbums = useCallback(() => {
@@ -62,12 +67,23 @@ export const useGalleryDataController = ({
     });
   }, [debouncedKeyword, fetchSmartAlbums, filters.page, filters.pageSize, filters.sortBy, filters.sortOrder]);
 
+  const loadDirectoryAlbums = useCallback(() => {
+    return fetchDirectoryAlbums({
+      libraryRootId: filters.directoryLibraryRootId || undefined,
+      relativePath: filters.directoryRelativePath || undefined
+    });
+  }, [fetchDirectoryAlbums, filters.directoryLibraryRootId, filters.directoryRelativePath]);
+
   const refreshCurrentGallery = useCallback(async () => {
     if (!isAuthenticated) {
       return;
     }
 
     await fetchLibraryRoots();
+    if (galleryViewMode === 'directoryAlbums') {
+      await loadDirectoryAlbums();
+      return;
+    }
     if (galleryViewMode === 'smartAlbums') {
       await loadSmartAlbums();
       return;
@@ -78,7 +94,7 @@ export const useGalleryDataController = ({
     }
 
     await loadAlbums();
-  }, [fetchLibraryRoots, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadSmartAlbums]);
+  }, [fetchLibraryRoots, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadSmartAlbums]);
 
   const { isScanning, scan, scanningLibraryRootIds, isAnyScanning } = useLibraryScan({
     onScanComplete: refreshCurrentGallery
@@ -112,13 +128,17 @@ export const useGalleryDataController = ({
 
   useEffect(() => {
     if (isAuthenticated && currentScreen === Screen.GALLERY) {
+      if (galleryViewMode === 'directoryAlbums') {
+        void loadDirectoryAlbums();
+        return;
+      }
       if (galleryViewMode === 'smartAlbums') {
         void loadSmartAlbums();
         return;
       }
       void loadAlbums();
     }
-  }, [currentScreen, galleryViewMode, isAuthenticated, loadAlbums, loadSmartAlbums]);
+  }, [currentScreen, galleryViewMode, isAuthenticated, loadAlbums, loadDirectoryAlbums, loadSmartAlbums]);
 
   useEffect(() => {
     if (!isAuthenticated || currentScreen !== Screen.SMART_ALBUM_DETAIL || !selectedSmartAlbum) {
@@ -138,27 +158,34 @@ export const useGalleryDataController = ({
         void loadSmartAlbums();
         return;
       }
+      if (galleryViewMode === 'directoryAlbums') {
+        void loadDirectoryAlbums();
+        return;
+      }
       void loadAlbums();
     }, 3000);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [galleryViewMode, isAnyScanning, isAuthenticated, loadAlbums, loadSmartAlbums, wsConnected]);
+  }, [galleryViewMode, isAnyScanning, isAuthenticated, loadAlbums, loadDirectoryAlbums, loadSmartAlbums, wsConnected]);
 
   return {
     albums,
     error,
+    directoryAlbums,
     fetchLibraryRoots,
     fetchRecentAlbums,
     fetchSmartAlbumDetail,
     isAnyScanning,
     isLoading,
+    isDirectoryAlbumsLoading,
     isRecentLoading,
     isScanning,
     isSmartAlbumsLoading,
     libraryRoots,
     loadAlbums,
+    loadDirectoryAlbums,
     loadSmartAlbums,
     recentAlbums,
     refreshCurrentGallery,

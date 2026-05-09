@@ -1,5 +1,5 @@
 ﻿import { AnimatePresence, motion } from 'motion/react';
-import { Camera, Clock, Images, Layers3, Loader2, Menu, RefreshCw, Settings, X } from 'lucide-react';
+import { Camera, Clock, FolderTree, Images, Layers3, Loader2, Menu, RefreshCw, Settings, X } from 'lucide-react';
 import { type FC, useState } from 'react';
 import { useMobile, useWideMobile } from '../hooks';
 import type { LibraryRootDTO } from '../types/api';
@@ -19,6 +19,8 @@ interface SidebarProps {
   isRecentActive: boolean;
   onSmartAlbumsClick: () => void;
   isSmartAlbumsActive: boolean;
+  onDirectoryAlbumsClick: () => void;
+  isDirectoryAlbumsActive: boolean;
 }
 
 export const Sidebar: FC<SidebarProps> = ({
@@ -36,6 +38,8 @@ export const Sidebar: FC<SidebarProps> = ({
   isRecentActive,
   onSmartAlbumsClick,
   isSmartAlbumsActive,
+  onDirectoryAlbumsClick,
+  isDirectoryAlbumsActive,
 }) => {
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
@@ -107,7 +111,7 @@ export const Sidebar: FC<SidebarProps> = ({
             }
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
-            currentLibraryRootId === '' && !isRecentActive && !isSmartAlbumsActive
+            currentLibraryRootId === '' && !isRecentActive && !isSmartAlbumsActive && !isDirectoryAlbumsActive
               ? 'bg-primary-container font-bold text-on-primary-container'
               : 'hover:bg-primary-container/10'
           }`}
@@ -148,6 +152,23 @@ export const Sidebar: FC<SidebarProps> = ({
         >
           <Layers3 className="h-5 w-5" />
           <span className="text-sm font-semibold">自动整理</span>
+        </button>
+
+        <button
+          onClick={() => {
+            onDirectoryAlbumsClick();
+            if (isMobile) {
+              setIsOpen(false);
+            }
+          }}
+          className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
+            isDirectoryAlbumsActive
+              ? 'bg-primary-container font-bold text-on-primary-container'
+              : 'hover:bg-primary-container/10'
+          }`}
+        >
+          <FolderTree className="h-5 w-5" />
+          <span className="text-sm font-semibold">目录相册</span>
         </button>
 
         {libraryRoots.map((root) => (

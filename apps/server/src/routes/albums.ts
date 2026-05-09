@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
 import { deleteAlbum, getAlbumAssets, getAlbumDetail, listAlbums, recordAlbumView, getRecentAlbums } from "../services/album-service.js";
+import { DirectoryAlbumPathInvalidError, DirectoryAlbumRootNotFoundError, listDirectoryAlbums } from "../services/directory-album-service.js";
 import { rescanAlbum, ScanAlbumNotFoundError, ScanAlbumSourceInvalidError, ScanLibraryRootNotFoundError } from "../services/library-scanner.js";
 
 export const albumRoutes: FastifyPluginAsync = async (app) => {
@@ -14,6 +15,33 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     const payload = await getRecentAlbums(limit);
 
     return ok({ items: payload });
+  });
+
+  app.get("/api/v1/albums/directory-tree", async (request, reply) => {
+    const query = request.query as { libraryRootId?: string; relativePath?: string };
+
+    try {
+      return ok(await listDirectoryAlbums({
+        libraryRootId: query.libraryRootId,
+        relativePath: query.relativePath
+      }));
+    } catch (error) {
+      if (error instanceof DirectoryAlbumRootNotFoundError) {
+        return reply.status(404).send({
+          code: 4001,
+          message: "library root not found"
+        });
+      }
+
+      if (error instanceof DirectoryAlbumPathInvalidError) {
+        return reply.status(400).send({
+          code: 4006,
+          message: "directory path invalid"
+        });
+      }
+
+      throw error;
+    }
   });
 
   app.post("/api/v1/albums/:albumId/view", async (request, reply) => {

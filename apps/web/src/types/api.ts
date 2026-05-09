@@ -5,6 +5,7 @@ export type SmartAlbumRuleScopeDTO = "albumName" | "sourcePath" | "parentPath" |
 export type SmartAlbumRuleMatchModeDTO = "contains" | "equals" | "prefix" | "suffix" | "regex";
 export type SmartAlbumRuleActionDTO = "assignSmartAlbum" | "mergeAlias" | "exclude";
 export type SmartAlbumAiModeDTO = "assist" | "auto_low_risk" | "full_auto";
+export type PageTransitionModeDTO = "page" | "normal";
 
 export type PaginationDTO = {
   page: number;
@@ -27,6 +28,36 @@ export type AlbumListItemDTO = {
   assetCount: number;
   coverUrl: string | null;
   updatedAt: string;
+};
+
+export type DirectoryAlbumNodeDTO = {
+  id: string;
+  name: string;
+  kind: "directory" | "album";
+  libraryRootId: string;
+  relativePath: string;
+  albumId: string | null;
+  sourceType: SourceTypeDTO | null;
+  assetCount: number;
+  coverUrl: string | null;
+  updatedAt: string | null;
+  childCount: number;
+};
+
+export type DirectoryAlbumBreadcrumbDTO = {
+  name: string;
+  libraryRootId: string | null;
+  relativePath: string;
+};
+
+export type DirectoryAlbumsDTO = {
+  current: {
+    name: string;
+    libraryRootId: string | null;
+    relativePath: string;
+  };
+  breadcrumbs: DirectoryAlbumBreadcrumbDTO[];
+  items: DirectoryAlbumNodeDTO[];
 };
 
 export type AlbumDetailDTO = {
@@ -107,6 +138,7 @@ export type SystemConfigDTO = {
   preloadBefore: number;
   preloadAfter: number;
   defaultImageQualityPreset: "low" | "balanced" | "high" | "original";
+  pageTransitionMode: PageTransitionModeDTO;
   albumListItemMinWidthMobile: number;
   albumListItemMinWidthDesktop: number;
   albumDetailItemMinWidthMobile: number;

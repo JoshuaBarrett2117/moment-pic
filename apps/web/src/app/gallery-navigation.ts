@@ -3,7 +3,7 @@ import { Screen } from '../types';
 
 const STORAGE_KEY = 'gallery_filters';
 
-export type GalleryViewMode = 'albums' | 'smartAlbums';
+export type GalleryViewMode = 'albums' | 'smartAlbums' | 'directoryAlbums';
 export type GallerySortBy = 'name' | 'updatedAt' | 'assetCount' | 'albumCount';
 
 export interface GalleryFilters {
@@ -14,6 +14,8 @@ export interface GalleryFilters {
   sortOrder: 'asc' | 'desc';
   sourceType: '' | 'folder' | 'zip';
   libraryRootId: string;
+  directoryLibraryRootId: string;
+  directoryRelativePath: string;
 }
 
 export interface UrlNavigationState {
@@ -72,7 +74,12 @@ export const parseNavigationFromUrl = (): UrlNavigationState => {
   const albumId = params.get('albumId');
   const smartAlbumId = params.get('smartAlbumId');
   const recent = params.get('recent');
-  const view = params.get('view') === 'smart' ? 'smartAlbums' : 'albums';
+  const viewParam = params.get('view');
+  const view = viewParam === 'smart'
+    ? 'smartAlbums'
+    : viewParam === 'directory'
+      ? 'directoryAlbums'
+      : 'albums';
 
   if (screenParam === 'album' && albumId) {
     return {
@@ -145,6 +152,12 @@ export const buildUrl = (
   if (filters.libraryRootId) {
     params.set('libraryRootId', filters.libraryRootId);
   }
+  if (navigation.galleryViewMode === 'directoryAlbums' && filters.directoryLibraryRootId) {
+    params.set('directoryLibraryRootId', filters.directoryLibraryRootId);
+  }
+  if (navigation.galleryViewMode === 'directoryAlbums' && filters.directoryRelativePath) {
+    params.set('directoryRelativePath', filters.directoryRelativePath);
+  }
 
   if (navigation.screen === Screen.ALBUM_DETAIL && navigation.selectedAlbumId) {
     params.set('screen', 'album');
@@ -158,6 +171,9 @@ export const buildUrl = (
 
   if (navigation.galleryViewMode === 'smartAlbums') {
     params.set('view', 'smart');
+  }
+  if (navigation.galleryViewMode === 'directoryAlbums') {
+    params.set('view', 'directory');
   }
 
   if (navigation.isRecentActive) {
@@ -189,7 +205,14 @@ const getInitialFilters = (initialViewMode: GalleryViewMode): GalleryFilters => 
     sortOrder: urlFilters.sortOrder || 'desc',
     sourceType: urlFilters.sourceType || '',
     libraryRootId: urlFilters.libraryRootId || '',
+    directoryLibraryRootId: parseFiltersFromUrlParams('directoryLibraryRootId'),
+    directoryRelativePath: parseFiltersFromUrlParams('directoryRelativePath'),
   };
+};
+
+const parseFiltersFromUrlParams = (key: string): string => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get(key) || '';
 };
 
 export const useGalleryAppState = () => {

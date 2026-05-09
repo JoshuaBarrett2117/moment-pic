@@ -23,6 +23,7 @@ import { SmartAlbumSettingsPanel } from './SmartAlbumSettingsPanel';
 interface SettingsScreenProps {
   onBack: () => void;
   onScanComplete?: () => void | Promise<void>;
+  onSystemConfigChange?: () => void | Promise<void>;
 }
 
 const clampGridWidth = (value: number): number => {
@@ -33,7 +34,7 @@ const clampGridWidth = (value: number): number => {
   return Math.max(180, Math.min(600, Math.round(value)));
 };
 
-export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete }) => {
+export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete, onSystemConfigChange }) => {
   const { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot } = useLibraryRoots();
   const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan({
     onScanComplete
@@ -46,10 +47,12 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
     defaultImageQualityPreset,
     handleViewerPreloadRadiusChange,
     isSavingConfig,
+    pageTransitionMode,
     preloadAfter,
     preloadBefore,
     saveConfig,
     saveDefaultImageQualityPreset,
+    savePageTransitionMode,
     saveStatus,
     setAlbumDetailItemMinWidthDesktop,
     setAlbumDetailItemMinWidthMobile,
@@ -216,6 +219,36 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
             <div className="bg-surface-container-highest rounded-2xl p-6 mb-8">
               <h3 className="text-lg font-bold text-on-surface mb-4">图片预览</h3>
               <div className="space-y-4">
+                <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
+                    <Settings className="h-6 w-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div>
+                        <p className="font-bold text-on-surface">页面跳转形式</p>
+                        <p className="mt-1 text-sm text-outline">选择页面切换时使用翻页滑动，或常规淡入淡出</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={pageTransitionMode}
+                          onChange={async (event) => {
+                            const didSave = await savePageTransitionMode(event.target.value as 'page' | 'normal');
+                            if (didSave) {
+                              await onSystemConfigChange?.();
+                            }
+                          }}
+                          disabled={isSavingConfig}
+                          className="rounded-xl border-2 border-outline/20 bg-surface px-4 py-2 font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                        >
+                          <option value="page">翻页滑动</option>
+                          <option value="normal">常规淡入</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex items-start gap-4 rounded-xl bg-surface-container-high p-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-container text-on-primary-container">
                     <Images className="h-6 w-6" />

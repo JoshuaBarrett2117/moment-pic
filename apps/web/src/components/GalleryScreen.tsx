@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Plus, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Search, X, Images, Layers3, SlidersHorizontal } from 'lucide-react';
+import { Plus, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Search, X, Images, Layers3, SlidersHorizontal, FolderOpen } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { ThrottledImage } from './ThrottledImage';
 import { useMobile, useSystemConfig, useWideMobile } from '../hooks';
-import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO, SmartAlbumListItemDTO } from '../types/api';
+import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO, SmartAlbumListItemDTO, DirectoryAlbumNodeDTO, DirectoryAlbumBreadcrumbDTO } from '../types/api';
 
-type GalleryDisplayMode = 'albums' | 'smartAlbums';
+type GalleryDisplayMode = 'albums' | 'smartAlbums' | 'directoryAlbums';
 
 interface GalleryScreenProps {
   displayMode?: GalleryDisplayMode;
-  albums: Array<AlbumListItemDTO | SmartAlbumListItemDTO>;
+  albums: Array<AlbumListItemDTO | SmartAlbumListItemDTO | DirectoryAlbumNodeDTO>;
   isLoading: boolean;
   pagination: PaginationDTO | null;
   onNavigateToAlbum: (albumId: string) => void;
@@ -43,6 +43,11 @@ interface GalleryScreenProps {
   onScrollPositionChange?: (position: number) => void;
   onSmartAlbumsClick: () => void;
   isSmartAlbumsActive: boolean;
+  onDirectoryAlbumsClick: () => void;
+  isDirectoryAlbumsActive: boolean;
+  onDirectoryNodeClick?: (node: DirectoryAlbumNodeDTO) => void;
+  directoryBreadcrumbs?: DirectoryAlbumBreadcrumbDTO[];
+  onDirectoryBreadcrumbClick?: (crumb: DirectoryAlbumBreadcrumbDTO) => void;
   headerTitle?: string;
   headerDescription?: string;
   emptyTitle?: string;
@@ -59,7 +64,8 @@ const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP = 300;
 const RENDER_CHUNK_SIZE = 72;
 
-const isStandardAlbum = (album: AlbumListItemDTO | SmartAlbumListItemDTO): album is AlbumListItemDTO => 'sourceType' in album;
+const isDirectoryNode = (album: AlbumListItemDTO | SmartAlbumListItemDTO | DirectoryAlbumNodeDTO): album is DirectoryAlbumNodeDTO => 'kind' in album;
+const isStandardAlbum = (album: AlbumListItemDTO | SmartAlbumListItemDTO | DirectoryAlbumNodeDTO): album is AlbumListItemDTO => 'sourceType' in album && !isDirectoryNode(album);
 
 export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   displayMode = 'albums',
@@ -95,6 +101,11 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onScrollPositionChange,
   onSmartAlbumsClick,
   isSmartAlbumsActive,
+  onDirectoryAlbumsClick,
+  isDirectoryAlbumsActive,
+  onDirectoryNodeClick,
+  directoryBreadcrumbs = [],
+  onDirectoryBreadcrumbClick,
   headerTitle,
   headerDescription,
   emptyTitle,
@@ -109,6 +120,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
   const isSmartAlbumsMode = displayMode === 'smartAlbums';
+  const isDirectoryAlbumsMode = displayMode === 'directoryAlbums';
 
   const totalPages = pagination ? Math.ceil(pagination.total / pagination.pageSize) : 1;
   const currentPage = pagination?.page || 1;
@@ -118,7 +130,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     currentSortBy !== 'updatedAt' ||
     currentSortOrder !== 'desc' ||
     currentPageSize !== 24 ||
-    (!isSmartAlbumsMode && Boolean(currentSourceType || currentLibraryRootId));
+    (!isSmartAlbumsMode && !isDirectoryAlbumsMode && Boolean(currentSourceType || currentLibraryRootId));
   const albumListItemMinWidth = isMobile
     ? (isWideMobile
       ? (systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP)
@@ -141,15 +153,17 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         { value: 'updatedAt', label: '更新时间' },
         { value: 'assetCount', label: '图片数量' },
       ];
-  const resolvedHeaderTitle = headerTitle ?? (isSmartAlbumsMode ? '自动整理' : '瞬间图库');
-  const resolvedHeaderDescription = headerDescription ?? (isSmartAlbumsMode ? '让归纳好的系列图集自己浮现出来' : '更懂你的，也更懂你如何整理回忆');
+  const resolvedHeaderTitle = headerTitle ?? (isSmartAlbumsMode ? '自动整理' : isDirectoryAlbumsMode ? '目录相册' : '瞬间图库');
+  const resolvedHeaderDescription = headerDescription ?? (isSmartAlbumsMode ? '让归纳好的系列图集自己浮现出来' : isDirectoryAlbumsMode ? '按图库根目录逐层进入，直到抵达真正的图集。' : '更懂你的，也更懂你如何整理回忆');
   const resolvedEmptyTitle = emptyTitle ?? (hasActiveFilters
-    ? (isSmartAlbumsMode ? '没有找到匹配的自动整理' : '没有找到匹配的相册')
-    : (isSmartAlbumsMode ? '还没有生成自动整理' : '这里还是一片空白'));
+    ? (isSmartAlbumsMode ? '没有找到匹配的自动整理' : isDirectoryAlbumsMode ? '没有找到匹配的目录' : '没有找到匹配的相册')
+    : (isSmartAlbumsMode ? '还没有生成自动整理' : isDirectoryAlbumsMode ? '这里还没有可进入的目录' : '这里还是一片空白'));
   const resolvedEmptyDescription = emptyDescription ?? (hasActiveFilters
     ? '试试清空筛选条件，或者换一个关键词。'
     : (isSmartAlbumsMode
       ? '先到设置里的“智能归纳”新增规则，再重建一次自动整理。'
+      : isDirectoryAlbumsMode
+        ? '先扫描图库，目录相册会根据已扫描图集生成入口。'
       : '去左侧边栏找到“设置”，导入你的第一个瞬间图库吧。'));
   const pageSizeOptions = [12, 24, 48, 96];
   const containerVariants = {
@@ -242,6 +256,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         isRecentActive={isRecentActive}
         onSmartAlbumsClick={onSmartAlbumsClick}
         isSmartAlbumsActive={isSmartAlbumsActive}
+        onDirectoryAlbumsClick={onDirectoryAlbumsClick}
+        isDirectoryAlbumsActive={isDirectoryAlbumsActive}
       />
 
       <main
@@ -279,6 +295,23 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </button>
         </header>
 
+        {isDirectoryAlbumsMode && directoryBreadcrumbs.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-outline">
+            {directoryBreadcrumbs.map((crumb, index) => (
+              <React.Fragment key={`${crumb.libraryRootId ?? 'root'}:${crumb.relativePath}:${index}`}>
+                {index > 0 && <ChevronRight className="h-4 w-4 text-outline/50" />}
+                <button
+                  onClick={() => onDirectoryBreadcrumbClick?.(crumb)}
+                  className="rounded-lg bg-surface-container-high px-3 py-1.5 font-medium transition-colors hover:bg-primary-container/20 hover:text-on-surface"
+                >
+                  {crumb.name}
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+
+        {!isDirectoryAlbumsMode && (
         <div className="mb-4">
           <button
             onClick={() => setIsFilterExpanded(!isFilterExpanded)}
@@ -382,6 +415,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             </div>
           </div>
         </div>
+        )}
 
         {isLoading && albums.length > 0 && (
           <div className="mb-4 flex items-center justify-between rounded-2xl border border-outline/10 bg-surface-container-high px-4 py-3 text-sm text-outline shadow-sm md:mb-6">
@@ -435,6 +469,56 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
             </motion.div>
           ) : (
             renderedAlbums.map((album, idx) => {
+              if (isDirectoryNode(album)) {
+                const isAlbumNode = album.kind === 'album';
+                const colorScheme = album.sourceType ? (tagColors[album.sourceType] || tagColors.folder) : tagColors.folder;
+
+                return (
+                  <motion.div
+                    key={album.id}
+                    variants={itemVariants}
+                    whileHover={isMobile ? undefined : { scale: 1.015, rotate: idx % 2 === 0 ? 0.35 : -0.35, zIndex: 10 }}
+                    className="group cursor-pointer"
+                  >
+                    <button
+                      onClick={() => onDirectoryNodeClick?.(album)}
+                      className="relative w-full rounded-xl bg-surface-container-highest p-4 text-left shadow-lg transition-all duration-300 hover:shadow-xl"
+                    >
+                      <div className={`absolute -top-3 z-10 rounded-full border border-black/5 px-4 py-1 text-xs font-bold shadow-sm ${
+                        idx % 2 === 0 ? '-right-2 rotate-12' : '-left-3 -rotate-12'
+                      } ${isAlbumNode ? `${colorScheme.bg} ${colorScheme.text}` : 'bg-secondary-container text-on-secondary-container'}`}>
+                        {isAlbumNode ? (album.sourceType === 'zip' ? '压缩包' : '图集') : '目录'}
+                      </div>
+                      <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-xl bg-surface-container-high">
+                        {album.coverUrl ? (
+                          <ThrottledImage
+                            key="cover"
+                            className="col-span-3 h-full w-full object-cover"
+                            src={album.coverUrl}
+                            alt={album.name}
+                          />
+                        ) : (
+                          <div className="col-span-3 flex h-full items-center justify-center">
+                            {isAlbumNode ? <Images className="h-14 w-14 text-outline/20" /> : <FolderOpen className="h-14 w-14 text-outline/25" />}
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-4 px-2 pb-2">
+                        <h3 className="mb-1 truncate font-headline text-lg font-bold leading-tight text-on-surface" title={album.name}>
+                          {album.name}
+                        </h3>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold uppercase tracking-wider text-outline">
+                            {isAlbumNode ? `${album.assetCount} 张` : `${album.childCount} 项`}
+                          </span>
+                          <ArrowRight className="h-4 w-4 text-outline/30 transition-all group-hover:translate-x-1 group-hover:text-primary" />
+                        </div>
+                      </div>
+                    </button>
+                  </motion.div>
+                );
+              }
+
               if (isSmartAlbumsMode && !isStandardAlbum(album)) {
                 return (
                   <motion.div

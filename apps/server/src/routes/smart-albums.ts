@@ -1,72 +1,20 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
-import { nowIso } from "../lib/time.js";
 import {
   getSmartAlbumAiConfig,
   getSmartAlbumDetail,
   getSmartAlbumMembers,
   listSmartAlbumRules,
   listSmartAlbums,
-  rebuildSmartAlbums,
   testSmartAlbumAiConnection,
   testSmartAlbumRule,
   updateSmartAlbumAiConfig
 } from "../services/smart-album-service.js";
+import { getSmartAlbumRebuildTask, startSmartAlbumRebuildTask } from "../services/smart-album-rebuild-service.js";
 import { createSmartAlbumRule, deleteSmartAlbumRule, updateSmartAlbumRule } from "../services/smart-album-rules-service.js";
 
-type SmartAlbumRebuildTaskStatus = "pending" | "running" | "completed" | "failed";
-
-type SmartAlbumRebuildTaskRecord = {
-  id: string;
-  status: SmartAlbumRebuildTaskStatus;
-  createdAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  error: string | null;
-  result: Awaited<ReturnType<typeof rebuildSmartAlbums>> | null;
-};
-
-const smartAlbumRebuildTasks = new Map<string, SmartAlbumRebuildTaskRecord>();
-
 export const smartAlbumRoutes: FastifyPluginAsync = async (app) => {
-  const runRebuildTask = async (taskId: string) => {
-    const task = smartAlbumRebuildTasks.get(taskId);
-    if (!task) {
-      return;
-    }
-
-    task.status = "running";
-    task.startedAt = nowIso();
-
-    try {
-      task.result = await rebuildSmartAlbums();
-      task.status = "completed";
-      task.finishedAt = nowIso();
-    } catch (error) {
-      task.status = "failed";
-      task.finishedAt = nowIso();
-      task.error = error instanceof Error ? error.message : "smart album rebuild failed";
-      app.log.error(
-        {
-          taskId,
-          error: task.error
-        },
-        "smart album rebuild failed"
-      );
-    }
-  };
-
-  const toRebuildTaskDto = (task: SmartAlbumRebuildTaskRecord) => ({
-    taskId: task.id,
-    status: task.status,
-    createdAt: task.createdAt,
-    startedAt: task.startedAt,
-    finishedAt: task.finishedAt,
-    error: task.error,
-    result: task.result
-  });
-
   app.get("/api/v1/smart-albums", async (request) => {
     const query = request.query as {
       page?: string;
@@ -82,37 +30,27 @@ export const smartAlbumRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/api/v1/smart-albums/rebuild", async () => {
-    const activeTask = Array.from(smartAlbumRebuildTasks.values())
-      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-      .find((task) => task.status === "pending" || task.status === "running");
-
-    if (activeTask) {
-      return ok(toRebuildTaskDto(activeTask));
-    }
-
-    const taskId = `smart_album_rebuild_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const task: SmartAlbumRebuildTaskRecord = {
-      id: taskId,
-      status: "pending",
-      createdAt: nowIso(),
-      startedAt: null,
-      finishedAt: null,
-      error: null,
-      result: null
-    };
-    smartAlbumRebuildTasks.set(taskId, task);
-    void runRebuildTask(taskId);
-
-    return ok(toRebuildTaskDto(task));
+    const task = startSmartAlbumRebuildTask({
+      onTaskFailed: (failedTask) => {
+        app.log.error(
+          {
+            taskId: failedTask.taskId,
+            error: failedTask.error
+          },
+          "smart album rebuild failed"
+        );
+      }
+    });
+    return ok(task);
   });
 
   app.get("/api/v1/smart-albums/rebuild/:taskId", async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
-    const task = smartAlbumRebuildTasks.get(taskId);
+    const task = getSmartAlbumRebuildTask(taskId);
     if (!task) {
       return reply.status(404).send({ code: 4004, message: "smart album rebuild task not found" });
     }
-    return ok(toRebuildTaskDto(task));
+    return ok(task);
   });
 
   app.get("/api/v1/smart-albums/:smartAlbumId", async (request, reply) => {

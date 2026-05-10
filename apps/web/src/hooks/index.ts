@@ -5,5 +5,7 @@ export { useScan } from './useScan';
 export { useLibraryScan } from './useLibraryScan';
 export { useWebSocket } from './useWebSocket';
 export { useSystemConfig } from './useSystemConfig';
+export { useSettingsConfigForm } from './useSettingsConfigForm';
 export { useMobile, useWideMobile, useTablet, useDesktop, useBetween } from './useResponsive';
 export { useSmartAlbums } from './useSmartAlbums';
+export { useDirectoryAlbums } from './useDirectoryAlbums';

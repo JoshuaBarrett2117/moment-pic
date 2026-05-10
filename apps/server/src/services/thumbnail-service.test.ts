@@ -64,12 +64,50 @@ const createAssetRecord = (overrides: Partial<AssetRecord>): AssetRecord => ({
   ...overrides
 });
 
-test("ensureThumbnail handles JPEGs with libvips warnings", async (t) => {
-  const assetId = "ast_68c58721b729f0c1fb1fe05c2059e3f2";
+test("ensureThumbnail generates thumbnails from repository JPEG fixtures without relying on preloaded DB assets", async () => {
+  const sourcePath = path.resolve("apps/server/samples/library/风景1/001.jpg");
+  const timestamp = new Date().toISOString();
+  const suffix = crypto.randomUUID().replace(/-/g, "");
+  const libraryRootId = `root_thumbnail_fixture_${suffix}`;
+  const albumId = `alb_thumbnail_fixture_${suffix}`;
+  const assetId = `ast_thumbnail_fixture_${suffix}`;
+  const stat = await fs.promises.stat(sourcePath);
+
+  const asset = createAssetRecord({
+    id: assetId,
+    albumId,
+    sourceType: "folder",
+    sourcePath,
+    sizeBytes: String(stat.size)
+  });
+
+  upsertLibraryRootDb({
+    id: libraryRootId,
+    name: "thumbnail-fixture-root",
+    path: path.dirname(sourcePath),
+    enabled: true,
+    lastScannedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
   if (!findAssetByIdDb(assetId)) {
-    t.skip("当前测试环境未提供该固定样本资产");
-    return;
+    insertAlbumWithAssetsDb({
+      id: albumId,
+      libraryRootId,
+      name: "thumbnail-fixture-album",
+      sourceType: "folder",
+      sourcePath: path.dirname(sourcePath),
+      sourceMtime: null,
+      assetsFingerprint: null,
+      coverAssetId: asset.id,
+      assetCount: 1,
+      scanStatus: "ready",
+      errorMessage: null,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, [asset]);
   }
+
   const thumbnail = await ensureThumbnail(assetId);
 
   assert.equal(thumbnail.mimeType, "image/jpeg");

@@ -1,6 +1,7 @@
 import type { SmartAlbumRuleDTO } from "../types/dto.js";
 import type { SmartAlbumRuleRecord } from "../types/store.js";
-import { deleteSmartAlbumRuleDb, findSmartAlbumRuleByIdDb, makeId, upsertSmartAlbumRuleDb } from "./sqlite-store.js";
+import { deleteSmartAlbumRuleDb, findSmartAlbumRuleByIdDb, upsertSmartAlbumRuleDb } from "../repositories/smart-album-repository.js";
+import { makeId } from "../repositories/ids.js";
 
 type SmartAlbumRuleInput = Omit<SmartAlbumRuleDTO, "id" | "createdAt" | "updatedAt">;
 
@@ -10,6 +11,7 @@ const toRuleDto = (rule: SmartAlbumRuleRecord): SmartAlbumRuleDTO => ({
   id: rule.id,
   name: rule.name,
   enabled: rule.enabled,
+  sourceEngine: rule.sourceEngine,
   priority: rule.priority,
   scope: rule.scope,
   matchMode: rule.matchMode,
@@ -20,6 +22,10 @@ const toRuleDto = (rule: SmartAlbumRuleRecord): SmartAlbumRuleDTO => ({
   targetNameTemplate: rule.targetNameTemplate,
   minAlbumCount: rule.minAlbumCount,
   minConfidence: rule.minConfidence,
+  generatedNormalizedKey: rule.generatedNormalizedKey,
+  generatedConfidence: rule.generatedConfidence,
+  generatedReason: rule.generatedReason,
+  generatedRunId: rule.generatedRunId,
   createdAt: rule.createdAt,
   updatedAt: rule.updatedAt
 });
@@ -30,6 +36,7 @@ export const createSmartAlbumRule = async (input: SmartAlbumRuleInput): Promise<
     id: makeId("sar"),
     name: input.name,
     enabled: input.enabled,
+    sourceEngine: "manual",
     priority: input.priority,
     scope: input.scope,
     matchMode: input.matchMode,
@@ -40,6 +47,10 @@ export const createSmartAlbumRule = async (input: SmartAlbumRuleInput): Promise<
     targetNameTemplate: input.targetNameTemplate,
     minAlbumCount: input.minAlbumCount,
     minConfidence: input.minConfidence,
+    generatedNormalizedKey: null,
+    generatedConfidence: null,
+    generatedReason: null,
+    generatedRunId: null,
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -53,6 +64,7 @@ export const updateSmartAlbumRule = async (ruleId: string, input: Partial<SmartA
   }
   const record: SmartAlbumRuleRecord = {
     ...existing,
+    sourceEngine: "manual",
     name: input.name ?? existing.name,
     enabled: input.enabled ?? existing.enabled,
     priority: input.priority ?? existing.priority,
@@ -65,6 +77,10 @@ export const updateSmartAlbumRule = async (ruleId: string, input: Partial<SmartA
     targetNameTemplate: input.targetNameTemplate === undefined ? existing.targetNameTemplate : input.targetNameTemplate,
     minAlbumCount: input.minAlbumCount ?? existing.minAlbumCount,
     minConfidence: input.minConfidence ?? existing.minConfidence,
+    generatedNormalizedKey: null,
+    generatedConfidence: null,
+    generatedReason: null,
+    generatedRunId: null,
     updatedAt: new Date().toISOString()
   };
   return toRuleDto(upsertSmartAlbumRuleDb(record));

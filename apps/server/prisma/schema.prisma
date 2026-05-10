@@ -148,6 +148,8 @@ model SystemConfig {
   pollingInterval  Int      @default(60000)
   preloadBefore    Int      @default(2)
   preloadAfter     Int      @default(3)
+  defaultImageQualityPreset String @default("original") @map("default_image_quality_preset")
+  pageTransitionMode String @default("page") @map("page_transition_mode")
   albumListItemMinWidthMobile Int  @default(160)
   albumListItemMinWidthDesktop Int @default(300)
   albumDetailItemMinWidthMobile Int @default(160)

@@ -459,14 +459,15 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     }
 
     lastTouchDistance.current = 0;
-    setIsDragging(false);
-
     if (e.touches.length === 1) {
       lastTouchX.current = e.touches[0].clientX;
       lastTouchY.current = e.touches[0].clientY;
       isTouchPanning.current = scale > 1;
+      setIsDragging(scale > 1);
       return;
     }
+
+    setIsDragging(false);
 
     if (isTouchPanning.current) {
       isTouchPanning.current = false;
@@ -476,7 +477,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       }
     }
 
-    if (e.touches.length > 0 || isZooming.current || !e.changedTouches?.[0]) {
+    if (isZooming.current || !e.changedTouches?.[0]) {
       return;
     }
 

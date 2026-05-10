@@ -77,6 +77,7 @@ const bootstrap = (db: Database.Database) => {
       enable_polling INTEGER NOT NULL DEFAULT 1,
       polling_interval INTEGER NOT NULL DEFAULT 60000,
       default_image_quality_preset TEXT NOT NULL DEFAULT 'original',
+      page_transition_mode TEXT NOT NULL DEFAULT 'page',
       album_list_item_min_width_mobile INTEGER NOT NULL DEFAULT 160,
       album_list_item_min_width_desktop INTEGER NOT NULL DEFAULT 300,
       album_detail_item_min_width_mobile INTEGER NOT NULL DEFAULT 160,
@@ -137,6 +138,7 @@ const bootstrap = (db: Database.Database) => {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
+      source_engine TEXT NOT NULL DEFAULT 'manual',
       priority INTEGER NOT NULL DEFAULT 100,
       scope TEXT NOT NULL,
       match_mode TEXT NOT NULL,
@@ -147,6 +149,10 @@ const bootstrap = (db: Database.Database) => {
       target_name_template TEXT,
       min_album_count INTEGER NOT NULL DEFAULT 1,
       min_confidence REAL NOT NULL DEFAULT 1,
+      generated_normalized_key TEXT,
+      generated_confidence REAL,
+      generated_reason TEXT,
+      generated_run_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -196,6 +202,9 @@ const bootstrap = (db: Database.Database) => {
     db.exec("ALTER TABLE system_config ADD COLUMN default_image_quality_preset TEXT NOT NULL DEFAULT 'original'");
   } catch (e) {}
   try {
+    db.exec("ALTER TABLE system_config ADD COLUMN page_transition_mode TEXT NOT NULL DEFAULT 'page'");
+  } catch (e) {}
+  try {
     db.exec('ALTER TABLE system_config ADD COLUMN album_list_item_min_width_mobile INTEGER NOT NULL DEFAULT 160');
   } catch (e) {}
   try {
@@ -222,22 +231,40 @@ const bootstrap = (db: Database.Database) => {
   try {
     db.exec("ALTER TABLE smart_album_ai_configs ADD COLUMN api_model TEXT NOT NULL DEFAULT 'gpt-4.1-mini'");
   } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN source_engine TEXT NOT NULL DEFAULT 'manual'");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN generated_normalized_key TEXT");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN generated_confidence REAL");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN generated_reason TEXT");
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE smart_album_rules ADD COLUMN generated_run_id TEXT");
+  } catch (e) {}
 
   try {
     db.exec(`
-      INSERT OR IGNORE INTO system_config (id, enable_polling, polling_interval, default_image_quality_preset, album_list_item_min_width_mobile, album_list_item_min_width_desktop, album_detail_item_min_width_mobile, album_detail_item_min_width_desktop, created_at, updated_at)
-      VALUES ('system_config', 1, 60000, 'original', 160, 300, 160, 300, datetime('now'), datetime('now'));
+      INSERT OR IGNORE INTO system_config (id, enable_polling, polling_interval, default_image_quality_preset, page_transition_mode, album_list_item_min_width_mobile, album_list_item_min_width_desktop, album_detail_item_min_width_mobile, album_detail_item_min_width_desktop, created_at, updated_at)
+      VALUES ('system_config', 1, 60000, 'original', 'page', 160, 300, 160, 300, datetime('now'), datetime('now'));
     `);
   } catch (e) {}
 
   try {
-    const existingConfig = db.prepare("SELECT preload_before, preload_after, default_image_quality_preset, album_list_item_min_width, album_detail_item_min_width, album_list_item_min_width_mobile, album_list_item_min_width_desktop, album_detail_item_min_width_mobile, album_detail_item_min_width_desktop FROM system_config WHERE id = 'system_config'").get() as { preload_before: number; preload_after: number; default_image_quality_preset: string | null; album_list_item_min_width: number; album_detail_item_min_width: number; album_list_item_min_width_mobile: number; album_list_item_min_width_desktop: number; album_detail_item_min_width_mobile: number; album_detail_item_min_width_desktop: number } | undefined;
+    const existingConfig = db.prepare("SELECT preload_before, preload_after, default_image_quality_preset, page_transition_mode, album_list_item_min_width, album_detail_item_min_width, album_list_item_min_width_mobile, album_list_item_min_width_desktop, album_detail_item_min_width_mobile, album_detail_item_min_width_desktop FROM system_config WHERE id = 'system_config'").get() as { preload_before: number; preload_after: number; default_image_quality_preset: string | null; page_transition_mode: string | null; album_list_item_min_width: number; album_detail_item_min_width: number; album_list_item_min_width_mobile: number; album_list_item_min_width_desktop: number; album_detail_item_min_width_mobile: number; album_detail_item_min_width_desktop: number } | undefined;
     if (existingConfig) {
       if (existingConfig.preload_before === 0 && existingConfig.preload_after === 0) {
         db.prepare("UPDATE system_config SET preload_before = 2, preload_after = 3 WHERE id = 'system_config'").run();
       }
       if (!existingConfig.default_image_quality_preset) {
         db.prepare("UPDATE system_config SET default_image_quality_preset = 'original' WHERE id = 'system_config'").run();
+      }
+      if (existingConfig.page_transition_mode !== 'page' && existingConfig.page_transition_mode !== 'normal') {
+        db.prepare("UPDATE system_config SET page_transition_mode = 'page' WHERE id = 'system_config'").run();
       }
       if (existingConfig.album_list_item_min_width_mobile === 160 && existingConfig.album_list_item_min_width_desktop === 300 && typeof existingConfig.album_list_item_min_width === 'number') {
         db.prepare("UPDATE system_config SET album_list_item_min_width_mobile = 160, album_list_item_min_width_desktop = ? WHERE id = 'system_config'").run(existingConfig.album_list_item_min_width);
@@ -294,6 +321,14 @@ const bootstrap = (db: Database.Database) => {
         datetime('now'),
         datetime('now')
       );
+    `);
+  } catch (e) {}
+
+  try {
+    db.exec(`
+      UPDATE smart_album_rules
+      SET source_engine = COALESCE(source_engine, 'manual')
+      WHERE source_engine IS NULL OR TRIM(source_engine) = '';
     `);
   } catch (e) {}
 };

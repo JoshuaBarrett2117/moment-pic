@@ -16,3 +16,17 @@ test("getSystemConfigDb keeps balanced as the default image quality preset", () 
     updateSystemConfigDb({ defaultImageQualityPreset: previousConfig.defaultImageQualityPreset });
   }
 });
+
+test("getSystemConfigDb persists page transition mode", () => {
+  const previousConfig = getSystemConfigDb();
+
+  try {
+    updateSystemConfigDb({ pageTransitionMode: "normal" });
+
+    const updatedConfig = getSystemConfigDb();
+
+    assert.equal(updatedConfig.pageTransitionMode, "normal");
+  } finally {
+    updateSystemConfigDb({ pageTransitionMode: previousConfig.pageTransitionMode });
+  }
+});

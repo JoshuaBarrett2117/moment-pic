@@ -9,24 +9,15 @@ import { path7za } from "7zip-bin";
 
 import { isSupportedImageExtension } from "../lib/image-formats.js";
 import { normalizeExtension, toPosixPath } from "../lib/paths.js";
+import { detectArchiveType, extractJpegFromPsd, normalizeArchiveEntryPath, PSD_MAGIC, SUPPORTED_ARCHIVE_EXTENSIONS } from "./archive-utils.js";
 
-const SUPPORTED_ARCHIVE_EXTENSIONS = new Set(["zip", "cbz", "cbr", "rar", "7z"]);
+export { detectArchiveType } from "./archive-utils.js";
 
 export type ArchiveImageEntry = {
   entryPath: string;
   name: string;
   extension: string;
   sizeBytes: number;
-};
-
-type ArchiveType = "zip" | "cbr" | "7z";
-
-export const detectArchiveType = (filePath: string): ArchiveType | null => {
-  const ext = normalizeExtension(filePath).toLowerCase();
-  if (ext === "zip" || ext === "cbz") return "zip";
-  if (ext === "cbr" || ext === "rar") return "cbr";
-  if (ext === "7z") return "7z";
-  return null;
 };
 
 type ZipEntryName = string | Buffer;
@@ -179,9 +170,6 @@ const run7za = async (
 
     runWithCommand(commands[0], 0);
   });
-
-const normalizeArchiveEntryPath = (entryPath: string): string =>
-  toPosixPath(entryPath).replace(/\\/g, "/");
 
 const createSingleRun = (fn: () => void) => {
   let called = false;
@@ -518,63 +506,6 @@ const readZipStream = async (zipPath: string, entryPath: string): Promise<Readab
       rejectWithCleanup(error);
     });
   });
-};
-
-const PSD_MAGIC = Buffer.from([0x38, 0x42, 0x50, 0x53]);
-const JPEG_SOI = Buffer.from([0xff, 0xd8]);
-const JPEG_EOI = Buffer.from([0xff, 0xd9]);
-
-const extractJpegFromPsd = (buffer: Buffer): Buffer => {
-  if (buffer.length < 10) {
-    return buffer;
-  }
-
-  if (buffer.subarray(0, 4).equals(PSD_MAGIC)) {
-    const jpeg = findEmbeddedJpegInPsd(buffer);
-    if (jpeg) {
-      return jpeg;
-    }
-  }
-
-  return buffer;
-};
-
-const findEmbeddedJpegInPsd = (buffer: Buffer): Buffer | null => {
-  const jpegEnd = Buffer.from([0xff, 0xd9]);
-  
-  const jpegMarkers = [
-    Buffer.from([0xff, 0xd8, 0xff, 0xe1]),
-    Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
-    Buffer.from([0xff, 0xd8, 0xff, 0xee]),
-    Buffer.from([0xff, 0xd8, 0xff, 0xdb]),
-  ];
-
-  for (const marker of jpegMarkers) {
-    const startIdx = buffer.indexOf(marker);
-    if (startIdx !== -1) {
-      const endIdx = buffer.lastIndexOf(jpegEnd);
-      if (endIdx > startIdx) {
-        const extracted = buffer.subarray(startIdx, endIdx + 2);
-        if (extracted.length > 100) {
-          return extracted;
-        }
-      }
-    }
-  }
-
-  const simpleStart = Buffer.from([0xff, 0xd8]);
-  const startIdx = buffer.indexOf(simpleStart);
-  if (startIdx !== -1 && startIdx < buffer.length - 10) {
-    const endIdx = buffer.lastIndexOf(jpegEnd);
-    if (endIdx > startIdx) {
-      const extracted = buffer.subarray(startIdx, endIdx + 2);
-      if (extracted.length > 100 && extracted.length < buffer.length) {
-        return extracted;
-      }
-    }
-  }
-
-  return null;
 };
 
 const readCbrBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {

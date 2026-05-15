@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 
+import { createLogger } from '../lib/logger';
+
+const logger = createLogger('WebSocket');
+
 export type FileChangeEvent = {
   type: 'add' | 'change' | 'unlink';
   path: string;
@@ -56,12 +60,12 @@ export function useWebSocket(
 
     ws.onopen = () => {
       setIsConnected(true);
-      console.log('[WebSocket] Connected');
+      logger.info('连接已建立');
     };
 
     ws.onclose = () => {
       setIsConnected(false);
-      console.log('[WebSocket] Disconnected');
+      logger.info('连接已断开');
       wsRef.current = null;
       
       if (!reconnectTimeoutRef.current) {
@@ -73,7 +77,7 @@ export function useWebSocket(
     };
 
     ws.onerror = (error) => {
-      console.error('[WebSocket] Error:', error);
+      logger.error('连接异常', error);
     };
 
     ws.onmessage = (event) => {
@@ -88,7 +92,7 @@ export function useWebSocket(
           onScanCompleteRef.current?.(message.event);
         }
       } catch (error) {
-        console.error('[WebSocket] Failed to parse message:', error);
+        logger.error('消息解析失败', error);
       }
     };
   };

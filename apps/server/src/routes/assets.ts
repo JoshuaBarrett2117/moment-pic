@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { lookup as lookupMimeType } from "mime-types";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 
 import { ok } from "../lib/api.js";
 import { deleteAsset, getAssetDetail } from "../services/album-service.js";
@@ -33,7 +33,7 @@ const resolvePreferredFormat = (
 };
 
 const applyVariantCacheHeaders = async (
-  reply: any,
+  reply: FastifyReply,
   input: {
     etagPrefix: "thumb" | "preview";
     cacheKey: string;
@@ -56,19 +56,19 @@ const applyVariantCacheHeaders = async (
 };
 
 export const assetRoutes: FastifyPluginAsync = async (app) => {
-  const sendAssetNotFound = (reply: any) =>
+  const sendAssetNotFound = (reply: FastifyReply) =>
     reply.status(404).send({
       code: 4002,
       message: "asset not found"
     });
 
-  const sendOriginalSourceMissing = (reply: any) =>
+  const sendOriginalSourceMissing = (reply: FastifyReply) =>
     reply.status(404).send({
       code: 4005,
       message: "original asset source not found"
     });
 
-  const sendOriginalAssetFallback = async (assetId: string, reply: any) => {
+  const sendOriginalAssetFallback = async (assetId: string, reply: FastifyReply) => {
     const { asset, body, sizeBytes } = await openOriginalImage(assetId);
     const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
     if (sizeBytes !== null && Number.isFinite(sizeBytes)) {

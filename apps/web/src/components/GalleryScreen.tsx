@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Plus, ArrowRight, ArrowLeft, ChevronLeft, ChevronRight, Search, X, Images, Layers3, SlidersHorizontal, FolderOpen } from 'lucide-react';
+import { Plus, ArrowRight, ArrowLeft, ChevronRight, Search, X, Images, Layers3, SlidersHorizontal, FolderOpen } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { ThrottledImage } from './ThrottledImage';
+import { GalleryPagination } from './GalleryPagination';
 import { useMobile, useSystemConfig, useWideMobile } from '../hooks';
 import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO, SmartAlbumListItemDTO, DirectoryAlbumNodeDTO, DirectoryAlbumBreadcrumbDTO } from '../types/api';
 
@@ -121,9 +122,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const mainRef = useRef<HTMLElement | null>(null);
   const isSmartAlbumsMode = displayMode === 'smartAlbums';
   const isDirectoryAlbumsMode = displayMode === 'directoryAlbums';
-
-  const totalPages = pagination ? Math.ceil(pagination.total / pagination.pageSize) : 1;
   const currentPage = pagination?.page || 1;
+
   const renderedAlbums = useMemo(() => albums.slice(0, visibleCount), [albums, visibleCount]);
   const hasActiveFilters =
     Boolean(currentKeyword) ||
@@ -623,61 +623,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
         )}
 
-        {pagination && totalPages > 1 && (
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-2 md:mt-12 md:gap-4">
-            <button
-              onClick={() => onPageChange(currentPage - 1)}
-              disabled={currentPage <= 1 || isLoading}
-              className="rounded-full bg-surface-container-high p-2 text-on-surface-variant transition-all hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-50"
-              title="上一页"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum: number;
-
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => onPageChange(pageNum)}
-                    className={`h-10 w-10 rounded-full text-sm font-medium transition-all ${
-                      currentPage === pageNum
-                        ? 'bg-primary-container text-on-primary-container'
-                        : 'text-outline hover:bg-primary-container/20'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={() => onPageChange(currentPage + 1)}
-              disabled={currentPage >= totalPages || isLoading}
-              className="rounded-full bg-surface-container-high p-2 text-on-surface-variant transition-all hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-50"
-              title="下一页"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-
-            <span className="ml-2 text-xs text-outline md:ml-4 md:text-sm">
-              共 {pagination.total} 项 / {totalPages} 页
-            </span>
-          </div>
-        )}
+        <GalleryPagination pagination={pagination} isLoading={isLoading} onPageChange={onPageChange} />
       </main>
     </div>
   );

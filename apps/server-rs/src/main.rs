@@ -18,17 +18,16 @@ async fn health() -> Json<HealthResponse> {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
     let app = Router::new().route("/api/v1/health", get(health));
-    let addr: SocketAddr = "0.0.0.0:3320".parse().expect("invalid listen addr");
+    let addr: SocketAddr = "0.0.0.0:3320".parse()?;
     tracing::info!("moment-pic rust backend listening on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .expect("bind failed");
-    axum::serve(listener, app).await.expect("server error");
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { VIEWER_QUALITY_SESSION_KEY } from '../lib/viewer-quality';
 import { useSystemConfig } from './useSystemConfig';
 import type { PageTransitionModeDTO } from '../types/api';
+import { clampGridWidth } from '../components/settings-screen-utils';
 
 const VIEWER_PRELOAD_BEFORE_KEY = 'moment_pic_viewer_preload_before';
 const VIEWER_PRELOAD_AFTER_KEY = 'moment_pic_viewer_preload_after';
@@ -20,14 +21,6 @@ const clampPreloadRadius = (value: number): number => {
   }
 
   return Math.max(0, Math.min(100, Math.round(value)));
-};
-
-const clampGridWidth = (value: number): number => {
-  if (!Number.isFinite(value)) {
-    return DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE;
-  }
-
-  return Math.max(180, Math.min(600, Math.round(value)));
 };
 
 export const useSettingsConfigForm = () => {

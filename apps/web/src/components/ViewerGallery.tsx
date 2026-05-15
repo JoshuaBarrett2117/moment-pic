@@ -1,10 +1,10 @@
-﻿import { type FC, type MouseEvent, type TouchEvent, type TouchList, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FC, type MouseEvent, type TouchEvent, type TouchList, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw, Maximize2, X, SlidersHorizontal } from 'lucide-react';
 import { useMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
-
-type ImageQualityPreset = 'low' | 'balanced' | 'high' | 'original';
-const VIEWER_QUALITY_SESSION_KEY = 'moment_pic_viewer_quality_preset';
+import { type ImageQualityPreset, VIEWER_QUALITY_SESSION_KEY } from '../lib/viewer-quality';
+import { getPreloadHint, getQualityLabel, getTouchPointsDistance, QUALITY_OPTIONS, resolveImageSrc, resolvePreloadWindow } from './viewer-gallery-utils';
+import { ViewerGalleryStyles } from './ViewerGalleryStyles';
 
 interface ViewerGalleryProps {
   items: AssetListItemDTO[];
@@ -62,21 +62,6 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
         alt: item.name,
       }));
   }, [safeItems]);
-
-  const buildPreviewSrc = useCallback((assetId: string, preset: Exclude<ImageQualityPreset, 'original'>) => {
-    return `/api/v1/assets/${assetId}/preview?preset=${preset}`;
-  }, []);
-
-  const resolveImageSrc = useCallback((
-    image: { id: string; originalSrc: string },
-    preset: ImageQualityPreset,
-  ) => {
-    if (preset === 'original') {
-      return image.originalSrc;
-    }
-
-    return buildPreviewSrc(image.id, preset);
-  }, [buildPreviewSrc]);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [scale, setScale] = useState(1);
@@ -150,18 +135,19 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       return;
     }
 
-    const effectivePreloadBefore = qualityPreset === 'original'
-      ? 0
-      : qualityPreset === 'high'
-        ? Math.min(Math.max(0, preloadBefore), 1)
-        : Math.max(0, preloadBefore);
-    const effectivePreloadAfter = qualityPreset === 'original'
-      ? 0
-      : qualityPreset === 'high'
-        ? Math.min(Math.max(0, preloadAfter), 1)
-        : Math.max(0, preloadAfter);
-    const start = Math.max(0, activeIndex - effectivePreloadBefore);
-    const end = Math.min(images.length - 1, activeIndex + effectivePreloadAfter);
+    const preloadWindow = resolvePreloadWindow({
+      activeIndex,
+      total: images.length,
+      preset: qualityPreset,
+      preloadBefore,
+      preloadAfter,
+    });
+    if (!preloadWindow) {
+      preloadedImagesRef.current = [];
+      return;
+    }
+
+    const { start, end } = preloadWindow;
     const urlsToPreload = new Set<string>();
 
     for (let index = start; index <= end; index += 1) {
@@ -185,7 +171,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     return () => {
       preloadedImagesRef.current = [];
     };
-  }, [activeIndex, images, isOpen, preloadAfter, preloadBefore, qualityPreset, resolveImageSrc]);
+  }, [activeIndex, images, isOpen, preloadAfter, preloadBefore, qualityPreset]);
 
   const goToPrev = useCallback(() => {
     if (images.length === 0) {
@@ -381,9 +367,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       return 0;
     }
 
-    const dx = touches[0].clientX - touches[1].clientX;
-    const dy = touches[0].clientY - touches[1].clientY;
-    return Math.sqrt(dx * dx + dy * dy);
+    return getTouchPointsDistance(touches[0], touches[1]);
   };
 
   const handleTouchStart = useCallback((e: TouchEvent) => {
@@ -496,15 +480,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const closeBtnSize = isMobile ? 56 : 48;
   const navBtnSize = isMobile ? 64 : 56;
   const currentImageSrc = resolveImageSrc(currentImage, qualityPreset);
-  const qualityLabel = qualityPreset === 'low' ? '省流' : qualityPreset === 'high' ? '高清' : qualityPreset === 'original' ? '原图' : '均衡';
-  const preloadHint = qualityPreset === 'original' ? '当前档位已关闭相邻预加载' : qualityPreset === 'high' ? '当前档位会减少相邻预加载' : null;
-  const qualityOptions: Array<{ value: ImageQualityPreset; label: string; description: string }> = [
-    { value: 'low', label: '省流', description: '打开更快' },
-    { value: 'balanced', label: '均衡', description: '默认推荐' },
-    { value: 'high', label: '高清', description: '更清晰' },
-    { value: 'original', label: '原图', description: '最完整' },
-  ];
-
+  const qualityLabel = getQualityLabel(qualityPreset);
+  const preloadHint = getPreloadHint(qualityPreset);
   return (
     <div
       className="viewer-gallery fixed inset-0 z-[99999] flex items-center justify-center bg-black touch-none"
@@ -514,186 +491,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       onMouseEnter={() => !useTouchInteractions && !showEndPrompt && setShowControls(true)}
       onMouseLeave={() => !useTouchInteractions && !showEndPrompt && setShowControls(false)}
     >
-      <style>{`
-        .viewer-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(255, 255, 255, 0.2);
-          border: none;
-          border-radius: 12px;
-          color: white;
-          cursor: pointer;
-          transition: all 0.2s;
-          -webkit-tap-highlight-color: transparent;
-          user-select: none;
-        }
-        .viewer-btn:hover {
-          background: rgba(255, 255, 255, 0.3);
-        }
-        .viewer-btn:active {
-          transform: scale(0.95);
-          background: rgba(255, 255, 255, 0.4);
-        }
-        .viewer-counter {
-          position: fixed;
-          top: calc(env(safe-area-inset-top) + 20px);
-          left: 50%;
-          transform: translateX(-50%) translateY(${showControls ? '-10px' : '0'});
-          padding: 10px 20px;
-          background: rgba(0, 0, 0, 0.7);
-          border-radius: 24px;
-          color: white;
-          font-size: 15px;
-          font-weight: 500;
-          backdrop-filter: blur(10px);
-          z-index: 20;
-          opacity: ${showControls ? 1 : 0};
-          transition: all 0.3s;
-        }
-        .viewer-close {
-          position: fixed;
-          top: calc(env(safe-area-inset-top) + 20px);
-          right: 20px;
-          transform: translateY(${showControls ? '-10px' : '0'});
-          background: rgba(255, 255, 255, 0.2);
-          border: none;
-          border-radius: 50%;
-          color: white;
-          cursor: pointer;
-          transition: all 0.3s;
-          z-index: 20;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .viewer-close:hover {
-          background: rgba(255, 255, 255, 0.3);
-        }
-        .viewer-close:active {
-          transform: scale(0.95);
-        }
-        .viewer-nav-btn {
-          position: fixed;
-          top: 50%;
-          transform: translateY(-50%);
-          background: rgba(255, 255, 255, 0.15);
-          border: none;
-          border-radius: 50%;
-          color: white;
-          cursor: pointer;
-          transition: all 0.2s;
-          z-index: 20;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          -webkit-tap-highlight-color: transparent;
-          opacity: ${showControls ? 1 : 0};
-        }
-        .viewer-nav-btn.prev {
-          left: 12px;
-        }
-        .viewer-nav-btn.next {
-          right: 12px;
-        }
-        .viewer-nav-btn:hover {
-          background: rgba(255, 255, 255, 0.25);
-        }
-        .viewer-nav-btn:active {
-          transform: translateY(-50%) scale(0.95);
-          background: rgba(255, 255, 255, 0.35);
-        }
-        .viewer-toolbar {
-          position: fixed;
-          bottom: calc(env(safe-area-inset-bottom) + 24px);
-          left: 50%;
-          transform: translateX(-50%) translateY(${showControls ? '-20px' : '0'});
-          display: flex;
-          gap: 12px;
-          padding: 16px 24px;
-          background: rgba(0, 0, 0, 0.7);
-          border-radius: 20px;
-          backdrop-filter: blur(12px);
-          z-index: 20;
-          opacity: ${showControls ? 1 : 0};
-          transition: all 0.3s;
-        }
-        .viewer-quality-panel {
-          position: fixed;
-          bottom: calc(env(safe-area-inset-bottom) + 112px);
-          left: 50%;
-          transform: translateX(-50%);
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          width: min(18rem, calc(100vw - 2rem));
-          padding: 14px;
-          background: rgba(0, 0, 0, 0.82);
-          border-radius: 20px;
-          backdrop-filter: blur(12px);
-          z-index: 21;
-          opacity: ${showControls && showQualityPanel ? 1 : 0};
-          pointer-events: ${showControls && showQualityPanel ? 'auto' : 'none'};
-          transition: all 0.2s;
-        }
-        .viewer-quality-option {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          width: 100%;
-          padding: 12px 14px;
-          border: none;
-          border-radius: 14px;
-          color: white;
-          background: rgba(255, 255, 255, 0.08);
-          cursor: pointer;
-          text-align: left;
-          transition: background 0.2s;
-        }
-        .viewer-quality-option:hover {
-          background: rgba(255, 255, 255, 0.16);
-        }
-        .viewer-quality-option[data-active='true'] {
-          background: rgba(255, 255, 255, 0.22);
-        }
-        .viewer-image-container {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: transform 0.3s;
-        }
-        .viewer-image {
-          max-width: 100%;
-          max-height: 100%;
-          width: auto;
-          height: auto;
-          object-fit: contain;
-          transition: transform 0.15s ease-out;
-        }
-        .viewer-loading {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(0, 0, 0, 0.5);
-        }
-        .viewer-loading-spinner {
-          width: 48px;
-          height: 48px;
-          border: 3px solid rgba(255, 255, 255, 0.3);
-          border-top-color: white;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      <ViewerGalleryStyles showControls={showControls} showQualityPanel={showQualityPanel} />
 
       <button className="viewer-close" onClick={handleClose} title="关闭" style={{ width: closeBtnSize, height: closeBtnSize }}>
         <X size={isMobile ? 28 : 24} />
@@ -753,7 +551,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       )}
 
       <div className="viewer-quality-panel">
-        {qualityOptions.map((option) => (
+        {QUALITY_OPTIONS.map((option) => (
           <button
             key={option.value}
             className="viewer-quality-option"

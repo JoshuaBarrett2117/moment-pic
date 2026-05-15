@@ -5,7 +5,10 @@ import test from "node:test";
 
 import { smartAlbumRoutes } from "./smart-albums.js";
 import type { AlbumRecord, AssetRecord, SmartAlbumRuleRecord } from "../types/store.js";
-import { clearLibraryCatalogDb, clearSmartAlbumDataDb, insertAlbumWithAssetsDb, makeId, upsertLibraryRootDb, upsertSmartAlbumRuleDb } from "../services/sqlite-store.js";
+import { insertAlbumWithAssetsDb } from "../repositories/album-repository.js";
+import { clearLibraryCatalogDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
+import { makeId } from "../repositories/ids.js";
+import { clearSmartAlbumDataDb, upsertSmartAlbumRuleDb } from "../repositories/smart-album-repository.js";
 import { rebuildSmartAlbums, updateSmartAlbumAiConfig } from "../services/smart-album-service.js";
 
 const createAssetRecord = (overrides: Partial<AssetRecord>): AssetRecord => ({

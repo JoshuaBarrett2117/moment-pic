@@ -13,9 +13,7 @@
     "start:server": "npm run start --workspace @moment-pic/server",
     "test:server": "npm run test --workspace @moment-pic/server",
     "test:web": "npm run test --workspace @moment-pic/web",
-    "test:rust": "cargo test --manifest-path apps/server-rs/Cargo.toml",
-    "test": "npm run test:server && npm run test:web && npm run lint:web && npm run build:server && npm run build:web",
-    "prisma:generate": "npm run prisma:generate --workspace @moment-pic/server",
-    "prisma:migrate": "npm run prisma:migrate --workspace @moment-pic/server"
+    "test:rust": "node scripts/test-rust.mjs",
+    "test": "npm run test:server && npm run test:web && npm run lint:web && npm run build:server && npm run build:web"
   }
 }

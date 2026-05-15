@@ -163,14 +163,3 @@ export type SmartAlbumAiConfigRecord = {
   updatedAt: string;
 };
 
-export type IndexStore = {
-  libraryRoots: LibraryRootRecord[];
-  albums: AlbumRecord[];
-  assets: AssetRecord[];
-  thumbnails: ThumbnailRecord[];
-  albumViews: AlbumViewRecord[];
-  smartAlbums: SmartAlbumRecord[];
-  smartAlbumMembers: SmartAlbumMemberRecord[];
-  smartAlbumMatchRecords: SmartAlbumMatchRecord[];
-  smartAlbumRules: SmartAlbumRuleRecord[];
-};

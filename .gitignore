@@ -11,6 +11,12 @@ debug/
 tmp/
 .cache/
 apps/server/data/cache/
+apps/server/data/**
+!apps/server/data/.gitkeep
+apps/server/prisma/data/**
+!apps/server/prisma/data/.gitkeep
+data/cache/**
+!data/cache/.gitkeep
 apps/server/tmp/
 !.gitkeep
 .logs/

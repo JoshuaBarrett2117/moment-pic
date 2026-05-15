@@ -17,7 +17,7 @@ import {
 import { findLibraryRootByIdDb, listLibraryRootsDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
 import { makeId } from "../repositories/ids.js";
 import { isArchiveFile, listRootImageEntries } from "./archive.js";
-import { rebuildSmartAlbums } from "./smart-album-service.js";
+import { runPostLibraryScanTasks } from "./library-scanner/post-scan-tasks.js";
 import { buildAssetsFingerprint, buildStableAssetId, mapWithConcurrency, sortNames } from "./library-scanner-utils.js";
 
 export { buildStableAssetId } from "./library-scanner-utils.js";
@@ -502,7 +502,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
     }
   }
 
-  await rebuildSmartAlbums();
+  await runPostLibraryScanTasks();
 
   return {
     albumsDiscovered,
@@ -562,7 +562,7 @@ export const rescanAlbum = async (albumId: string) => {
     ]
   });
 
-  await rebuildSmartAlbums();
+  await runPostLibraryScanTasks();
 
   return {
     albumId: existingAlbum.id,

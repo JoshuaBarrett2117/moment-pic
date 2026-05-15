@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
+import { parseBoundedInteger, parseEnumValue, parseOptionalString } from "../lib/request-query.js";
 import {
   getSmartAlbumAiConfig,
   getSmartAlbumDetail,
@@ -24,9 +25,14 @@ export const smartAlbumRoutes: FastifyPluginAsync = async (app) => {
       sortBy?: "name" | "updatedAt" | "albumCount" | "assetCount";
       sortOrder?: "asc" | "desc";
     };
-    const page = Math.max(1, Number(query.page ?? 1));
-    const pageSize = Math.max(1, Math.min(100, Number(query.pageSize ?? 24)));
-    return ok(await listSmartAlbums(page, pageSize, query));
+    const page = parseBoundedInteger(query.page, { defaultValue: 1, min: 1, max: 100000 });
+    const pageSize = parseBoundedInteger(query.pageSize, { defaultValue: 24, min: 1, max: 100 });
+    return ok(await listSmartAlbums(page, pageSize, {
+      keyword: parseOptionalString(query.keyword),
+      status: parseEnumValue(query.status, ["active", "hidden", "review_pending"] as const),
+      sortBy: parseEnumValue(query.sortBy, ["name", "updatedAt", "albumCount", "assetCount"] as const),
+      sortOrder: parseEnumValue(query.sortOrder, ["asc", "desc"] as const)
+    }));
   });
 
   app.post("/api/v1/smart-albums/rebuild", async () => {

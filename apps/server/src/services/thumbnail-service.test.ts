@@ -11,7 +11,8 @@ import { path7za } from "7zip-bin";
 import sharp from "sharp";
 
 import type { AssetRecord } from "../types/store.js";
-import { findAssetByIdDb, insertAlbumWithAssetsDb, upsertLibraryRootDb } from "./sqlite-store.js";
+import { findAssetByIdDb, insertAlbumWithAssetsDb } from "../repositories/album-repository.js";
+import { upsertLibraryRootDb } from "../repositories/library-root-repository.js";
 import { ensurePreview, ensureThumbnail, openOriginalAssetSource } from "./thumbnail-service.js";
 
 const run7z = async (args: string[], cwd?: string) =>

@@ -77,7 +77,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: Dockerfile.arm64
           platforms: linux/arm64
           push: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature-') || startsWith(github.ref, 'refs/tags/v')) }}
           tags: ${{ steps.arm64-tags.outputs.tags }}

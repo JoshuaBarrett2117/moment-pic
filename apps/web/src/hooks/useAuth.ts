@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { clearAuthSession, markAuthSession } from '../app/auth-session';
 import { api } from '../lib/api';
 import type { LoginResponseDTO } from '../types/api';
 
@@ -20,6 +21,7 @@ export function useAuth(): UseAuthReturn {
     setError(null);
     try {
       await api.post<LoginResponseDTO>('/auth/login', { username, password });
+      markAuthSession();
       setIsAuthenticated(true);
       return true;
     } catch (err) {
@@ -36,6 +38,7 @@ export function useAuth(): UseAuthReturn {
     try {
       await api.post('/auth/logout');
     } finally {
+      clearAuthSession();
       setIsAuthenticated(false);
       setIsLoading(false);
     }

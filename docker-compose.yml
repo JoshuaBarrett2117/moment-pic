@@ -17,9 +17,7 @@ services:
       LOG_LEVEL: "${LOG_LEVEL:-info}"
     volumes:
       - gallery-data:/data
-      - "C:/Users/a3875/Pictures/test:/test"
-      - "C:/Users/a3875/Pictures/test2:/test2"
-      - "Y:/其他/PIC:/test1"
+      - "${LIBRARY_HOST_PATH:-./apps/server/samples/library}:/data/library:ro"
     restart: unless-stopped
 
 volumes:

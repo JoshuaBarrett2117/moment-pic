@@ -1,6 +1,5 @@
 import path from "node:path";
 
-import { createLogger } from "../lib/logger.js";
 import type {
   SmartAlbumAiConfigDTO,
   SmartAlbumAiConnectionTestDTO,
@@ -16,20 +15,21 @@ import type {
   SmartAlbumMatchRecord,
   SmartAlbumMemberRecord,
   SmartAlbumRecord,
-  SmartAlbumRuleNormalizeOptions,
   SmartAlbumRuleRecord
 } from "../types/store.js";
-import { createOpenAiChatCompletion, normalizeOpenAiEndpoint, parseJsonFromModelText } from "./openai-compatible-service.js";
+import { normalizeOpenAiEndpoint } from "./openai-compatible-service.js";
 import {
-  buildHeuristicAiCandidates,
   buildSmartAlbumRuleRecords,
-  mapAiClustersToCandidates,
   normalizeSmartAlbumText,
-  parseJsonArray,
-  type AiCluster,
   type CandidateRecord,
   type SmartAlbumScopeAlbum
 } from "./smart-album-ai-rule-builder.js";
+import { DEFAULT_OPENAI_MODEL, toSmartAlbumAiConfigDto, toSmartAlbumRuleDto } from "./smart-album-mappers.js";
+import {
+  buildAiCandidates,
+  testSmartAlbumAiProviderConnection,
+  type SmartAlbumAiConnectionTestInput
+} from "./smart-album-ai-candidates.js";
 import {
   findAlbumByIdDb,
   listAlbumsForSmartRuleScopeDb,
@@ -47,8 +47,6 @@ import {
   updateSmartAlbumAiConfigDb
 } from "../repositories/smart-album-repository.js";
 import { makeId } from "../repositories/ids.js";
-
-const logger = createLogger("SmartAlbumService");
 
 export { areAiRulePatternsAligned, buildRulePatternsFromAlbums, buildSmartAlbumRuleRecords } from "./smart-album-ai-rule-builder.js";
 
@@ -69,140 +67,6 @@ type SmartAlbumAiConfigInput = {
   preferredScopes: SmartAlbumRuleScopeDTO[];
   reviewRequiredBelowConfidence: number;
 };
-type SmartAlbumAiConnectionTestInput = {
-  provider?: "openai";
-  apiEndpoint?: string;
-  apiModel?: string;
-  apiToken?: string | null;
-};
-
-const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
-const MAX_AI_ALBUMS_PER_BATCH = 40;
-const OPENAI_GROUPING_TIMEOUT_MS = 90000;
-
-const parseNormalizeOptions = (value: string): SmartAlbumRuleNormalizeOptions => {
-  try {
-    const parsed = JSON.parse(value);
-    return typeof parsed === "object" && parsed ? (parsed as SmartAlbumRuleNormalizeOptions) : {};
-  } catch {
-    return {};
-  }
-};
-
-const toRuleDto = (rule: SmartAlbumRuleRecord): SmartAlbumRuleDTO => ({
-  id: rule.id,
-  name: rule.name,
-  enabled: rule.enabled,
-  sourceEngine: rule.sourceEngine,
-  priority: rule.priority,
-  scope: rule.scope,
-  matchMode: rule.matchMode,
-  patterns: parseJsonArray(rule.patternsJson),
-  normalizeOptions: parseNormalizeOptions(rule.normalizeOptionsJson),
-  action: rule.action,
-  targetName: rule.targetName,
-  targetNameTemplate: rule.targetNameTemplate,
-  minAlbumCount: rule.minAlbumCount,
-  minConfidence: rule.minConfidence,
-  generatedNormalizedKey: rule.generatedNormalizedKey,
-  generatedConfidence: rule.generatedConfidence,
-  generatedReason: rule.generatedReason,
-  generatedRunId: rule.generatedRunId,
-  createdAt: rule.createdAt,
-  updatedAt: rule.updatedAt
-});
-
-const toAiConfigDto = (config: SmartAlbumAiConfigRecord): SmartAlbumAiConfigDTO => ({
-  id: config.id,
-  enabled: config.enabled,
-  mode: config.mode,
-  provider: "openai",
-  apiEndpoint: normalizeOpenAiEndpoint(config.apiEndpoint),
-  apiModel: config.apiModel || DEFAULT_OPENAI_MODEL,
-  hasApiToken: Boolean(config.apiToken?.trim()),
-  apiTokenMasked: config.apiToken?.trim() ? `${config.apiToken.trim().slice(0, 6)}...${config.apiToken.trim().slice(-4)}` : null,
-  minConfidenceAutoApply: config.minConfidenceAutoApply,
-  minClusterAlbumCount: config.minClusterAlbumCount,
-  maxSuggestionsPerRun: config.maxSuggestionsPerRun,
-  allowAliasMerge: config.allowAliasMerge,
-  allowCrossRootGrouping: config.allowCrossRootGrouping,
-  excludedTokens: parseJsonArray(config.excludedTokensJson),
-  preferredScopes: parseJsonArray(config.preferredScopesJson).filter(
-    (item): item is SmartAlbumRuleScopeDTO =>
-      item === "albumName" || item === "sourcePath" || item === "parentPath" || item === "assetFileName"
-  ),
-  reviewRequiredBelowConfidence: config.reviewRequiredBelowConfidence,
-  createdAt: config.createdAt,
-  updatedAt: config.updatedAt
-});
-
-const buildAiRuntimeConfig = (config: SmartAlbumAiConfigRecord, overrides?: SmartAlbumAiConnectionTestInput) => {
-  const endpoint = normalizeOpenAiEndpoint(overrides?.apiEndpoint ?? config.apiEndpoint);
-  const model = (overrides?.apiModel ?? config.apiModel ?? DEFAULT_OPENAI_MODEL).trim() || DEFAULT_OPENAI_MODEL;
-  const apiToken = overrides?.apiToken === undefined
-    ? (config.apiToken?.trim() || "")
-    : (overrides.apiToken?.trim() || "");
-
-  return {
-    endpoint,
-    model,
-    apiToken
-  };
-};
-
-const buildAiPromptAlbums = (
-  albums: Array<{
-    id: string;
-    name: string;
-    sourcePath: string;
-    assetCount: number;
-  }>
-) => albums.map((album) => ({
-  id: album.id,
-  name: album.name,
-  sourcePath: album.sourcePath,
-  parentPath: path.dirname(album.sourcePath),
-  assetCount: album.assetCount
-}));
-
-const buildAiSystemPrompt = () => [
-  "你是一个本地图库自动归纳助手。",
-  "请基于用户自己的图集内容，把明显属于同一人物、作者、系列、品牌或作品线的多个普通图集归纳到同一个自动整理下。",
-  "不要写死示例名称，不要臆造不存在的主体，不要输出单图集分组。",
-  "只有在你高度确信多个图集确实属于同一主题时才分组。",
-  "请严格返回 JSON，不要输出解释性文本。"
-].join("");
-
-const buildAiUserPrompt = (
-  albums: Array<{
-    id: string;
-    name: string;
-    sourcePath: string;
-    assetCount: number;
-  }>,
-  maxSuggestions: number
-) => JSON.stringify({
-  task: "group_albums",
-  requirements: {
-    maxSuggestions,
-    minAlbumsPerGroup: 2,
-    fields: ["name", "albumIds", "confidence", "reason"],
-    confidenceRange: "0-1",
-    avoidSingleAlbumGroups: true,
-    output: {
-      clusters: [
-        {
-          name: "归纳名称",
-          albumIds: ["必须使用输入中的 album id"],
-          confidence: 0.92,
-          reason: "简短说明依据"
-        }
-      ]
-    }
-  },
-  albums: buildAiPromptAlbums(albums)
-});
-
 const extractScopeTexts = (scope: SmartAlbumRuleScopeDTO, album: { id: string; name: string; sourcePath: string }): string[] => {
   if (scope === "albumName") {
     return [album.name];
@@ -294,77 +158,6 @@ const buildRuleCandidates = (rule: SmartAlbumRuleDTO, albums: SmartAlbumScopeAlb
   return matches.filter((match) => (albumCounts.get(match.normalizedKey) ?? 0) >= rule.minAlbumCount);
 };
 
-const requestOpenAiClusters = async (
-  config: SmartAlbumAiConfigRecord,
-  albums: SmartAlbumScopeAlbum[]
-): Promise<AiCluster[]> => {
-  const runtime = buildAiRuntimeConfig(config);
-  if (!runtime.apiToken) {
-    return [];
-  }
-
-  const text = await createOpenAiChatCompletion(
-    {
-      endpoint: runtime.endpoint,
-      apiToken: runtime.apiToken,
-      model: runtime.model
-    },
-    {
-      messages: [
-        { role: "system", content: buildAiSystemPrompt() },
-        { role: "user", content: buildAiUserPrompt(albums, config.maxSuggestionsPerRun) }
-      ],
-      maxTokens: 2400,
-      temperature: 0.1,
-      timeoutMs: OPENAI_GROUPING_TIMEOUT_MS
-    }
-  );
-
-  const parsed = parseJsonFromModelText<{ clusters?: AiCluster[] }>(text);
-  return Array.isArray(parsed?.clusters) ? parsed.clusters : [];
-};
-
-const buildOpenAiCandidates = async (config: SmartAlbumAiConfigRecord, albums: SmartAlbumScopeAlbum[]): Promise<CandidateRecord[]> => {
-  if (albums.length < config.minClusterAlbumCount) {
-    return [];
-  }
-
-  const albumMap = new Map(albums.map((album) => [album.id, album]));
-  const candidates: CandidateRecord[] = [];
-  for (let index = 0; index < albums.length; index += MAX_AI_ALBUMS_PER_BATCH) {
-    const batch = albums.slice(index, index + MAX_AI_ALBUMS_PER_BATCH);
-    const clusters = await requestOpenAiClusters(config, batch);
-    candidates.push(...mapAiClustersToCandidates(clusters, albumMap));
-  }
-
-  return candidates.filter((candidate) => {
-    return candidate.confidence > 0;
-  });
-};
-
-const buildAiCandidates = async (albums: SmartAlbumScopeAlbum[]): Promise<CandidateRecord[]> => {
-  const config = getSmartAlbumAiConfigDb();
-  if (!config.enabled) {
-    return [];
-  }
-
-  const runtime = buildAiRuntimeConfig(config);
-  if (!runtime.apiToken) {
-    return buildHeuristicAiCandidates(config, albums);
-  }
-
-  try {
-    return await buildOpenAiCandidates(config, albums);
-  } catch (error) {
-    const runtime = buildAiRuntimeConfig(config);
-    logger.error(
-      `OpenAI 分组失败，回退到启发式智能相册：endpoint=${runtime.endpoint} model=${runtime.model} batchSize=${MAX_AI_ALBUMS_PER_BATCH} timeoutMs=${OPENAI_GROUPING_TIMEOUT_MS}`,
-      error
-    );
-    return buildHeuristicAiCandidates(config, albums);
-  }
-};
-
 const buildSmartAlbumRecords = (candidates: CandidateRecord[], runId: string) => {
   const grouped = new Map<string, CandidateRecord[]>();
   for (const candidate of candidates) {
@@ -443,7 +236,7 @@ export const rebuildSmartAlbums = async (): Promise<{ smartAlbumsDiscovered: num
   const albums = listAlbumsForSmartRuleScopeDb();
   const rules = listSmartAlbumRulesDb().filter((rule) => rule.enabled && rule.action === "assignSmartAlbum");
   const baseRules = rules.filter((rule) => rule.sourceEngine !== "ai");
-  const baseRuleDtos = baseRules.map(toRuleDto);
+  const baseRuleDtos = baseRules.map(toSmartAlbumRuleDto);
   const baseCandidates = baseRuleDtos.flatMap((rule) => buildRuleCandidates(rule, albums));
   const coveredAlbumIds = collectCandidateAlbumIds(baseCandidates);
   const remainingAlbums = albums.filter((album) => !coveredAlbumIds.has(album.id));
@@ -451,7 +244,7 @@ export const rebuildSmartAlbums = async (): Promise<{ smartAlbumsDiscovered: num
 
   if (aiConfig.enabled) {
     const aiCandidates = remainingAlbums.length >= aiConfig.minClusterAlbumCount
-      ? await buildAiCandidates(remainingAlbums)
+      ? await buildAiCandidates(aiConfig, remainingAlbums)
       : [];
     const aiRules = aiCandidates.length > 0
       ? buildSmartAlbumRuleRecords(aiCandidates, remainingAlbums, makeId("srun"), aiConfig)
@@ -461,7 +254,7 @@ export const rebuildSmartAlbums = async (): Promise<{ smartAlbumsDiscovered: num
 
   const refreshedRules = listSmartAlbumRulesDb().filter((rule) => rule.enabled && rule.action === "assignSmartAlbum");
   const candidates = refreshedRules
-    .flatMap((rule) => buildRuleCandidates(toRuleDto(rule), albums))
+    .flatMap((rule) => buildRuleCandidates(toSmartAlbumRuleDto(rule), albums))
     .reduce((map, candidate) => {
       const key = `${candidate.albumId}:${candidate.normalizedKey}`;
       const existing = map.get(key);
@@ -554,9 +347,9 @@ export const getSmartAlbumMembers = async (smartAlbumId: string): Promise<SmartA
     .filter((item): item is SmartAlbumMemberDTO => item !== null);
 };
 
-export const listSmartAlbumRules = async (): Promise<SmartAlbumRuleDTO[]> => listSmartAlbumRulesDb().map(toRuleDto);
+export const listSmartAlbumRules = async (): Promise<SmartAlbumRuleDTO[]> => listSmartAlbumRulesDb().map(toSmartAlbumRuleDto);
 
-export const getSmartAlbumAiConfig = async (): Promise<SmartAlbumAiConfigDTO> => toAiConfigDto(getSmartAlbumAiConfigDb());
+export const getSmartAlbumAiConfig = async (): Promise<SmartAlbumAiConfigDTO> => toSmartAlbumAiConfigDto(getSmartAlbumAiConfigDb());
 
 export const updateSmartAlbumAiConfig = async (input: SmartAlbumAiConfigInput): Promise<SmartAlbumAiConfigDTO> => {
   const existing = getSmartAlbumAiConfigDb();
@@ -580,58 +373,12 @@ export const updateSmartAlbumAiConfig = async (input: SmartAlbumAiConfigInput): 
     preferredScopesJson: JSON.stringify(input.preferredScopes),
     reviewRequiredBelowConfidence: input.reviewRequiredBelowConfidence
   });
-  return toAiConfigDto(updated);
+  return toSmartAlbumAiConfigDto(updated);
 };
 
 export const testSmartAlbumAiConnection = async (input?: SmartAlbumAiConnectionTestInput): Promise<SmartAlbumAiConnectionTestDTO> => {
   const config = getSmartAlbumAiConfigDb();
-  const runtime = buildAiRuntimeConfig(config, input);
-
-  if (!runtime.apiToken) {
-    return {
-      success: false,
-      message: "请先填写 OpenAI Token",
-      endpoint: runtime.endpoint,
-      model: runtime.model,
-      latencyMs: 0
-    };
-  }
-
-  const startedAt = Date.now();
-  try {
-    const text = await createOpenAiChatCompletion(
-      {
-        endpoint: runtime.endpoint,
-        apiToken: runtime.apiToken,
-        model: runtime.model
-      },
-      {
-        messages: [
-          { role: "system", content: "你是连接测试助手，请只回复 OK。" },
-          { role: "user", content: "请回复 OK" }
-        ],
-        maxTokens: 16,
-        temperature: 0,
-        timeoutMs: 20000
-      }
-    );
-
-    return {
-      success: true,
-      message: `连接成功，模型返回：${text.slice(0, 80)}`,
-      endpoint: runtime.endpoint,
-      model: runtime.model,
-      latencyMs: Date.now() - startedAt
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "连接测试失败",
-      endpoint: runtime.endpoint,
-      model: runtime.model,
-      latencyMs: Date.now() - startedAt
-    };
-  }
+  return testSmartAlbumAiProviderConnection(config, input);
 };
 
 export const testSmartAlbumRule = async (ruleId: string): Promise<SmartAlbumRuleTestResultDTO | null> => {
@@ -639,7 +386,7 @@ export const testSmartAlbumRule = async (ruleId: string): Promise<SmartAlbumRule
   if (!rule) {
     return null;
   }
-  const ruleDto = toRuleDto(rule);
+  const ruleDto = toSmartAlbumRuleDto(rule);
   const matchedAlbums = buildRuleCandidates(ruleDto, listAlbumsForSmartRuleScopeDb())
     .map((item) => {
       const album = findAlbumByIdDb(item.albumId);

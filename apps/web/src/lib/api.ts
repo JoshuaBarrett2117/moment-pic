@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { clearAuthSession, notifyAuthExpired } from '../app/auth-session';
 
 export interface ApiResponse<T> {
   code: number;
@@ -31,9 +32,8 @@ class ApiClient {
       (response) => response,
       (error: AxiosError<ApiErrorResponse>) => {
         if (error.response?.status === 401) {
-          localStorage.removeItem('auth_token');
-          document.cookie = 'moment_pic_auth=; Max-Age=0; Path=/; HttpOnly';
-          window.dispatchEvent(new Event('moment-pic-auth-expired'));
+          clearAuthSession();
+          notifyAuthExpired();
         }
         return Promise.reject(error);
       }

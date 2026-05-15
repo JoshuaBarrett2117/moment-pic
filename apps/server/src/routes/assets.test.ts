@@ -9,7 +9,8 @@ import Fastify from "fastify";
 
 import { assetRoutes } from "./assets.js";
 import type { AssetRecord } from "../types/store.js";
-import { findAssetByIdDb, insertAlbumWithAssetsDb, upsertLibraryRootDb } from "../services/sqlite-store.js";
+import { findAssetByIdDb, insertAlbumWithAssetsDb } from "../repositories/album-repository.js";
+import { upsertLibraryRootDb } from "../repositories/library-root-repository.js";
 
 const createAssetRecord = (overrides: Partial<AssetRecord>): AssetRecord => ({
   id: `ast_${crypto.randomUUID().replace(/-/g, "")}`,

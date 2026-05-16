@@ -81,3 +81,18 @@ export const resolveNextAlbumId = (
   const currentIndex = albums.findIndex((album) => album.id === currentAlbumId);
   return currentIndex >= 0 ? albums[currentIndex + 1]?.id ?? null : null;
 };
+
+export const buildDirectoryNavigationAlbums = (
+  nodes: DirectoryAlbumNodeDTO[] | null | undefined
+): AlbumListItemDTO[] => {
+  return (nodes || [])
+    .filter((node) => node.kind === 'album' && node.albumId)
+    .map((node) => ({
+      id: node.albumId as string,
+      name: node.name,
+      sourceType: node.sourceType ?? 'folder',
+      assetCount: node.assetCount,
+      coverUrl: node.coverUrl,
+      updatedAt: node.updatedAt ?? new Date(0).toISOString(),
+    }));
+};

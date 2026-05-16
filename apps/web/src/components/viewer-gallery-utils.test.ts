@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildPreviewSrc, getPreloadHint, getQualityLabel, getTouchPointsDistance, QUALITY_OPTIONS, resolveImageSrc, resolvePreloadWindow } from './viewer-gallery-utils';
+import {
+  buildPreviewSrc,
+  getPreloadHint,
+  getQualityLabel,
+  getTouchPointsDistance,
+  QUALITY_OPTIONS,
+  resolveImageSrc,
+  resolvePreloadWindow,
+  resolveViewerNextAction,
+  resolveViewerIndexAfterImagesChange,
+  resolveViewerInitialIndex,
+} from './viewer-gallery-utils';
 
 test('viewer gallery resolves original and preview image sources', () => {
   const image = { id: 'asset_1', originalSrc: '/api/v1/assets/asset_1/original' };
@@ -27,6 +38,47 @@ test('resolvePreloadWindow clamps original and high quality preload ranges', () 
   assert.deepEqual(resolvePreloadWindow({ activeIndex: 5, total: 10, preset: 'high', preloadBefore: 8, preloadAfter: 8 }), { start: 4, end: 6 });
   assert.deepEqual(resolvePreloadWindow({ activeIndex: 1, total: 3, preset: 'balanced', preloadBefore: 8, preloadAfter: 8 }), { start: 0, end: 2 });
   assert.equal(resolvePreloadWindow({ activeIndex: 0, total: 0, preset: 'balanced', preloadBefore: 1, preloadAfter: 1 }), null);
+});
+
+test('viewer index keeps current page position when appended images arrive', () => {
+  assert.equal(resolveViewerInitialIndex(30, 24), 23);
+  assert.equal(resolveViewerIndexAfterImagesChange(23, 48), 23);
+  assert.equal(resolveViewerIndexAfterImagesChange(47, 24), 23);
+  assert.equal(resolveViewerIndexAfterImagesChange(0, 0), null);
+
+  const indexBeforePendingAdvance = resolveViewerIndexAfterImagesChange(23, 48);
+  assert.equal(indexBeforePendingAdvance === null ? null : indexBeforePendingAdvance + 1, 24);
+});
+
+test('resolveViewerNextAction shows end prompt only after requesting next from the final image', () => {
+  assert.equal(resolveViewerNextAction({
+    activeIndex: 22,
+    total: 24,
+    hasMoreItems: false,
+    canRequestMoreItems: true,
+    isBusy: false,
+  }), 'advance');
+  assert.equal(resolveViewerNextAction({
+    activeIndex: 23,
+    total: 24,
+    hasMoreItems: false,
+    canRequestMoreItems: true,
+    isBusy: false,
+  }), 'show-end-prompt');
+  assert.equal(resolveViewerNextAction({
+    activeIndex: 23,
+    total: 24,
+    hasMoreItems: true,
+    canRequestMoreItems: true,
+    isBusy: false,
+  }), 'load-more');
+  assert.equal(resolveViewerNextAction({
+    activeIndex: 23,
+    total: 24,
+    hasMoreItems: true,
+    canRequestMoreItems: true,
+    isBusy: true,
+  }), 'none');
 });
 
 test('getTouchPointsDistance returns euclidean distance', () => {

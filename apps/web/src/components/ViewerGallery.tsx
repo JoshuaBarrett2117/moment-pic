@@ -3,7 +3,14 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 import { type ImageQualityPreset } from '../lib/viewer-quality';
-import { getPreloadHint, getQualityLabel, QUALITY_OPTIONS, resolveImageSrc } from './viewer-gallery-utils';
+import {
+  getPreloadHint,
+  getQualityLabel,
+  QUALITY_OPTIONS,
+  resolveImageSrc,
+  resolveViewerIndexAfterImagesChange,
+  resolveViewerInitialIndex,
+} from './viewer-gallery-utils';
 import { ViewerGalleryStyles } from './ViewerGalleryStyles';
 import { ViewerEndPrompt } from './viewer/ViewerEndPrompt';
 import { ViewerImageStage } from './viewer/ViewerImageStage';
@@ -66,6 +73,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const [isRequestingMoreItems, setIsRequestingMoreItems] = useState(false);
   const [pendingAdvanceAfterLoad, setPendingAdvanceAfterLoad] = useState(false);
   const resetViewRef = useRef<() => void>(() => undefined);
+  const hasInitializedOpenSessionRef = useRef(false);
 
   const handleImageLoadingReset = useCallback(() => {
     setIsImageLoading(true);
@@ -141,16 +149,28 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   resetViewRef.current = resetView;
 
   useEffect(() => {
-    if (isOpen && images.length > 0) {
-      const validIndex = Math.min(initialIndex, Math.max(0, images.length - 1));
-      const sessionPreset = readViewerQualityPreset();
-      setActiveIndex(validIndex);
-      setQualityPreset(sessionPreset ?? defaultQualityPreset);
-      resetView();
-      setShowControls(true);
-      setShowQualityPanel(false);
-      setShowEndPrompt(false);
+    if (!isOpen) {
+      hasInitializedOpenSessionRef.current = false;
+      return;
     }
+
+    if (hasInitializedOpenSessionRef.current) {
+      return;
+    }
+
+    const validIndex = resolveViewerInitialIndex(initialIndex, images.length);
+    if (validIndex === null) {
+      return;
+    }
+
+    const sessionPreset = readViewerQualityPreset();
+    setActiveIndex(validIndex);
+    setQualityPreset(sessionPreset ?? defaultQualityPreset);
+    resetView();
+    setShowControls(true);
+    setShowQualityPanel(false);
+    setShowEndPrompt(false);
+    hasInitializedOpenSessionRef.current = true;
   }, [defaultQualityPreset, images.length, initialIndex, isOpen, resetView]);
 
   useEffect(() => {
@@ -158,7 +178,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       return;
     }
 
-    setActiveIndex((prev) => Math.min(prev, images.length - 1));
+    setActiveIndex((prev) => resolveViewerIndexAfterImagesChange(prev, images.length) ?? prev);
   }, [images.length]);
 
   useEffect(() => {

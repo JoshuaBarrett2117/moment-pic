@@ -23,6 +23,46 @@ export const resolveImageSrc = (image: ViewerImage, preset: ImageQualityPreset):
   return buildPreviewSrc(image.id, preset);
 };
 
+export const resolveViewerInitialIndex = (initialIndex: number, total: number): number | null => {
+  if (total <= 0) {
+    return null;
+  }
+
+  return Math.min(Math.max(0, initialIndex), total - 1);
+};
+
+export const resolveViewerIndexAfterImagesChange = (activeIndex: number, total: number): number | null => {
+  if (total <= 0) {
+    return null;
+  }
+
+  return Math.min(Math.max(0, activeIndex), total - 1);
+};
+
+export type ViewerNextAction = 'advance' | 'load-more' | 'show-end-prompt' | 'none';
+
+export const resolveViewerNextAction = (input: {
+  activeIndex: number;
+  total: number;
+  hasMoreItems: boolean;
+  canRequestMoreItems: boolean;
+  isBusy: boolean;
+}): ViewerNextAction => {
+  if (input.total <= 0) {
+    return 'none';
+  }
+
+  if (input.activeIndex < input.total - 1) {
+    return 'advance';
+  }
+
+  if (input.hasMoreItems && input.canRequestMoreItems) {
+    return input.isBusy ? 'none' : 'load-more';
+  }
+
+  return 'show-end-prompt';
+};
+
 export const getQualityLabel = (preset: ImageQualityPreset): string => {
   if (preset === 'low') {
     return '省流';

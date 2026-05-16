@@ -1,5 +1,6 @@
 import chokidar, { FSWatcher } from "chokidar";
 
+import { startCoverThumbnailWarmup } from "./cover-thumbnail-warmup.js";
 import { listExistingLibraryRoots } from "./library-scanner.js";
 import { scanLibrary } from "./library-scanner.js";
 import { createLogger } from "../lib/logger.js";
@@ -139,6 +140,13 @@ class DirectoryWatcherService {
         albumsDiscovered: result.albumsDiscovered,
         assetsDiscovered: result.assetsDiscovered,
         timestamp: nowIso()
+      });
+      startCoverThumbnailWarmup({
+        reason: "watcher",
+        libraryRootId,
+        concurrency: 2,
+        limit: 300,
+        recentLimit: 120
       });
     } catch (error) {
       logger.error(`增量扫描失败：libraryRootId=${libraryRootId}`, error);

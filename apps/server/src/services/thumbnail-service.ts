@@ -152,12 +152,20 @@ export const openOriginalImage = async (assetId: string) => {
   return openOriginalAssetSource(asset);
 };
 
+export type CoverThumbnailWarmupResult = {
+  total: number;
+  completed: number;
+  failed: number;
+  recentTotal: number;
+  remainingTotal: number;
+};
+
 export const warmupCoverThumbnails = async (input?: {
   libraryRootId?: string;
   concurrency?: number;
   limit?: number;
   recentLimit?: number;
-}) => {
+}): Promise<CoverThumbnailWarmupResult> => {
   const targetConcurrency = Math.max(1, Math.min(input?.concurrency ?? 3, 8));
   const assetIds = listAlbumCoverAssetIdsDb(input?.libraryRootId, input?.limit ?? 2000);
   const recentLimit = Math.max(1, Math.min(input?.recentLimit ?? 80, assetIds.length || 1));

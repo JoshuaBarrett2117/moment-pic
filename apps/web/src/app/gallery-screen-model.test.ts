@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildGalleryScreenModel, resolveNextAlbumId } from './gallery-screen-model';
+import { buildDirectoryNavigationAlbums, buildGalleryScreenModel, resolveNextAlbumId } from './gallery-screen-model';
 import type { AlbumListItemDTO, DirectoryAlbumNodeDTO, SmartAlbumListItemDTO } from '../types/api';
 
 const album = (id: string): AlbumListItemDTO => ({
@@ -23,7 +23,7 @@ const smartAlbum = (id: string): SmartAlbumListItemDTO => ({
   updatedAt: '2026-01-01T00:00:00.000Z',
 });
 
-const directoryNode = (id: string): DirectoryAlbumNodeDTO => ({
+const directoryNode = (id: string, overrides: Partial<DirectoryAlbumNodeDTO> = {}): DirectoryAlbumNodeDTO => ({
   id,
   name: id,
   kind: 'directory',
@@ -35,6 +35,7 @@ const directoryNode = (id: string): DirectoryAlbumNodeDTO => ({
   coverUrl: null,
   updatedAt: null,
   childCount: 1,
+  ...overrides,
 });
 
 test('buildGalleryScreenModel chooses smart album list and disables source filters', () => {
@@ -85,4 +86,21 @@ test('resolveNextAlbumId returns the next album or null at boundaries', () => {
   assert.equal(resolveNextAlbumId(albums, 'alb_1'), 'alb_2');
   assert.equal(resolveNextAlbumId(albums, 'alb_2'), null);
   assert.equal(resolveNextAlbumId(albums, 'missing'), null);
+});
+
+test('buildDirectoryNavigationAlbums keeps album nodes as next-album candidates', () => {
+  const candidates = buildDirectoryNavigationAlbums([
+    directoryNode('dir_1'),
+    directoryNode('node_1', {
+      kind: 'album',
+      albumId: 'alb_1',
+      sourceType: 'zip',
+      assetCount: 12,
+      updatedAt: '2026-05-16T00:00:00.000Z',
+    }),
+  ]);
+
+  assert.deepEqual(candidates.map((item) => item.id), ['alb_1']);
+  assert.equal(candidates[0]?.sourceType, 'zip');
+  assert.equal(candidates[0]?.assetCount, 12);
 });

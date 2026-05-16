@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Screen } from '../types';
 import { api } from '../lib/api';
 import { clearAuthSession, hasAuthSession } from './auth-session';
@@ -82,7 +82,10 @@ export function useAppAuthBootstrap({
   setSelectedAlbum,
   setSelectedSmartAlbum,
 }: UseAppAuthBootstrapInput) {
+  const [isAuthBootstrapping, setIsAuthBootstrapping] = useState(true);
+
   useEffect(() => {
+    let isMounted = true;
     const input = {
       initialFilters,
       initialNavigation,
@@ -97,20 +100,32 @@ export function useAppAuthBootstrap({
     };
 
     const verifyAuth = async () => {
-      if (!hasAuthSession()) {
-        resetToLoginScreen(input);
-        return;
-      }
-
       try {
+        if (!hasAuthSession()) {
+          resetToLoginScreen(input);
+          return;
+        }
+
         await api.get('/albums', { page: 1, pageSize: 1 });
-        restoreInitialNavigation(input);
+        if (isMounted) {
+          restoreInitialNavigation(input);
+        }
       } catch {
-        resetToLoginScreen(input);
+        if (isMounted) {
+          resetToLoginScreen(input);
+        }
+      } finally {
+        if (isMounted) {
+          setIsAuthBootstrapping(false);
+        }
       }
     };
 
     void verifyAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, [
     initialFilters,
     initialNavigation,
@@ -123,4 +138,6 @@ export function useAppAuthBootstrap({
     setSelectedAlbum,
     setSelectedSmartAlbum,
   ]);
+
+  return isAuthBootstrapping;
 }

@@ -7,7 +7,7 @@ import { api } from './lib/api';
 import type { DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
 import { clearAuthSession, markAuthSession } from './app/auth-session';
 import { useGalleryAppState } from './app/gallery-navigation';
-import { buildGalleryScreenModel, resolveNextAlbumId } from './app/gallery-screen-model';
+import { buildDirectoryNavigationAlbums, buildGalleryScreenModel, resolveNextAlbumId } from './app/gallery-screen-model';
 import { buildSmartAlbumMemberAlbums, resolveSmartAlbumMemberSortBy } from './app/smart-album-member-albums';
 import { useGalleryDataController } from './app/use-gallery-data-controller';
 import { useAppAuthBootstrap } from './app/useAppAuthBootstrap';
@@ -98,7 +98,7 @@ export default function App() {
     }
   }, [fetchSystemConfig, isAuthenticated]);
 
-  useAppAuthBootstrap({
+  const isAuthBootstrapping = useAppAuthBootstrap({
     initialFilters,
     initialNavigation,
     setActiveTab,
@@ -128,6 +128,31 @@ export default function App() {
     setScrollPosition,
   });
 
+  const smartAlbumMemberSortBy = resolveSmartAlbumMemberSortBy(filters.sortBy);
+  const smartAlbumMemberAlbums = useMemo(() => {
+    return buildSmartAlbumMemberAlbums(smartAlbumMembers, filters);
+  }, [filters, smartAlbumMembers]);
+  const directoryNavigationAlbums = useMemo(() => buildDirectoryNavigationAlbums(directoryAlbums?.items), [directoryAlbums?.items]);
+  const albumNavigationSource = useMemo(() => {
+    if (galleryViewMode === 'smartAlbums' && selectedSmartAlbum) {
+      return smartAlbumMemberAlbums;
+    }
+
+    if (galleryViewMode === 'directoryAlbums') {
+      return directoryNavigationAlbums;
+    }
+
+    return isRecentActive ? (recentAlbums || []) : (albums?.items || []);
+  }, [
+    albums?.items,
+    directoryNavigationAlbums,
+    galleryViewMode,
+    isRecentActive,
+    recentAlbums,
+    selectedSmartAlbum,
+    smartAlbumMemberAlbums,
+  ]);
+
   const handleLogin = useCallback(() => {
     const nextFilters = resetToAlbumFilters();
     markAuthSession();
@@ -139,14 +164,21 @@ export default function App() {
   }, [loadAlbums, navigate, resetToAlbumFilters, setGalleryViewMode, setIsAuthenticated]);
 
   const handleNavigateToAlbum = useCallback((albumId: string) => {
-    const sourceAlbums = isRecentActive ? (recentAlbums || []) : (albums?.items || []);
-    const nextId = resolveNextAlbumId(sourceAlbums, albumId);
+    const nextId = resolveNextAlbumId(albumNavigationSource, albumId);
 
     setSelectedAlbum(albumId);
     setNextAlbumId(nextId);
     void recordAlbumView(albumId);
     navigate(Screen.ALBUM_DETAIL, 1, { selectedAlbumId: albumId, isRecentActive, galleryViewMode });
-  }, [albums?.items, galleryViewMode, isRecentActive, navigate, recentAlbums, setNextAlbumId, setSelectedAlbum]);
+  }, [albumNavigationSource, galleryViewMode, isRecentActive, navigate, setNextAlbumId, setSelectedAlbum]);
+
+  useEffect(() => {
+    if (currentScreen !== Screen.ALBUM_DETAIL || !selectedAlbum) {
+      return;
+    }
+
+    setNextAlbumId(resolveNextAlbumId(albumNavigationSource, selectedAlbum));
+  }, [albumNavigationSource, currentScreen, selectedAlbum, setNextAlbumId]);
 
   const handleNavigateToSmartAlbum = useCallback((smartAlbumId: string) => {
     setSelectedSmartAlbum(smartAlbumId);
@@ -251,10 +283,6 @@ export default function App() {
     await scan(libraryRootId);
   }, [scan]);
 
-  const smartAlbumMemberSortBy = resolveSmartAlbumMemberSortBy(filters.sortBy);
-  const smartAlbumMemberAlbums = useMemo(() => {
-    return buildSmartAlbumMemberAlbums(smartAlbumMembers, filters);
-  }, [filters, smartAlbumMembers]);
   const galleryScreenModel = useMemo(() => buildGalleryScreenModel({
     galleryViewMode,
     isRecentActive,
@@ -292,11 +320,16 @@ export default function App() {
     <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
       <PaperGrain />
 
-      <PageTransitionFrame
-        screenKey={currentScreen}
-        direction={direction}
-        mode={systemConfig?.pageTransitionMode ?? 'page'}
-      >
+      {isAuthBootstrapping ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-surface text-outline">
+          正在进入图库...
+        </div>
+      ) : (
+        <PageTransitionFrame
+          screenKey={currentScreen}
+          direction={direction}
+          mode={systemConfig?.pageTransitionMode ?? 'page'}
+        >
           {(currentScreen === Screen.LOGIN || !isAuthenticated) && (
             <LoginScreen onLogin={handleLogin} />
           )}
@@ -439,7 +472,8 @@ export default function App() {
               />
             </Suspense>
           )}
-      </PageTransitionFrame>
+        </PageTransitionFrame>
+      )}
     </div>
   );
 }

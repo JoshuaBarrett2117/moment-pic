@@ -3,12 +3,19 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import test from "node:test";
 
 import { path7za } from "7zip-bin";
 import sharp from "sharp";
 
-import { detectArchiveType, isArchiveFile, listRootImageEntries, readArchiveEntryBuffer } from "./archive.js";
+import {
+  detectArchiveType,
+  isArchiveFile,
+  listRootImageEntries,
+  openArchiveEntryBody,
+  readArchiveEntryBuffer
+} from "./archive.js";
 
 const testArchiveRoots = (process.env.MOMENT_PIC_REAL_ARCHIVE_ROOTS ?? "")
   .split(/[;\r\n]+/)
@@ -49,6 +56,18 @@ const run7z = async (args: string[], cwd?: string) =>
     });
   });
 
+const readBody = async (body: Buffer | Readable): Promise<Buffer> => {
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of body) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+};
+
 const createMixedZipFixture = async (): Promise<{ archivePath: string; tempDir: string }> => {
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-archive-root-"));
   const archivePath = path.join(tempDir, "mixed.zip");
@@ -72,6 +91,25 @@ const create7zFixture = async (): Promise<{ archivePath: string; tempDir: string
   await fs.promises.writeFile(path.join(pagesDir, "page-01.jpg"), Buffer.alloc(1024, 0x33));
   await run7z(["a", "-t7z", archivePath, "pages/page-01.jpg"], tempDir);
   return { archivePath, tempDir };
+};
+
+const createCbrExtractionFixture = async (): Promise<{
+  archivePath: string;
+  tempDir: string;
+  entryPath: string;
+  content: Buffer;
+}> => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-archive-cbr-7z-"));
+  const archivePath = path.join(tempDir, "sample.cbr");
+  const entryPath = "pages/page-01.jpg";
+  const entryFullPath = path.join(tempDir, entryPath);
+  const content = Buffer.from("cbr-entry-content-through-7z", "utf8");
+
+  await fs.promises.mkdir(path.dirname(entryFullPath), { recursive: true });
+  await fs.promises.writeFile(entryFullPath, content);
+  await run7z(["a", "-tzip", archivePath, entryPath], tempDir);
+
+  return { archivePath, tempDir, entryPath, content };
 };
 
 const createLargeZipFixture = async (): Promise<{ archivePath: string; tempDir: string; entryPath: string }> => {
@@ -131,10 +169,10 @@ test("listRootImageEntries reads a real cbr archive through unrar when integrati
   assert.equal(entries[0]?.extension, "jpg");
 });
 
-test("readArchiveEntryBuffer reads a real cbr entry through unrar when integration fixtures are configured", async (t) => {
+test("readArchiveEntryBuffer reads a real cbr entry through 7z extraction when integration fixtures are configured", async (t) => {
   const archivePath = await findRealArchive(/Silver Photobook/i);
   if (!archivePath) {
-    t.skip("MOMENT_PIC_REAL_ARCHIVE_ROOTS 未配置，跳过真实 CBR 集成测试");
+    t.skip("MOMENT_PIC_REAL_ARCHIVE_ROOTS 未配置，跳过真实 CBR 读取集成测试");
     return;
   }
 
@@ -176,6 +214,28 @@ test("listRootImageEntries reads generated 7z fixtures", async () => {
 
     assert.equal(entries.length, 1);
     assert.equal(entries[0]?.entryPath, "pages/page-01.jpg");
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("readArchiveEntryBuffer reads cbr entries through 7z extraction", async () => {
+  const { archivePath, tempDir, entryPath, content } = await createCbrExtractionFixture();
+  try {
+    const buffer = await readArchiveEntryBuffer(archivePath, entryPath);
+
+    assert.deepEqual(buffer, content);
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("openArchiveEntryBody streams cbr entries through 7z extraction", async () => {
+  const { archivePath, tempDir, entryPath, content } = await createCbrExtractionFixture();
+  try {
+    const body = await openArchiveEntryBody(archivePath, entryPath);
+
+    assert.deepEqual(await readBody(body), content);
   } finally {
     await fs.promises.rm(tempDir, { recursive: true, force: true });
   }

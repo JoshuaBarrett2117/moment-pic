@@ -177,3 +177,11 @@ rg "@google/genai|photoswipe|react-viewer|express|dotenv|@prisma/client|node-7z"
 - 已修复：`syncAssetDimensions` 不再自行读取原图；普通文件通过文件路径输入 Sharp，归档内图片保留 Buffer 输入。
 - 已补测试：覆盖普通文件路径输入和无 Sharp 输入时不读取缺失原图。
 - 验证结果：`npm --workspace apps/server test`、`npm run build:server`、`npm test` 均通过。
+
+## 18. 2026-05-16 CBR/RAR `Not enough memory` 追溯状态
+
+- 历史修复：`967f27d Fix preview memory fallback` 曾通过预览/缩略图失败后流式回源，以及 Sharp 并发和 cache 限制，缓解普通预览内存问题。
+- 本次定位：`Not enough memory` 文本来自 `node-unrar-js` 的 `ERAR_NO_MEMORY`；CBR/RAR 回源也会走 unrar 解压，因此旧的流式回源兜底对这类归档仍可能失效。
+- 已修复：CBR/RAR 内容读取改为复用 7z extraction，`readCbrBuffer` 与 `readCbrStream` 不再通过 node-unrar-js 解压输出。
+- 已补测试：CBR Buffer 读取和 CBR 流式回源读取均覆盖 7z extraction 路径。
+- 验证结果：`npm --workspace apps/server test`、`npm run build:server`、`npm test` 均通过。

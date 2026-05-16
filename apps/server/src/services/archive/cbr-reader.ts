@@ -1,5 +1,3 @@
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import type { Readable } from "node:stream";
 
@@ -7,8 +5,7 @@ import { createExtractorFromFile } from "node-unrar-js";
 
 import { isSupportedImageExtension } from "../../lib/image-formats.js";
 import { normalizeExtension, toPosixPath } from "../../lib/paths.js";
-import { extractJpegFromPsd } from "../archive-utils.js";
-import { createSingleRun } from "./archive-body.js";
+import { read7zBuffer, read7zStream } from "./sevenzip-reader.js";
 import type { ArchiveImageEntry } from "./archive-types.js";
 
 type UnrarExtractor = Awaited<ReturnType<typeof createExtractorFromFile>>;
@@ -53,45 +50,9 @@ export const collectCbrImageEntries = async (archivePath: string): Promise<Archi
 };
 
 export const readCbrBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
-  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-unrar-"));
-  try {
-    const unrar = await createExtractorFromFile({ filepath: archivePath, targetPath: tempDir });
-    const extracted = await unrar.extract({ files: [entryPath] });
-
-    for (const file of extracted.files) {
-      const extractedPath = path.join(tempDir, file.fileHeader.name);
-      const extractedBuffer = await fs.promises.readFile(extractedPath);
-      return extractJpegFromPsd(extractedBuffer);
-    }
-
-    throw new Error(`CBR entry not found: ${entryPath}`);
-  } finally {
-    await fs.promises.rm(tempDir, { recursive: true, force: true });
-  }
+  return read7zBuffer(archivePath, entryPath);
 };
 
 export const readCbrStream = async (archivePath: string, entryPath: string): Promise<Readable> => {
-  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-unrar-"));
-  try {
-    const unrar = await createExtractorFromFile({ filepath: archivePath, targetPath: tempDir });
-    const extracted = await unrar.extract({ files: [entryPath] });
-
-    for (const file of extracted.files) {
-      const extractedPath = path.join(tempDir, file.fileHeader.name);
-      const stream = fs.createReadStream(extractedPath);
-      const cleanup = createSingleRun(() => {
-        void fs.promises.rm(tempDir, { recursive: true, force: true });
-      });
-      stream.once("error", cleanup);
-      stream.once("end", cleanup);
-      stream.once("close", cleanup);
-      return stream;
-    }
-
-    await fs.promises.rm(tempDir, { recursive: true, force: true });
-    throw new Error(`CBR entry not found: ${entryPath}`);
-  } catch (error) {
-    await fs.promises.rm(tempDir, { recursive: true, force: true });
-    throw error;
-  }
+  return read7zStream(archivePath, entryPath);
 };

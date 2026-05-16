@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { Readable } from "node:stream";
+import { PassThrough, type Readable } from "node:stream";
 
 import { path7za } from "7zip-bin";
 
@@ -133,7 +133,9 @@ export const run7zaStream = async (args: string[]): Promise<Readable> =>
 
       const stdout = child.stdout;
       const stderrChunks: Buffer[] = [];
+      const output = new PassThrough();
       let settled = false;
+      let stdoutEnded = false;
 
       child.stderr.on("data", (chunk) => {
         stderrChunks.push(Buffer.from(chunk));
@@ -169,18 +171,30 @@ export const run7zaStream = async (args: string[]): Promise<Readable> =>
         }
 
         settled = true;
+        stdout.on("data", (chunk) => {
+          output.write(chunk);
+        });
+        stdout.once("end", () => {
+          stdoutEnded = true;
+        });
+        stdout.once("error", (error) => {
+          output.destroy(error);
+        });
         child.once("close", (code) => {
           if (code === 0) {
+            if (stdoutEnded) {
+              output.end();
+            }
             return;
           }
 
           const stderr = decode7zText(Buffer.concat(stderrChunks));
-          stdout.destroy(
+          output.destroy(
             new Error(`7z command failed via "${command}" (code ${code}): ${stderr || args.join(" ")}`)
           );
         });
 
-        resolve(stdout);
+        resolve(output);
       });
 
       child.once("close", (code) => {

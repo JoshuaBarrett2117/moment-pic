@@ -241,6 +241,22 @@ test("openArchiveEntryBody streams cbr entries through 7z extraction", async () 
   }
 });
 
+test("openArchiveEntryBody rejects failed 7z streams instead of returning an empty body", async () => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-archive-invalid-7z-"));
+  const archivePath = path.join(tempDir, "broken.7z");
+
+  try {
+    await fs.promises.writeFile(archivePath, Buffer.from("not-a-real-archive", "utf8"));
+
+    await assert.rejects(
+      () => openArchiveEntryBody(archivePath, "pages/page-01.jpg"),
+      /7z command failed/
+    );
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("readArchiveEntryBuffer preserves generated ZIP JPEG dimensions", async () => {
   const { archivePath, tempDir, entryPath } = await createLargeZipFixture();
   try {

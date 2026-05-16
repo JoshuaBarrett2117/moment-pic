@@ -22,6 +22,15 @@ export class OriginalAssetSourceMissingError extends Error {
 export type OriginalImageBody = Buffer | Readable;
 export type OriginalSharpInput = Buffer | string;
 
+const toKnownPositiveSize = (value: string | null): number | null => {
+  if (!value) {
+    return null;
+  }
+
+  const size = Number(value);
+  return Number.isFinite(size) && size > 0 ? size : null;
+};
+
 export const readOriginalBuffer = async (assetId: string) => {
   const asset = findAssetByIdDb(assetId);
 
@@ -112,10 +121,11 @@ export const openOriginalAssetSource = async (asset: AssetRecord): Promise<{
   }
 
   try {
+    const body = await openArchiveEntryBody(asset.sourcePath, asset.zipEntryPath ?? "");
     return {
       asset,
-      body: await openArchiveEntryBody(asset.sourcePath, asset.zipEntryPath ?? ""),
-      sizeBytes: asset.sizeBytes ? Number(asset.sizeBytes) : null
+      body,
+      sizeBytes: Buffer.isBuffer(body) ? body.length : toKnownPositiveSize(asset.sizeBytes)
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

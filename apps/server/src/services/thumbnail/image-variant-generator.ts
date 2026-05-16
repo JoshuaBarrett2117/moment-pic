@@ -36,10 +36,28 @@ const getFilePath = (cacheKey: string, format: ThumbnailFormat) => {
 
 const findReadyFile = async (filePath: string) => {
   try {
-    await fs.promises.access(filePath, fs.constants.F_OK);
-    return true;
+    const stat = await fs.promises.stat(filePath);
+    return stat.isFile() && stat.size > 0;
   } catch {
     return false;
+  }
+};
+
+const writeVariantFile = async (
+  filePath: string,
+  write: (targetPath: string) => Promise<void>
+) => {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await write(tempPath);
+    const stat = await fs.promises.stat(tempPath);
+    if (!stat.isFile() || stat.size <= 0) {
+      throw new Error(`thumbnail variant generation produced empty file: ${filePath}`);
+    }
+    await fs.promises.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.promises.rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
   }
 };
 
@@ -127,9 +145,9 @@ export const ensureThumbnailVariant = async (input: {
           position: "centre"
         });
         if (input.format === "webp") {
-          await pipeline.webp({ quality: input.quality }).toFile(filePath);
+          await writeVariantFile(filePath, (targetPath) => pipeline.webp({ quality: input.quality }).toFile(targetPath).then(() => undefined));
         } else {
-          await pipeline.jpeg({ quality: input.quality }).toFile(filePath);
+          await writeVariantFile(filePath, (targetPath) => pipeline.jpeg({ quality: input.quality }).toFile(targetPath).then(() => undefined));
         }
       } catch (error) {
         if (input.format !== "webp") {
@@ -147,13 +165,16 @@ export const ensureThumbnailVariant = async (input: {
           quality: input.quality
         });
         finalFilePath = getFilePath(finalCacheKey, "jpeg");
-        await createSharp(sharpInput)
-          .resize(input.width, input.height, {
-            fit: "cover",
-            position: "centre"
-          })
-          .jpeg({ quality: input.quality })
-          .toFile(finalFilePath);
+        await writeVariantFile(finalFilePath, (targetPath) =>
+          createSharp(sharpInput)
+            .resize(input.width, input.height, {
+              fit: "cover",
+              position: "centre"
+            })
+            .jpeg({ quality: input.quality })
+            .toFile(targetPath)
+            .then(() => undefined)
+        );
       }
 
       if (canUseDbRecord) {
@@ -228,9 +249,9 @@ export const ensurePreviewVariant = async (input: {
           withoutEnlargement: true
         });
         if (input.format === "webp") {
-          await pipeline.webp({ quality: input.quality }).toFile(filePath);
+          await writeVariantFile(filePath, (targetPath) => pipeline.webp({ quality: input.quality }).toFile(targetPath).then(() => undefined));
         } else {
-          await pipeline.jpeg({ quality: input.quality }).toFile(filePath);
+          await writeVariantFile(filePath, (targetPath) => pipeline.jpeg({ quality: input.quality }).toFile(targetPath).then(() => undefined));
         }
       } catch (error) {
         if (input.format !== "webp") {
@@ -248,13 +269,16 @@ export const ensurePreviewVariant = async (input: {
           quality: presetOptions.jpegQuality
         });
         finalFilePath = getFilePath(finalCacheKey, "jpeg");
-        await createSharp(sharpInput)
-          .resize(presetOptions.maxWidth, presetOptions.maxHeight, {
-            fit: "inside",
-            withoutEnlargement: true
-          })
-          .jpeg({ quality: presetOptions.jpegQuality })
-          .toFile(finalFilePath);
+        await writeVariantFile(finalFilePath, (targetPath) =>
+          createSharp(sharpInput)
+            .resize(presetOptions.maxWidth, presetOptions.maxHeight, {
+              fit: "inside",
+              withoutEnlargement: true
+            })
+            .jpeg({ quality: presetOptions.jpegQuality })
+            .toFile(targetPath)
+            .then(() => undefined)
+        );
       }
 
       return {

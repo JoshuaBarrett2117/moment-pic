@@ -10,9 +10,11 @@ import test from "node:test";
 import { path7za } from "7zip-bin";
 import sharp from "sharp";
 
+import { env } from "../config/env.js";
 import type { AssetRecord } from "../types/store.js";
 import { findAssetByIdDb, insertAlbumWithAssetsDb } from "../repositories/album-repository.js";
 import { upsertLibraryRootDb } from "../repositories/library-root-repository.js";
+import { buildCacheKey, PREVIEW_PRESET_OPTIONS } from "./thumbnail-options.js";
 import { ensurePreview, ensureThumbnail, openOriginalAssetSource } from "./thumbnail-service.js";
 import { readOriginalSharpInput } from "./thumbnail/original-image-source.js";
 import { syncAssetDimensions } from "./thumbnail/asset-dimensions.js";
@@ -271,6 +273,91 @@ test("ensurePreview generates a resized preview for folder assets", async () => 
     const metadata = await sharp(preview.filePath).metadata();
     assert.ok((metadata.width ?? 0) <= 2560);
     assert.ok((metadata.height ?? 0) <= 2560);
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("ensurePreview regenerates zero byte preview cache files", async () => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-preview-zero-cache-"));
+  const sourcePath = path.join(tempDir, "sample.jpg");
+  const timestamp = new Date().toISOString();
+  const suffix = crypto.randomUUID().replace(/-/g, "");
+  const libraryRootId = `root_preview_zero_${suffix}`;
+  const albumId = `alb_preview_zero_${suffix}`;
+  const assetId = `ast_preview_zero_${suffix}`;
+
+  try {
+    const sourceBuffer = await sharp({
+      create: {
+        width: 1200,
+        height: 900,
+        channels: 3,
+        background: { r: 40, g: 120, b: 180 }
+      }
+    })
+      .jpeg({ quality: 88 })
+      .toBuffer();
+
+    await fs.promises.writeFile(sourcePath, sourceBuffer);
+
+    const asset = createAssetRecord({
+      id: assetId,
+      albumId,
+      sourceType: "folder",
+      sourcePath,
+      sizeBytes: String(sourceBuffer.length)
+    });
+
+    upsertLibraryRootDb({
+      id: libraryRootId,
+      name: "preview-zero-root",
+      path: tempDir,
+      enabled: true,
+      lastScannedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+    if (!findAssetByIdDb(assetId)) {
+      insertAlbumWithAssetsDb({
+        id: albumId,
+        libraryRootId,
+        name: "preview-zero-folder",
+        sourceType: "folder",
+        sourcePath: tempDir,
+        sourceMtime: null,
+        assetsFingerprint: null,
+        coverAssetId: asset.id,
+        assetCount: 1,
+        scanStatus: "ready",
+        errorMessage: null,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }, [asset]);
+    }
+
+    const preset = PREVIEW_PRESET_OPTIONS.balanced;
+    const cacheKey = buildCacheKey({
+      kind: "preview",
+      sourcePath: asset.sourcePath,
+      zipEntryPath: asset.zipEntryPath,
+      sourceMtime: asset.sourceMtime,
+      width: preset.maxWidth,
+      height: preset.maxHeight,
+      format: "webp",
+      quality: preset.webpQuality
+    });
+    const zeroCachePath = path.join(env.cacheDir, `${cacheKey}.webp`);
+    await fs.promises.mkdir(env.cacheDir, { recursive: true });
+    await fs.promises.writeFile(zeroCachePath, Buffer.alloc(0));
+
+    const preview = await ensurePreview(asset.id, {
+      preset: "balanced",
+      format: "webp"
+    });
+
+    assert.equal(preview.filePath, zeroCachePath);
+    assert.equal((await fs.promises.stat(preview.filePath)).size > 0, true);
   } finally {
     await fs.promises.rm(tempDir, { recursive: true, force: true });
   }

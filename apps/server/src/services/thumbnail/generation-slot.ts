@@ -1,4 +1,4 @@
-const THUMBNAIL_GENERATION_CONCURRENCY = 2;
+const THUMBNAIL_GENERATION_CONCURRENCY = 1;
 
 let activeGenerationCount = 0;
 const generationWaitQueue: Array<() => void> = [];

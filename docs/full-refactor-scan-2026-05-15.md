@@ -168,3 +168,12 @@ git ls-files | rg "apps/server/data|data/|package-lock|sqlite-store|mock-data|in
 rg "request\.(query|params|body) as" apps/server/src/routes apps/server/src/services -n
 rg "@google/genai|photoswipe|react-viewer|express|dotenv|@prisma/client|node-7z" apps package.json -n
 ```
+
+## 17. 2026-05-16 缩略图内存回归处置状态
+
+- 触发问题：重构后缩略图/预览链路出现 `Not enough memory`。
+- 根因判断：不是完全丢失 Sharp 内存配置，而是拆分后缓存命中补尺寸、普通文件 Buffer 化、请求闸门偏宽共同放大内存峰值。
+- 已修复：Sharp cache/concurrency 收紧，生成后释放 cache；缩略图生成槽位降为 1；路由请求闸门降为 8 active / 160 queue。
+- 已修复：`syncAssetDimensions` 不再自行读取原图；普通文件通过文件路径输入 Sharp，归档内图片保留 Buffer 输入。
+- 已补测试：覆盖普通文件路径输入和无 Sharp 输入时不读取缺失原图。
+- 验证结果：`npm --workspace apps/server test`、`npm run build:server`、`npm test` 均通过。

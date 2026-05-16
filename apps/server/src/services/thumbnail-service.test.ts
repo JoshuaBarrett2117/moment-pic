@@ -14,6 +14,8 @@ import type { AssetRecord } from "../types/store.js";
 import { findAssetByIdDb, insertAlbumWithAssetsDb } from "../repositories/album-repository.js";
 import { upsertLibraryRootDb } from "../repositories/library-root-repository.js";
 import { ensurePreview, ensureThumbnail, openOriginalAssetSource } from "./thumbnail-service.js";
+import { readOriginalSharpInput } from "./thumbnail/original-image-source.js";
+import { syncAssetDimensions } from "./thumbnail/asset-dimensions.js";
 
 const run7z = async (args: string[], cwd?: string) =>
   new Promise<void>((resolve, reject) => {
@@ -164,6 +166,40 @@ test("openOriginalAssetSource keeps archive-backed assets readable through the n
   } finally {
     await fs.promises.rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test("readOriginalSharpInput gives sharp a folder path instead of buffering the file", async () => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-sharp-path-"));
+  const sourcePath = path.join(tempDir, "sample.jpg");
+
+  try {
+    await fs.promises.writeFile(sourcePath, Buffer.from("path-input-content", "utf8"));
+    const asset = createAssetRecord({
+      id: `ast_sharp_path_${crypto.randomUUID().replace(/-/g, "")}`,
+      sourceType: "folder",
+      sourcePath
+    });
+
+    const result = await readOriginalSharpInput(asset);
+
+    assert.equal(result.sharpInput, sourcePath);
+    assert.equal(Buffer.isBuffer(result.sharpInput), false);
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("syncAssetDimensions does not read missing originals when no sharp input is provided", async () => {
+  const asset = createAssetRecord({
+    id: `ast_dimension_skip_${crypto.randomUUID().replace(/-/g, "")}`,
+    sourcePath: path.join(os.tmpdir(), "moment-pic-missing-original.jpg"),
+    width: null,
+    height: null
+  });
+
+  const result = await syncAssetDimensions({ asset });
+
+  assert.equal(result, null);
 });
 
 test("ensurePreview generates a resized preview for folder assets", async () => {

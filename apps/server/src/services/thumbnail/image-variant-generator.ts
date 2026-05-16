@@ -9,13 +9,12 @@ import {
   buildCacheKey,
   DEFAULT_THUMBNAIL_HEIGHT,
   DEFAULT_THUMBNAIL_WIDTH,
-  normalizeMetadataDimensions,
   type PreviewPreset,
   PREVIEW_PRESET_OPTIONS,
   type ThumbnailFormat
 } from "../thumbnail-options.js";
-import { readOriginalBuffer } from "./original-image-source.js";
-import { createSharp } from "./sharp-runtime.js";
+import { readOriginalSharpInput } from "./original-image-source.js";
+import { createSharp, releaseSharpResources } from "./sharp-runtime.js";
 import { syncAssetDimensions } from "./asset-dimensions.js";
 import { withGenerationSlot } from "./generation-slot.js";
 
@@ -104,91 +103,93 @@ export const ensureThumbnailVariant = async (input: {
   }
 
   return withGenerationSlot(async () => {
-    if (await findReadyFile(filePath)) {
-      return {
-        filePath,
-        mimeType: getMimeType(input.format),
-        cacheKey: input.cacheKey,
-        width: input.width,
-        height: input.height,
-        format: input.format
-      };
-    }
-
-    const { buffer } = await readOriginalBuffer(input.asset.id);
-    await syncAssetDimensions({ asset: input.asset, buffer });
-    let finalFormat: ThumbnailFormat = input.format;
-    let finalFilePath = filePath;
-    let finalCacheKey = input.cacheKey;
-
     try {
-      const pipeline = createSharp(buffer).resize(input.width, input.height, {
-        fit: "cover",
-        position: "centre"
-      });
-      if (input.format === "webp") {
-        await pipeline.webp({ quality: input.quality }).toFile(filePath);
-      } else {
-        await pipeline.jpeg({ quality: input.quality }).toFile(filePath);
+      if (await findReadyFile(filePath)) {
+        return {
+          filePath,
+          mimeType: getMimeType(input.format),
+          cacheKey: input.cacheKey,
+          width: input.width,
+          height: input.height,
+          format: input.format
+        };
       }
-    } catch (error) {
-      if (input.format !== "webp") {
-        throw error;
-      }
-      finalFormat = "jpeg";
-      finalCacheKey = buildCacheKey({
-        kind: "thumbnail",
-        sourcePath: input.asset.sourcePath,
-        zipEntryPath: input.asset.zipEntryPath,
-        sourceMtime: input.asset.sourceMtime,
-        width: input.width,
-        height: input.height,
-        format: "jpeg",
-        quality: input.quality
-      });
-      finalFilePath = getFilePath(finalCacheKey, "jpeg");
-      await createSharp(buffer)
-        .resize(input.width, input.height, {
+
+      const { sharpInput } = await readOriginalSharpInput(input.asset);
+      const syncedDimensions = await syncAssetDimensions({ asset: input.asset, sharpInput });
+      let finalFormat: ThumbnailFormat = input.format;
+      let finalFilePath = filePath;
+      let finalCacheKey = input.cacheKey;
+
+      try {
+        const pipeline = createSharp(sharpInput).resize(input.width, input.height, {
           fit: "cover",
           position: "centre"
-        })
-        .jpeg({ quality: input.quality })
-        .toFile(finalFilePath);
-    }
+        });
+        if (input.format === "webp") {
+          await pipeline.webp({ quality: input.quality }).toFile(filePath);
+        } else {
+          await pipeline.jpeg({ quality: input.quality }).toFile(filePath);
+        }
+      } catch (error) {
+        if (input.format !== "webp") {
+          throw error;
+        }
+        finalFormat = "jpeg";
+        finalCacheKey = buildCacheKey({
+          kind: "thumbnail",
+          sourcePath: input.asset.sourcePath,
+          zipEntryPath: input.asset.zipEntryPath,
+          sourceMtime: input.asset.sourceMtime,
+          width: input.width,
+          height: input.height,
+          format: "jpeg",
+          quality: input.quality
+        });
+        finalFilePath = getFilePath(finalCacheKey, "jpeg");
+        await createSharp(sharpInput)
+          .resize(input.width, input.height, {
+            fit: "cover",
+            position: "centre"
+          })
+          .jpeg({ quality: input.quality })
+          .toFile(finalFilePath);
+      }
 
-    if (canUseDbRecord) {
-      const metadata = await createSharp(buffer).metadata();
-      const normalized = normalizeMetadataDimensions(metadata);
-      const updatedAt = new Date().toISOString();
-      updateAssetMetadataDb(input.asset.id, {
-        width: normalized.width,
-        height: normalized.height,
-        thumbnailKey: finalCacheKey,
-        updatedAt
-      });
+      if (canUseDbRecord) {
+        const updatedAt = new Date().toISOString();
+        updateAssetMetadataDb(input.asset.id, {
+          width: syncedDimensions?.width ?? input.asset.width,
+          height: syncedDimensions?.height ?? input.asset.height,
+          thumbnailKey: finalCacheKey,
+          updatedAt
+        });
 
-      upsertThumbnailDb({
-        id: existing?.id ?? makeId("thumb"),
-        assetId: input.asset.id,
-        cacheKey: finalCacheKey,
-        format: "jpeg",
-        width: DEFAULT_THUMBNAIL_WIDTH,
-        height: DEFAULT_THUMBNAIL_HEIGHT,
+        upsertThumbnailDb({
+          id: existing?.id ?? makeId("thumb"),
+          assetId: input.asset.id,
+          cacheKey: finalCacheKey,
+          format: "jpeg",
+          width: DEFAULT_THUMBNAIL_WIDTH,
+          height: DEFAULT_THUMBNAIL_HEIGHT,
+          filePath: finalFilePath,
+          status: "ready",
+          createdAt: existing?.createdAt ?? updatedAt,
+          updatedAt
+        });
+      }
+
+      return {
         filePath: finalFilePath,
-        status: "ready",
-        createdAt: existing?.createdAt ?? updatedAt,
-        updatedAt
-      });
+        mimeType: getMimeType(finalFormat),
+        cacheKey: finalCacheKey,
+        width: input.width,
+        height: input.height,
+        format: finalFormat
+      };
+    } finally {
+      releaseSharpResources();
     }
-
-    return {
-      filePath: finalFilePath,
-      mimeType: getMimeType(finalFormat),
-      cacheKey: finalCacheKey,
-      width: input.width,
-      height: input.height,
-      format: finalFormat
-    };
   });
 };
 
@@ -203,65 +204,69 @@ export const ensurePreviewVariant = async (input: {
   const filePath = getFilePath(input.cacheKey, input.format);
 
   return withGenerationSlot(async () => {
-    if (await findReadyFile(filePath)) {
-      return {
-        filePath,
-        mimeType: getMimeType(input.format),
-        cacheKey: input.cacheKey,
-        width: presetOptions.maxWidth,
-        height: presetOptions.maxHeight,
-        format: input.format
-      };
-    }
-
-    const { buffer } = await readOriginalBuffer(input.asset.id);
-    await syncAssetDimensions({ asset: input.asset, buffer });
-    let finalFormat: ThumbnailFormat = input.format;
-    let finalFilePath = filePath;
-    let finalCacheKey = input.cacheKey;
-
     try {
-      const pipeline = createSharp(buffer).resize(presetOptions.maxWidth, presetOptions.maxHeight, {
-        fit: "inside",
-        withoutEnlargement: true
-      });
-      if (input.format === "webp") {
-        await pipeline.webp({ quality: input.quality }).toFile(filePath);
-      } else {
-        await pipeline.jpeg({ quality: input.quality }).toFile(filePath);
+      if (await findReadyFile(filePath)) {
+        return {
+          filePath,
+          mimeType: getMimeType(input.format),
+          cacheKey: input.cacheKey,
+          width: presetOptions.maxWidth,
+          height: presetOptions.maxHeight,
+          format: input.format
+        };
       }
-    } catch (error) {
-      if (input.format !== "webp") {
-        throw error;
-      }
-      finalFormat = "jpeg";
-      finalCacheKey = buildCacheKey({
-        kind: "preview",
-        sourcePath: input.asset.sourcePath,
-        zipEntryPath: input.asset.zipEntryPath,
-        sourceMtime: input.asset.sourceMtime,
-        width: presetOptions.maxWidth,
-        height: presetOptions.maxHeight,
-        format: "jpeg",
-        quality: presetOptions.jpegQuality
-      });
-      finalFilePath = getFilePath(finalCacheKey, "jpeg");
-      await createSharp(buffer)
-        .resize(presetOptions.maxWidth, presetOptions.maxHeight, {
+
+      const { sharpInput } = await readOriginalSharpInput(input.asset);
+      await syncAssetDimensions({ asset: input.asset, sharpInput });
+      let finalFormat: ThumbnailFormat = input.format;
+      let finalFilePath = filePath;
+      let finalCacheKey = input.cacheKey;
+
+      try {
+        const pipeline = createSharp(sharpInput).resize(presetOptions.maxWidth, presetOptions.maxHeight, {
           fit: "inside",
           withoutEnlargement: true
-        })
-        .jpeg({ quality: presetOptions.jpegQuality })
-        .toFile(finalFilePath);
-    }
+        });
+        if (input.format === "webp") {
+          await pipeline.webp({ quality: input.quality }).toFile(filePath);
+        } else {
+          await pipeline.jpeg({ quality: input.quality }).toFile(filePath);
+        }
+      } catch (error) {
+        if (input.format !== "webp") {
+          throw error;
+        }
+        finalFormat = "jpeg";
+        finalCacheKey = buildCacheKey({
+          kind: "preview",
+          sourcePath: input.asset.sourcePath,
+          zipEntryPath: input.asset.zipEntryPath,
+          sourceMtime: input.asset.sourceMtime,
+          width: presetOptions.maxWidth,
+          height: presetOptions.maxHeight,
+          format: "jpeg",
+          quality: presetOptions.jpegQuality
+        });
+        finalFilePath = getFilePath(finalCacheKey, "jpeg");
+        await createSharp(sharpInput)
+          .resize(presetOptions.maxWidth, presetOptions.maxHeight, {
+            fit: "inside",
+            withoutEnlargement: true
+          })
+          .jpeg({ quality: presetOptions.jpegQuality })
+          .toFile(finalFilePath);
+      }
 
-    return {
-      filePath: finalFilePath,
-      mimeType: getMimeType(finalFormat),
-      cacheKey: finalCacheKey,
-      width: presetOptions.maxWidth,
-      height: presetOptions.maxHeight,
-      format: finalFormat
-    };
+      return {
+        filePath: finalFilePath,
+        mimeType: getMimeType(finalFormat),
+        cacheKey: finalCacheKey,
+        width: presetOptions.maxWidth,
+        height: presetOptions.maxHeight,
+        format: finalFormat
+      };
+    } finally {
+      releaseSharpResources();
+    }
   });
 };

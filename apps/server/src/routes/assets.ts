@@ -15,8 +15,8 @@ import {
 } from "../services/thumbnail-service.js";
 
 const thumbnailRequestGate = new ThumbnailRequestGate({
-  maxActive: 24,
-  maxQueue: 320,
+  maxActive: 8,
+  maxQueue: 160,
   queueTimeoutMs: 8000
 });
 

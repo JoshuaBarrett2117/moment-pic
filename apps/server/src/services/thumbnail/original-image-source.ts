@@ -20,6 +20,7 @@ export class OriginalAssetSourceMissingError extends Error {
 }
 
 export type OriginalImageBody = Buffer | Readable;
+export type OriginalSharpInput = Buffer | string;
 
 export const readOriginalBuffer = async (assetId: string) => {
   const asset = findAssetByIdDb(assetId);
@@ -46,6 +47,39 @@ export const readOriginalBuffer = async (assetId: string) => {
     return {
       asset,
       buffer: await readArchiveEntryBuffer(asset.sourcePath, asset.zipEntryPath ?? "")
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("not found") || message.includes("ENOENT")) {
+      throw new OriginalAssetSourceMissingError(asset.id, asset.sourcePath);
+    }
+    throw error;
+  }
+};
+
+export const readOriginalSharpInput = async (asset: AssetRecord): Promise<{
+  asset: AssetRecord;
+  sharpInput: OriginalSharpInput;
+}> => {
+  if (asset.sourceType === "folder") {
+    try {
+      await fs.promises.access(asset.sourcePath, fs.constants.R_OK);
+      return {
+        asset,
+        sharpInput: asset.sourcePath
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new OriginalAssetSourceMissingError(asset.id, asset.sourcePath);
+      }
+      throw error;
+    }
+  }
+
+  try {
+    return {
+      asset,
+      sharpInput: await readArchiveEntryBuffer(asset.sourcePath, asset.zipEntryPath ?? "")
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

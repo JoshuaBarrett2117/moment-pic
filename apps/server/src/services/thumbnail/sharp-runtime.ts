@@ -1,14 +1,24 @@
 import sharp from "sharp";
 
-sharp.cache({
-  memory: 64,
-  files: 0,
-  items: 128
-});
-sharp.concurrency(2);
+export type SharpInput = Buffer | string;
 
-export const createSharp = (buffer: Buffer) =>
-  sharp(buffer, {
+const SHARP_CACHE_OPTIONS = {
+  memory: 32,
+  files: 0,
+  items: 64
+};
+
+sharp.cache(SHARP_CACHE_OPTIONS);
+sharp.concurrency(1);
+
+export const createSharp = (input: SharpInput) =>
+  sharp(input, {
     animated: true,
+    sequentialRead: true,
     failOn: "none"
   });
+
+export const releaseSharpResources = () => {
+  sharp.cache(false);
+  sharp.cache(SHARP_CACHE_OPTIONS);
+};

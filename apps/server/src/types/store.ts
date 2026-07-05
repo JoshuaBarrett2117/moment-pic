@@ -28,6 +28,7 @@ export type AlbumRecord = {
   assetCount: number;
   scanStatus: "ready" | "error";
   errorMessage: string | null;
+  isFavorite?: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -68,6 +69,15 @@ export type AlbumViewRecord = {
   id: string;
   albumId: string;
   viewedAt: string;
+};
+
+export type AlbumShareRecord = {
+  id: string;
+  albumId: string;
+  token: string;
+  passwordHash: string;
+  expiresAt: string;
+  createdAt: string;
 };
 
 export type SmartAlbumRecord = {

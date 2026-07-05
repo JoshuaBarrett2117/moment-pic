@@ -93,6 +93,7 @@ export const buildDirectoryNavigationAlbums = (
       sourceType: node.sourceType ?? 'folder',
       assetCount: node.assetCount,
       coverUrl: node.coverUrl,
+      isFavorite: false,
       updatedAt: node.updatedAt ?? new Date(0).toISOString(),
     }));
 };

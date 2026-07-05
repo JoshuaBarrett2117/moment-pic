@@ -16,6 +16,7 @@ export const buildSmartAlbumMemberAlbums = (
     sourceType: member.sourceType,
     assetCount: member.assetCount,
     coverUrl: member.coverUrl,
+    isFavorite: member.isFavorite,
     updatedAt: member.updatedAt,
   })) as AlbumListItemDTO[])
     .filter((album) => {

@@ -1,22 +1,27 @@
 import { getDb } from "../db/sqlite.js";
-import type { AlbumRecord, AssetRecord, ThumbnailRecord } from "../types/store.js";
-import { rowToAlbum, rowToAsset, rowToThumbnail } from "./sqlite-mappers.js";
+import type { AlbumRecord, AlbumShareRecord, AssetRecord, ThumbnailRecord } from "../types/store.js";
+import { rowToAlbum, rowToAlbumShare, rowToAsset, rowToThumbnail } from "./sqlite-mappers.js";
 
 export type AlbumSortBy = "name" | "updatedAt" | "assetCount";
 export type SortOrder = "asc" | "desc";
 
+const toAlbumDbParams = (album: AlbumRecord) => ({
+  ...album,
+  isFavorite: album.isFavorite ? 1 : 0
+});
+
 export const insertAlbumWithAssetsDb = (album: AlbumRecord, assets: AssetRecord[]) => {
   const db = getDb();
   const insertAlbum = db.prepare(`
-    INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, assets_fingerprint, cover_asset_id, asset_count, scan_status, error_message, created_at, updated_at)
-    VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @assetsFingerprint, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @createdAt, @updatedAt)
+    INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, assets_fingerprint, cover_asset_id, asset_count, scan_status, error_message, is_favorite, created_at, updated_at)
+    VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @assetsFingerprint, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @isFavorite, @createdAt, @updatedAt)
   `);
   const insertAsset = db.prepare(`
     INSERT INTO assets (id, album_id, name, extension, source_type, source_path, relative_path, zip_entry_path, sort_index, width, height, size_bytes, source_mtime, thumbnail_key, created_at, updated_at)
     VALUES (@id, @albumId, @name, @extension, @sourceType, @sourcePath, @relativePath, @zipEntryPath, @sortIndex, @width, @height, @sizeBytes, @sourceMtime, @thumbnailKey, @createdAt, @updatedAt)
   `);
   const transaction = db.transaction(() => {
-    insertAlbum.run(album);
+    insertAlbum.run(toAlbumDbParams(album));
     for (const asset of assets) {
       insertAsset.run(asset);
     }
@@ -37,8 +42,8 @@ export const applyLibraryRootScanDiffDb = (input: {
   const deleteAssetsByAlbumId = db.prepare("DELETE FROM assets WHERE album_id = ?");
   const deleteAlbumById = db.prepare("DELETE FROM albums WHERE id = ?");
   const insertAlbum = db.prepare(`
-    INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, assets_fingerprint, cover_asset_id, asset_count, scan_status, error_message, created_at, updated_at)
-    VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @assetsFingerprint, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @createdAt, @updatedAt)
+    INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, assets_fingerprint, cover_asset_id, asset_count, scan_status, error_message, is_favorite, created_at, updated_at)
+    VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @assetsFingerprint, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @isFavorite, @createdAt, @updatedAt)
   `);
   const insertAsset = db.prepare(`
     INSERT INTO assets (id, album_id, name, extension, source_type, source_path, relative_path, zip_entry_path, sort_index, width, height, size_bytes, source_mtime, thumbnail_key, created_at, updated_at)
@@ -59,7 +64,7 @@ export const applyLibraryRootScanDiffDb = (input: {
         deleteAlbumById.run(item.existingAlbumId);
       }
 
-      insertAlbum.run(item.album);
+      insertAlbum.run(toAlbumDbParams(item.album));
       for (const asset of item.assets) {
         insertAsset.run(asset);
       }
@@ -129,6 +134,12 @@ export const findAlbumByIdDb = (albumId: string): AlbumRecord | null => {
   const db = getDb();
   const row = db.prepare("SELECT * FROM albums WHERE id = ? LIMIT 1").get(albumId) as Record<string, unknown> | undefined;
   return row ? rowToAlbum(row) : null;
+};
+
+export const updateAlbumFavoriteDb = (albumId: string, isFavorite: boolean, updatedAt: string): AlbumRecord | null => {
+  const db = getDb();
+  db.prepare("UPDATE albums SET is_favorite = ?, updated_at = ? WHERE id = ?").run(isFavorite ? 1 : 0, updatedAt, albumId);
+  return findAlbumByIdDb(albumId);
 };
 
 export const listAssetsByAlbumIdDb = (albumId: string, page?: number, pageSize?: number): AssetRecord[] => {
@@ -203,12 +214,45 @@ export const deleteAlbumDb = (albumId: string) => {
   const deleteThumbnail = db.prepare("DELETE FROM thumbnails WHERE asset_id IN (SELECT id FROM assets WHERE album_id = ?)");
   const deleteAsset = db.prepare("DELETE FROM assets WHERE album_id = ?");
   const deleteAlbum = db.prepare("DELETE FROM albums WHERE id = ?");
+  const deleteShares = db.prepare("DELETE FROM album_shares WHERE album_id = ?");
   const transaction = db.transaction(() => {
+    deleteShares.run(albumId);
     deleteThumbnail.run(albumId);
     deleteAsset.run(albumId);
     deleteAlbum.run(albumId);
   });
   transaction();
+};
+
+export const insertAlbumShareDb = (share: AlbumShareRecord): AlbumShareRecord => {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO album_shares (id, album_id, token, password_hash, expires_at, created_at)
+    VALUES (@id, @albumId, @token, @passwordHash, @expiresAt, @createdAt)
+  `).run(share);
+  return share;
+};
+
+export const findAlbumShareByTokenDb = (token: string): AlbumShareRecord | null => {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM album_shares WHERE token = ? LIMIT 1").get(token) as Record<string, unknown> | undefined;
+  return row ? rowToAlbumShare(row) : null;
+};
+
+export const deleteExpiredAlbumSharesDb = (nowIso: string): void => {
+  const db = getDb();
+  db.prepare("DELETE FROM album_shares WHERE expires_at <= ?").run(nowIso);
+};
+
+export const deleteAlbumShareDb = (shareId: string): void => {
+  const db = getDb();
+  db.prepare("DELETE FROM album_shares WHERE id = ?").run(shareId);
+};
+
+export const isAssetInAlbumDb = (albumId: string, assetId: string): boolean => {
+  const db = getDb();
+  const row = db.prepare("SELECT 1 AS matched FROM assets WHERE album_id = ? AND id = ? LIMIT 1").get(albumId, assetId) as { matched: number } | undefined;
+  return row?.matched === 1;
 };
 
 export const deleteAssetDb = (assetId: string) => {

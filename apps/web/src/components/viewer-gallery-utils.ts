@@ -20,6 +20,14 @@ export const resolveImageSrc = (image: ViewerImage, preset: ImageQualityPreset):
     return image.originalSrc;
   }
 
+  if (image.originalSrc.includes('/api/v1/shares/')) {
+    const [path, query = ''] = image.originalSrc.split('?');
+    const previewPath = path.endsWith('/original') ? `${path.slice(0, -'/original'.length)}/preview` : path;
+    const params = new URLSearchParams(query);
+    params.set('preset', preset);
+    return `${previewPath}?${params.toString()}`;
+  }
+
   return buildPreviewSrc(image.id, preset);
 };
 

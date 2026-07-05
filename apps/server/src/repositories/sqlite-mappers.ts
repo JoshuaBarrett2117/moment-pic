@@ -1,5 +1,6 @@
 import type {
   AlbumRecord,
+  AlbumShareRecord,
   AlbumViewRecord,
   AssetRecord,
   LibraryRootRecord,
@@ -33,6 +34,7 @@ export const rowToAlbum = (row: Record<string, unknown>): AlbumRecord => ({
   assetCount: Number(row.asset_count),
   scanStatus: row.scan_status === "error" ? "error" : "ready",
   errorMessage: row.error_message ? String(row.error_message) : null,
+  isFavorite: Number(row.is_favorite) === 1,
   createdAt: String(row.created_at),
   updatedAt: String(row.updated_at)
 });
@@ -73,6 +75,15 @@ export const rowToAlbumView = (row: { album_id: string; viewed_at: string }): Al
   id: row.album_id,
   albumId: row.album_id,
   viewedAt: row.viewed_at
+});
+
+export const rowToAlbumShare = (row: Record<string, unknown>): AlbumShareRecord => ({
+  id: String(row.id),
+  albumId: String(row.album_id),
+  token: String(row.token),
+  passwordHash: String(row.password_hash),
+  expiresAt: String(row.expires_at),
+  createdAt: String(row.created_at)
 });
 
 export const rowToSmartAlbum = (row: Record<string, unknown>): SmartAlbumRecord => ({

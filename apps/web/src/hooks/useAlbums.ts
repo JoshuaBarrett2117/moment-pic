@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { api } from '../lib/api';
-import type { AlbumsListDTO, AlbumAssetsDTO, RecentAlbumsDTO, AlbumListItemDTO } from '../types/api';
+import type { AlbumFavoriteDTO, AlbumShareDTO, AlbumsListDTO, AlbumAssetsDTO, RecentAlbumsDTO, AlbumListItemDTO, SharedAlbumAuthDTO } from '../types/api';
 
 interface UseAlbumsOptions {
   page?: number;
@@ -123,6 +123,54 @@ export const rescanAlbum = async (albumId: string): Promise<boolean> => {
     return true;
   } catch {
     return false;
+  }
+};
+
+export const setAlbumFavorite = async (albumId: string, isFavorite: boolean): Promise<AlbumFavoriteDTO | null> => {
+  try {
+    return await api.patch<AlbumFavoriteDTO>(`/albums/${albumId}/favorite`, { isFavorite });
+  } catch {
+    return null;
+  }
+};
+
+export const createAlbumShare = async (
+  albumId: string,
+  input: {
+    password: string;
+    expiresAt: string;
+  }
+): Promise<AlbumShareDTO | null> => {
+  try {
+    return await api.post<AlbumShareDTO>(`/albums/${albumId}/share`, input);
+  } catch {
+    return null;
+  }
+};
+
+export const authenticateAlbumShare = async (token: string, password: string): Promise<SharedAlbumAuthDTO | null> => {
+  try {
+    return await api.post<SharedAlbumAuthDTO>(`/shares/${token}/auth`, { password });
+  } catch {
+    return null;
+  }
+};
+
+export const fetchSharedAlbumAssets = async (
+  token: string,
+  accessToken: string,
+  options: UseAlbumAssetsOptions = {}
+): Promise<AlbumAssetsDTO | null> => {
+  try {
+    const params = new URLSearchParams();
+    params.append('accessToken', accessToken);
+    if (options.page) params.append('page', String(options.page));
+    if (options.pageSize) params.append('pageSize', String(options.pageSize));
+
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return await api.get<AlbumAssetsDTO>(`/shares/${token}/assets${query}`);
+  } catch {
+    return null;
   }
 };
 

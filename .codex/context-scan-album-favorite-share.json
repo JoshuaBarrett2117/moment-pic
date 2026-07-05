@@ -1,0 +1,36 @@
+{
+  "date": "2026-07-05",
+  "executor": "Codex",
+  "task": "新增图集收藏与分享功能",
+  "toolFallback": {
+    "sequentialThinking": "当前会话未暴露 sequential-thinking 工具，使用本地代码阅读与验证降级。",
+    "shrimpTaskManager": "当前会话未暴露 shrimp-task-manager 工具，使用本地计划与验证降级。",
+    "codeIndex": "当前会话未暴露 code-index 工具，使用 rg 与 Get-Content 检索。"
+  },
+  "scan": {
+    "serverRoutes": "apps/server/src/routes/albums.ts 负责相册列表、详情、资源分页、重扫和删除路由。",
+    "serverService": "apps/server/src/services/album-service.ts 负责 Album DTO 映射和相册业务操作。",
+    "serverRepository": "apps/server/src/repositories/album-repository.ts 封装 SQLite albums/assets/thumbnails 查询。",
+    "databaseBootstrap": "apps/server/src/db/sqlite.ts 使用 CREATE TABLE IF NOT EXISTS 与兼容 ALTER TABLE 管理 SQLite schema。",
+    "webGallery": "apps/web/src/components/gallery/AlbumCard.tsx 与 GalleryAlbumGrid.tsx 负责封面卡片展示。",
+    "webDetail": "apps/web/src/components/AlbumDetailScreen.tsx 负责相册详情左侧菜单和图片网格。",
+    "webApi": "apps/web/src/hooks/useAlbums.ts 与 apps/web/src/lib/api.ts 封装相册接口调用。"
+  },
+  "knowns": [
+    "相册列表和相册资源分页 DTO 都需要携带收藏状态，封面和详情页才能同步展示。",
+    "分享链接需要公开 API 路径，否则会被 app.ts 的全局 API 登录校验拦截。",
+    "公开分享页图片不能使用普通 /api/v1/assets 路径，否则缩略图和原图仍需要管理员登录。"
+  ],
+  "decisions": [
+    "albums 表新增 is_favorite 字段，默认未收藏。",
+    "新增 album_shares 表保存分享 token、密码哈希和 expires_at，每次分享访问前清理过期记录。",
+    "公开分享使用 /api/v1/shares/:token/... 路径读取相册分页、缩略图、预览图和原图。",
+    "前端新增 AlbumShareDialog 复用于封面页和详情页，新增 SharedAlbumScreen 处理 /share/:token 公开访问。"
+  ],
+  "sufficiencyCheck": {
+    "interfaceContract": true,
+    "technicalChoice": true,
+    "riskIdentified": true,
+    "verificationKnown": true
+  }
+}

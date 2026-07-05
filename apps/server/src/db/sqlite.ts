@@ -36,6 +36,7 @@ const bootstrap = (db: Database.Database) => {
       asset_count INTEGER NOT NULL,
       scan_status TEXT NOT NULL,
       error_message TEXT,
+      is_favorite INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -90,6 +91,15 @@ const bootstrap = (db: Database.Database) => {
       id TEXT PRIMARY KEY,
       album_id TEXT NOT NULL,
       viewed_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS album_shares (
+      id TEXT PRIMARY KEY,
+      album_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS smart_albums (
@@ -185,6 +195,8 @@ const bootstrap = (db: Database.Database) => {
     CREATE INDEX IF NOT EXISTS idx_assets_thumbnail_key ON assets (thumbnail_key);
     CREATE INDEX IF NOT EXISTS idx_album_views_album_id ON album_views (album_id);
     CREATE INDEX IF NOT EXISTS idx_album_views_viewed_at ON album_views (viewed_at);
+    CREATE INDEX IF NOT EXISTS idx_album_shares_token ON album_shares (token);
+    CREATE INDEX IF NOT EXISTS idx_album_shares_expires_at ON album_shares (expires_at);
     CREATE INDEX IF NOT EXISTS idx_smart_albums_name ON smart_albums (name);
     CREATE INDEX IF NOT EXISTS idx_smart_album_members_album_id ON smart_album_members (album_id);
     CREATE INDEX IF NOT EXISTS idx_smart_album_match_records_album_id ON smart_album_match_records (album_id);
@@ -218,6 +230,9 @@ const bootstrap = (db: Database.Database) => {
   } catch (e) {}
   try {
     db.exec('ALTER TABLE albums ADD COLUMN assets_fingerprint TEXT');
+  } catch (e) {}
+  try {
+    db.exec('ALTER TABLE albums ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0');
   } catch (e) {}
   try {
     db.exec("ALTER TABLE smart_album_ai_configs ADD COLUMN provider TEXT NOT NULL DEFAULT 'openai'");

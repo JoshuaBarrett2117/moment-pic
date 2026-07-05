@@ -1,13 +1,15 @@
 import { type FC, useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, RefreshCw, Share2, Star } from 'lucide-react';
 import { Polaroid } from './Polaroid';
+import { AlbumShareDialog } from './AlbumShareDialog';
 import { useToast } from './Toast';
 import { ViewerGallery } from './ViewerGallery';
-import { useAlbumAssets, rescanAlbum, useMobile, useSystemConfig, useWideMobile } from '../hooks';
+import { useAlbumAssets, rescanAlbum, setAlbumFavorite, useMobile, useSystemConfig, useWideMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
 interface AlbumDetailScreenProps {
+  mode?: 'album' | 'share';
   albumId: string;
   onBack: () => void;
   onRequestNextAlbum?: () => void;
@@ -32,6 +34,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   const [totalItems, setTotalItems] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRescanningAlbum, setIsRescanningAlbum] = useState(false);
+  const [isUpdatingFavorite, setIsUpdatingFavorite] = useState(false);
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [visibleRenderCount, setVisibleRenderCount] = useState(RENDER_CHUNK_SIZE);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
@@ -180,6 +184,24 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     setIsRescanningAlbum(false);
   }, [albumId, isRescanningAlbum, loadPage, toast]);
 
+  const handleFavoriteToggle = useCallback(async () => {
+    if (!albumId || isUpdatingFavorite) {
+      return;
+    }
+
+    setIsUpdatingFavorite(true);
+    const result = await setAlbumFavorite(albumId, !(assets?.album?.isFavorite ?? false));
+    if (!result) {
+      toast('更新收藏失败，请稍后重试', 'error');
+      setIsUpdatingFavorite(false);
+      return;
+    }
+
+    await loadPage(1, false);
+    toast(result.isFavorite ? '已收藏图集' : '已取消收藏', 'success');
+    setIsUpdatingFavorite(false);
+  }, [albumId, assets?.album?.isFavorite, isUpdatingFavorite, loadPage, toast]);
+
   const handleLoadMoreForViewer = useCallback(async (): Promise<boolean> => {
     if (isLoadingMore || loadedItems.length >= totalItems) {
       return false;
@@ -206,6 +228,24 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
             >
               <ArrowLeft className="h-4 w-4" />
               返回首页
+            </button>
+          </div>
+
+          <div className="mb-8 flex flex-col gap-3">
+            <button
+              onClick={() => void handleFavoriteToggle()}
+              disabled={isUpdatingFavorite}
+              className="wobbly-mask flex items-center gap-1 rounded-sm bg-secondary-container px-4 py-1.5 text-xs font-medium text-on-secondary-container shadow-sm transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isUpdatingFavorite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className={`h-4 w-4 ${assets?.album?.isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />}
+              {assets?.album?.isFavorite ? '取消收藏' : '收藏图集'}
+            </button>
+            <button
+              onClick={() => setIsShareDialogOpen(true)}
+              className="wobbly-mask flex items-center gap-1 rounded-sm bg-tertiary-container px-4 py-1.5 text-xs font-medium text-on-tertiary-container shadow-sm transition-all hover:brightness-95"
+            >
+              <Share2 className="h-4 w-4" />
+              分享图集
             </button>
           </div>
 
@@ -257,14 +297,31 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
             <h2 className={`truncate font-headline font-bold tracking-tight text-on-surface ${isWideMobile ? 'max-w-[280px] text-xl' : 'max-w-[200px] text-lg'}`}>
               {assets?.album?.name || albumId}
             </h2>
-            <button
-              onClick={() => void handleRescanAlbum()}
-              disabled={isRescanningAlbum}
-              className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60"
-              title="重扫当前图集"
-            >
-              {isRescanningAlbum ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => void handleFavoriteToggle()}
+                disabled={isUpdatingFavorite}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60"
+                title={assets?.album?.isFavorite ? '取消收藏' : '收藏图集'}
+              >
+                {isUpdatingFavorite ? <Loader2 className="h-5 w-5 animate-spin" /> : <Star className={`h-5 w-5 ${assets?.album?.isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />}
+              </button>
+              <button
+                onClick={() => setIsShareDialogOpen(true)}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                title="分享图集"
+              >
+                <Share2 className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => void handleRescanAlbum()}
+                disabled={isRescanningAlbum}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60"
+                title="重扫当前图集"
+              >
+                {isRescanningAlbum ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
+              </button>
+            </div>
           </header>
         )}
 
@@ -356,6 +413,14 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           defaultQualityPreset={systemConfig?.defaultImageQualityPreset ?? 'original'}
           preloadBefore={preloadBefore}
           preloadAfter={preloadAfter}
+        />
+      )}
+
+      {isShareDialogOpen && (
+        <AlbumShareDialog
+          albumId={albumId}
+          albumName={assets?.album?.name || albumId}
+          onClose={() => setIsShareDialogOpen(false)}
         />
       )}
 

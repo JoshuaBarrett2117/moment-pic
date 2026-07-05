@@ -2,9 +2,9 @@ import { useCallback, useEffect, lazy, Suspense, useMemo } from 'react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
 import { PaperGrain } from './components/PaperGrain';
-import { useRecentAlbums, recordAlbumView, useSystemConfig } from './hooks';
+import { useRecentAlbums, recordAlbumView, setAlbumFavorite, useSystemConfig } from './hooks';
 import { api } from './lib/api';
-import type { DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
+import type { AlbumListItemDTO, DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
 import { clearAuthSession, markAuthSession } from './app/auth-session';
 import { useGalleryAppState } from './app/gallery-navigation';
 import { buildDirectoryNavigationAlbums, buildGalleryScreenModel, resolveNextAlbumId } from './app/gallery-screen-model';
@@ -29,8 +29,36 @@ const SettingsScreen = lazy(() =>
     default: module.SettingsScreen
   }))
 );
+const SharedAlbumScreen = lazy(() =>
+  import('./components/SharedAlbumScreen').then((module) => ({
+    default: module.SharedAlbumScreen
+  }))
+);
 
-export default function App() {
+const getShareTokenFromPath = (): string => {
+  if (!window.location.pathname.startsWith('/share/')) {
+    return '';
+  }
+
+  return decodeURIComponent(window.location.pathname.slice('/share/'.length));
+};
+
+const SharedAlbumApp = ({ token }: { token: string }) => (
+  <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
+    <PaperGrain />
+    <Suspense
+      fallback={
+        <div className="w-full h-full flex items-center justify-center text-outline">
+          正在加载分享图集...
+        </div>
+      }
+    >
+      <SharedAlbumScreen token={token} />
+    </Suspense>
+  </div>
+);
+
+function AuthenticatedMomentPicApp() {
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
   const {
     activeTab,
@@ -283,6 +311,15 @@ export default function App() {
     await scan(libraryRootId);
   }, [scan]);
 
+  const handleAlbumFavoriteToggle = useCallback(async (album: AlbumListItemDTO) => {
+    const result = await setAlbumFavorite(album.id, !album.isFavorite);
+    if (!result) {
+      return;
+    }
+
+    await refreshCurrentGallery();
+  }, [refreshCurrentGallery]);
+
   const galleryScreenModel = useMemo(() => buildGalleryScreenModel({
     galleryViewMode,
     isRecentActive,
@@ -381,6 +418,7 @@ export default function App() {
                 onDirectoryNodeClick={handleDirectoryNodeClick}
                 directoryBreadcrumbs={directoryAlbums?.breadcrumbs || []}
                 onDirectoryBreadcrumbClick={handleDirectoryBreadcrumbClick}
+                onAlbumFavoriteToggle={handleAlbumFavoriteToggle}
               />
             </Suspense>
           )}
@@ -469,6 +507,7 @@ export default function App() {
                 emptyTitle="这个自动整理下还没有分类图集"
                 emptyDescription="请先重建自动整理，或者调整当前筛选条件。"
                 onBack={handleBackToGallery}
+                onAlbumFavoriteToggle={handleAlbumFavoriteToggle}
               />
             </Suspense>
           )}
@@ -476,4 +515,13 @@ export default function App() {
       )}
     </div>
   );
+}
+
+export default function App() {
+  const shareToken = getShareTokenFromPath();
+  if (shareToken) {
+    return <SharedAlbumApp token={shareToken} />;
+  }
+
+  return <AuthenticatedMomentPicApp />;
 }

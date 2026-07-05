@@ -1,7 +1,12 @@
+import crypto from "node:crypto";
+
 import type {
   AlbumAssetsDTO,
   AlbumDetailDTO,
+  AlbumFavoriteDTO,
   AlbumListItemDTO,
+  AlbumShareDTO,
+  SharedAlbumAuthDTO,
   AssetDetailDTO,
   LibraryRootDTO
 } from "../types/dto.js";
@@ -14,8 +19,14 @@ import {
   deleteAssetDb,
   findAlbumByIdDb,
   findAssetByIdDb,
+  findAlbumShareByTokenDb,
+  insertAlbumShareDb,
+  isAssetInAlbumDb,
   listAlbumsDb,
   listAssetsByAlbumIdDb,
+  deleteAlbumShareDb,
+  deleteExpiredAlbumSharesDb,
+  updateAlbumFavoriteDb,
 } from "../repositories/album-repository.js";
 import { listLibraryRootsDb, deleteLibraryRootDb, upsertLibraryRootDb, updateLibraryRootDb } from "../repositories/library-root-repository.js";
 import { makeId } from "../repositories/ids.js";
@@ -62,6 +73,16 @@ export const clearAlbumListCache = () => {
   albumListCache.clear();
 };
 
+const toAlbumListItem = (row: AlbumRecord): AlbumListItemDTO => ({
+  id: row.id,
+  name: row.name,
+  sourceType: row.sourceType,
+  assetCount: row.assetCount,
+  coverUrl: row.coverAssetId ? `/api/v1/assets/${row.coverAssetId}/thumbnail` : null,
+  isFavorite: Boolean(row.isFavorite),
+  updatedAt: row.updatedAt
+});
+
 export const listLibraryRoots = async (): Promise<LibraryRootDTO[]> => {
   return listLibraryRootsDb().map((row: LibraryRootRecord) => ({
     id: row.id,
@@ -92,14 +113,7 @@ export const listAlbums = async (
 
   const result = listAlbumsDb(page, pageSize, input);
 
-  const items: AlbumListItemDTO[] = result.items.map((row: AlbumRecord) => ({
-    id: row.id,
-    name: row.name,
-    sourceType: row.sourceType,
-    assetCount: row.assetCount,
-    coverUrl: row.coverAssetId ? `/api/v1/assets/${row.coverAssetId}/thumbnail` : null,
-    updatedAt: row.updatedAt
-  }));
+  const items: AlbumListItemDTO[] = result.items.map(toAlbumListItem);
 
   const payload: AlbumListResult = {
     items,
@@ -128,6 +142,7 @@ export const getAlbumDetail = async (albumId: string): Promise<AlbumDetailDTO | 
     sourceType: row.sourceType,
     assetCount: row.assetCount,
     coverAssetId: row.coverAssetId,
+    isFavorite: Boolean(row.isFavorite),
     updatedAt: row.updatedAt
   };
 };
@@ -146,6 +161,7 @@ export const getAlbumAssets = async (albumId: string, page = 1, pageSize = 120):
       id: album.id,
       name: album.name,
       assetCount: album.assetCount,
+      isFavorite: Boolean(album.isFavorite),
       updatedAt: album.updatedAt
     },
     items: assets.map((asset) => ({
@@ -191,6 +207,209 @@ export const deleteAlbum = async (albumId: string): Promise<boolean> => {
   deleteAlbumDb(albumId);
   clearAlbumListCache();
   return true;
+};
+
+export const setAlbumFavorite = async (albumId: string, isFavorite: boolean): Promise<AlbumFavoriteDTO | null> => {
+  const album = updateAlbumFavoriteDb(albumId, isFavorite, new Date().toISOString());
+  if (!album) {
+    return null;
+  }
+  clearAlbumListCache();
+  return {
+    albumId: album.id,
+    isFavorite: Boolean(album.isFavorite)
+  };
+};
+
+const hashSharePassword = (password: string): string => {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+};
+
+const verifySharePassword = (password: string, passwordHash: string): boolean => {
+  const [salt, expectedHash] = passwordHash.split(":");
+  if (!salt || !expectedHash) {
+    return false;
+  }
+
+  const actualHash = crypto.scryptSync(password, salt, 64).toString("hex");
+  const actual = Buffer.from(actualHash, "hex");
+  const expected = Buffer.from(expectedHash, "hex");
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+};
+
+const signShareAccessPayload = (payload: string, passwordHash: string): string =>
+  crypto.createHmac("sha256", passwordHash).update(payload).digest("hex");
+
+const createShareAccessToken = (input: { shareId: string; expiresAt: string; passwordHash: string }): string => {
+  const payload = Buffer.from(
+    JSON.stringify({
+      shareId: input.shareId,
+      exp: input.expiresAt
+    }),
+    "utf8"
+  ).toString("base64url");
+  const signature = signShareAccessPayload(payload, input.passwordHash);
+  return `${payload}.${signature}`;
+};
+
+const verifyShareAccessToken = (accessToken: string, input: { shareId: string; expiresAt: string; passwordHash: string }): boolean => {
+  const [payload, signature] = accessToken.split(".");
+  if (!payload || !signature) {
+    return false;
+  }
+
+  const expectedSignature = signShareAccessPayload(payload, input.passwordHash);
+  const actual = Buffer.from(signature, "utf8");
+  const expected = Buffer.from(expectedSignature, "utf8");
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) {
+    return false;
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      shareId?: string;
+      exp?: string;
+    };
+    return decoded.shareId === input.shareId && decoded.exp === input.expiresAt && Date.parse(decoded.exp) > Date.now();
+  } catch {
+    return false;
+  }
+};
+
+export const createAlbumShare = async (
+  albumId: string,
+  input: {
+    password: string;
+    expiresAt: string;
+    origin: string;
+  }
+): Promise<AlbumShareDTO | null> => {
+  const album = findAlbumByIdDb(albumId);
+  if (!album) {
+    return null;
+  }
+
+  const password = input.password.trim();
+  const expiresAtMs = Date.parse(input.expiresAt);
+  if (password.length < 1 || Number.isNaN(expiresAtMs) || expiresAtMs <= Date.now()) {
+    throw new AlbumShareInputInvalidError();
+  }
+
+  const token = crypto.randomBytes(18).toString("base64url");
+  const expiresAt = new Date(expiresAtMs).toISOString();
+  insertAlbumShareDb({
+    id: makeId("share"),
+    albumId,
+    token,
+    passwordHash: hashSharePassword(password),
+    expiresAt,
+    createdAt: new Date().toISOString()
+  });
+
+  return {
+    token,
+    shareUrl: `${input.origin.replace(/\/$/, "")}/share/${token}`,
+    expiresAt
+  };
+};
+
+export class AlbumShareInputInvalidError extends Error {
+  constructor() {
+    super("album share input invalid");
+  }
+}
+
+export class AlbumShareNotFoundError extends Error {
+  constructor() {
+    super("album share not found");
+  }
+}
+
+export class AlbumSharePasswordInvalidError extends Error {
+  constructor() {
+    super("album share password invalid");
+  }
+}
+
+export const authenticateAlbumShare = async (token: string, password: string): Promise<SharedAlbumAuthDTO> => {
+  deleteExpiredAlbumSharesDb(new Date().toISOString());
+
+  const share = findAlbumShareByTokenDb(token);
+  if (!share) {
+    throw new AlbumShareNotFoundError();
+  }
+
+  if (!verifySharePassword(password, share.passwordHash)) {
+    throw new AlbumSharePasswordInvalidError();
+  }
+
+  const album = findAlbumByIdDb(share.albumId);
+  if (!album) {
+    deleteAlbumShareDb(share.id);
+    throw new AlbumShareNotFoundError();
+  }
+
+  return {
+    token,
+    accessToken: createShareAccessToken({
+      shareId: share.id,
+      expiresAt: share.expiresAt,
+      passwordHash: share.passwordHash
+    }),
+    albumId: album.id,
+    name: album.name,
+    expiresAt: share.expiresAt
+  };
+};
+
+export const getSharedAlbumAssets = async (token: string, accessToken: string, page = 1, pageSize = 120): Promise<AlbumAssetsDTO | null> => {
+  deleteExpiredAlbumSharesDb(new Date().toISOString());
+
+  const share = findAlbumShareByTokenDb(token);
+  if (!share) {
+    return null;
+  }
+  if (!verifyShareAccessToken(accessToken, {
+    shareId: share.id,
+    expiresAt: share.expiresAt,
+    passwordHash: share.passwordHash
+  })) {
+    return null;
+  }
+
+  const assets = await getAlbumAssets(share.albumId, page, pageSize);
+  if (!assets) {
+    return null;
+  }
+
+  return {
+    ...assets,
+    items: assets.items.map((asset) => ({
+      ...asset,
+      thumbnailUrl: `/api/v1/shares/${token}/assets/${asset.id}/thumbnail?accessToken=${encodeURIComponent(accessToken)}`,
+      originalUrl: `/api/v1/shares/${token}/assets/${asset.id}/original?accessToken=${encodeURIComponent(accessToken)}`
+    }))
+  };
+};
+
+export const canReadSharedAsset = (token: string, assetId: string, accessToken: string): boolean => {
+  deleteExpiredAlbumSharesDb(new Date().toISOString());
+
+  const share = findAlbumShareByTokenDb(token);
+  if (!share) {
+    return false;
+  }
+  if (!verifyShareAccessToken(accessToken, {
+    shareId: share.id,
+    expiresAt: share.expiresAt,
+    passwordHash: share.passwordHash
+  })) {
+    return false;
+  }
+
+  return isAssetInAlbumDb(share.albumId, assetId);
 };
 
 export const deleteAsset = async (assetId: string): Promise<boolean> => {
@@ -265,12 +484,7 @@ export const getRecentAlbums = async (limit = 50): Promise<AlbumListItemDTO[]> =
     const album = findAlbumByIdDb(albumId);
     if (album) {
       items.push({
-        id: album.id,
-        name: album.name,
-        sourceType: album.sourceType,
-        assetCount: album.assetCount,
-        coverUrl: album.coverAssetId ? `/api/v1/assets/${album.coverAssetId}/thumbnail` : null,
-        updatedAt: album.updatedAt
+        ...toAlbumListItem(album)
       });
     }
   }

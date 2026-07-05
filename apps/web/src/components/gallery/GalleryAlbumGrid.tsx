@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import type { DirectoryAlbumNodeDTO } from '../../types/api';
+import type { AlbumListItemDTO, DirectoryAlbumNodeDTO } from '../../types/api';
 import { AlbumCard } from './AlbumCard';
 import { DirectoryNodeCard } from './DirectoryNodeCard';
 import { GalleryEmptyState } from './GalleryEmptyState';
@@ -22,6 +22,8 @@ type GalleryAlbumGridProps = {
   emptyDescription: string;
   onNavigateToAlbum: (albumId: string) => void;
   onDirectoryNodeClick?: (node: DirectoryAlbumNodeDTO) => void;
+  onAlbumFavoriteToggle?: (album: AlbumListItemDTO) => void;
+  onAlbumShare?: (album: AlbumListItemDTO) => void;
 };
 
 export function GalleryAlbumGrid({
@@ -36,6 +38,8 @@ export function GalleryAlbumGrid({
   emptyDescription,
   onNavigateToAlbum,
   onDirectoryNodeClick,
+  onAlbumFavoriteToggle,
+  onAlbumShare,
 }: GalleryAlbumGridProps) {
   return (
     <motion.div
@@ -87,6 +91,8 @@ export function GalleryAlbumGrid({
                   index={index}
                   isMobile={isMobile}
                   onNavigateToAlbum={onNavigateToAlbum}
+                  onFavoriteToggle={onAlbumFavoriteToggle}
+                  onShare={onAlbumShare}
                 />
               </React.Fragment>
             );

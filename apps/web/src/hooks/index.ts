@@ -1,5 +1,17 @@
 export { useAuth } from './useAuth';
-export { useAlbums, useAlbumAssets, deleteAlbum, deleteAsset, useRecentAlbums, recordAlbumView, rescanAlbum } from './useAlbums';
+export {
+  useAlbums,
+  useAlbumAssets,
+  authenticateAlbumShare,
+  createAlbumShare,
+  deleteAlbum,
+  deleteAsset,
+  fetchSharedAlbumAssets,
+  useRecentAlbums,
+  recordAlbumView,
+  rescanAlbum,
+  setAlbumFavorite,
+} from './useAlbums';
 export { useLibraryRoots } from './useLibraryRoots';
 export { useLibraryScan } from './useLibraryScan';
 export { useWebSocket } from './useWebSocket';

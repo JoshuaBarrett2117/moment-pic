@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { GalleryPagination } from './GalleryPagination';
+import { AlbumShareDialog } from './AlbumShareDialog';
 import { GalleryAlbumGrid } from './gallery/GalleryAlbumGrid';
 import { GalleryDirectoryBreadcrumbs } from './gallery/GalleryDirectoryBreadcrumbs';
 import { GalleryFilters } from './gallery/GalleryFilters';
@@ -58,6 +59,7 @@ interface GalleryScreenProps {
   onDirectoryNodeClick?: (node: DirectoryAlbumNodeDTO) => void;
   directoryBreadcrumbs?: DirectoryAlbumBreadcrumbDTO[];
   onDirectoryBreadcrumbClick?: (crumb: DirectoryAlbumBreadcrumbDTO) => void;
+  onAlbumFavoriteToggle?: (album: AlbumListItemDTO) => void;
   headerTitle?: string;
   headerDescription?: string;
   emptyTitle?: string;
@@ -109,6 +111,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   onDirectoryNodeClick,
   directoryBreadcrumbs = [],
   onDirectoryBreadcrumbClick,
+  onAlbumFavoriteToggle,
   headerTitle,
   headerDescription,
   emptyTitle,
@@ -121,6 +124,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const isWideMobile = useWideMobile();
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [sharingAlbum, setSharingAlbum] = useState<AlbumListItemDTO | null>(null);
   const isSmartAlbumsMode = resolvedDisplayMode === 'smartAlbums';
   const isDirectoryAlbumsMode = resolvedDisplayMode === 'directoryAlbums';
   const currentPage = pagination?.page || 1;
@@ -252,6 +256,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           emptyDescription={emptyText.description}
           onNavigateToAlbum={handleNavigateToAlbum}
           onDirectoryNodeClick={onDirectoryNodeClick}
+          onAlbumFavoriteToggle={onAlbumFavoriteToggle}
+          onAlbumShare={setSharingAlbum}
         />
 
         {hasMoreItems && (
@@ -262,6 +268,14 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
         <GalleryPagination pagination={pagination} isLoading={isLoading} onPageChange={onPageChange} />
       </main>
+
+      {sharingAlbum && (
+        <AlbumShareDialog
+          albumId={sharingAlbum.id}
+          albumName={sharingAlbum.name}
+          onClose={() => setSharingAlbum(null)}
+        />
+      )}
     </div>
   );
 };

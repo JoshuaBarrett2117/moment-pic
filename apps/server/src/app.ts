@@ -69,7 +69,7 @@ export const buildApp = () => {
     }
 
     if (pathname.startsWith("/api/")) {
-      if (pathname === "/api/v1/auth/login" || pathname === "/api/v1/auth/logout" || pathname === "/api/v1/health") {
+      if (pathname === "/api/v1/auth/login" || pathname === "/api/v1/auth/logout" || pathname === "/api/v1/health" || pathname.startsWith("/api/v1/shares/")) {
         return;
       }
       const authed = isAuthenticated(request, app.config.adminPassword);
@@ -80,6 +80,20 @@ export const buildApp = () => {
         });
       }
     }
+  });
+
+  app.addHook("onSend", async (request, reply, payload) => {
+    const pathname = getPathname(request.url);
+    const contentTypeHeader = reply.getHeader("Content-Type");
+    const contentType = Array.isArray(contentTypeHeader)
+      ? String(contentTypeHeader[0] ?? "")
+      : String(contentTypeHeader ?? "");
+
+    if (!pathname.startsWith("/api/") && !pathname.startsWith("/ws") && contentType.toLowerCase().startsWith("text/html")) {
+      reply.header("Cache-Control", "no-store");
+    }
+
+    return payload;
   });
 
   app.register(healthRoutes);
@@ -108,6 +122,9 @@ export const buildApp = () => {
       if (nextType !== currentType) {
         res.setHeader("Content-Type", nextType);
       }
+      if (path.basename(filePath) === "index.html") {
+        res.setHeader("Cache-Control", "no-store");
+      }
     }
   });
 
@@ -118,6 +135,7 @@ export const buildApp = () => {
       return reply.status(404).send({ error: "Not Found" });
     }
 
+    reply.header("Cache-Control", "no-store");
     return reply.type("text/html; charset=utf-8").sendFile("index.html");
   });
 

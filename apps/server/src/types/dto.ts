@@ -27,6 +27,7 @@ export type AlbumListItemDTO = {
   sourceType: SourceTypeDTO;
   assetCount: number;
   coverUrl: string | null;
+  isFavorite: boolean;
   updatedAt: string;
 };
 
@@ -66,6 +67,7 @@ export type AlbumDetailDTO = {
   sourceType: SourceTypeDTO;
   assetCount: number;
   coverAssetId: string | null;
+  isFavorite: boolean;
   updatedAt: string;
 };
 
@@ -97,6 +99,7 @@ export type AlbumAssetsDTO = {
     id: string;
     name: string;
     assetCount: number;
+    isFavorite: boolean;
     updatedAt: string;
   };
   items: AssetListItemDTO[];
@@ -139,6 +142,7 @@ export type SmartAlbumMemberDTO = {
   sourceType: SourceTypeDTO;
   assetCount: number;
   coverUrl: string | null;
+  isFavorite: boolean;
   updatedAt: string;
   sourceEngine: SmartAlbumSourceEngineDTO;
   confidence: number;
@@ -225,4 +229,23 @@ export type SmartAlbumRebuildTaskDTO = {
   finishedAt: string | null;
   error: string | null;
   result: SmartAlbumRebuildResultDTO | null;
+};
+
+export type AlbumFavoriteDTO = {
+  albumId: string;
+  isFavorite: boolean;
+};
+
+export type AlbumShareDTO = {
+  token: string;
+  shareUrl: string;
+  expiresAt: string;
+};
+
+export type SharedAlbumAuthDTO = {
+  token: string;
+  accessToken: string;
+  albumId: string;
+  name: string;
+  expiresAt: string;
 };

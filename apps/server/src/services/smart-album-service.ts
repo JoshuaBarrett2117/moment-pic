@@ -339,6 +339,7 @@ export const getSmartAlbumMembers = async (smartAlbumId: string): Promise<SmartA
         sourceType: album.sourceType,
         assetCount: album.assetCount,
         coverUrl: album.coverAssetId ? `/api/v1/assets/${album.coverAssetId}/thumbnail` : null,
+        isFavorite: Boolean(album.isFavorite),
         updatedAt: album.updatedAt,
         sourceEngine: member.sourceEngine,
         confidence: member.confidence

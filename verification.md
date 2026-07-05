@@ -227,3 +227,379 @@
 + 宸插皢鍥炲埌鍥惧簱鐨勬祦绋嬩繚鎸佷负鈥滆繑鍥炲墠鐨勮鍥剧姸鎬佲€濓紝涓嶅啀鍦ㄨ繑鍥炴椂娓呴櫎鍙鍖哄煙鐨勬粴鍔ㄤ綅缃紝閬垮厤鐢ㄦ埛闇€瑕侀噸鏂板惊鍧愬鎵惧師鏉ョ殑鍥惧唽銆?
 + 鏈湴楠岃瘉锛歚npm run lint --workspace @moment-pic/web`銆乣npm run build --workspace @moment-pic/web`銆乣npm run build --workspace @moment-pic/server` 閫氳繃銆?
 + 娴忚鍣ㄥ洖褰掗獙璇侊細浠庡浘搴撳悜涓嬫粴鍔?`1200` 鍚庤繘鍏ョ浉鍐屽苟鍥炴潵锛屾鏌ョ粨鏋滄樉绀鸿繑鍥炲悗 `scrollTop` 浼氬洖鍒?`1270` 宸﹀彸锛屽凡涓嶅啀琚浣嶅叏鍙?`0` 鎴栭噸缃€?
+## 2026-05-09 Codex
+
+- 已新增系统相册“目录相册”，从配置的图库根目录展示目录树；直接子节点若已扫描为图集则进入图集详情，否则继续进入目录树。
+- 本地验证：
+  - `npm run build --workspace @moment-pic/server` 通过。
+  - `npm run lint --workspace @moment-pic/web` 通过。
+  - `npm run build --workspace @moment-pic/web` 通过，存在既有 circular chunk 警告。
+  - `node --import tsx --test apps/server/src/**/*.test.ts` 通过，30 个测试通过。
+- 追加验证：`GET /api/v1/albums/directory-tree` 本地接口烟测通过，返回目录相册根节点与目录项。
+- 追加验证：`node --import tsx --test --test-concurrency=1 apps/server/src/**/*.test.ts` 使用隔离 SQLite 通过，30 个测试通过。
+
+## 2026-05-09 Codex
+
+- 已将页面跳转形式做成系统配置项，支持：
+  - `page`：翻页滑动，保持原有左右切换效果。
+  - `normal`：常规淡入淡出，避免页面像翻页一样横向移动。
+- 本地验证：
+  - `node --import tsx --test apps/server/src/services/sqlite-store.test.ts` 通过，2 个测试通过。
+  - `npm run lint --workspace @moment-pic/web` 通过。
+  - `npm run build --workspace @moment-pic/server` 通过。
+  - `npm run build --workspace @moment-pic/web` 通过，存在既有 circular chunk 警告。
+
+## 2026-05-09 Codex
+
+- 已排查页面跳转形式切换不生效问题。
+- 根因：设置页表单未先拉取 `systemConfig`，导致 `savePageTransitionMode` 判断 `systemConfig` 为空后直接返回，选择器只改了本地状态，没有发送 PATCH 保存请求。
+- 修复：`useSettingsConfigForm` 初始化时调用 `fetchSystemConfig()`，确保页面跳转形式及同一表单内其他系统配置保存前已有后端配置上下文。
+- 验证：
+  - 当前 3211 后端 API 直连 PATCH `pageTransitionMode` 可保存并由 GET 读回。
+  - `npm run lint --workspace @moment-pic/web` 通过。
+  - `npm run build --workspace @moment-pic/server` 通过。
+  - `node --import tsx --test apps/server/src/services/sqlite-store.test.ts` 通过，2 个测试通过。
+  - `npm run build --workspace @moment-pic/web` 通过，存在既有 circular chunk 警告。
+
+## 2026-05-09 Codex
+
+- `docker --version`
+  - 结果：通过，Docker CLI 可用，版本 29.3.1。
+- `docker buildx version`
+  - 结果：通过，Buildx 可用，版本 v0.32.1-desktop.1。
+- `docker buildx build --platform linux/arm64 -f Dockerfile.arm64 -t moment-pic:arm64-test --load .`
+  - 结果：未执行到构建阶段；Docker Desktop Linux daemon 未运行，报错为无法连接 `npipe:////./pipe/dockerDesktopLinuxEngine`。
+  - 风险评估：当前失败属于本机 Docker 引擎状态问题，不是 Dockerfile 语法或构建步骤执行失败；启动 Docker Desktop 后可使用同一命令继续验证。
+
+## 2026-05-09 Codex
+
+- `Select-String -Path .github\workflows\docker.yml -Pattern 'setup-qemu-action|Generate ARM64 tags|Dockerfile.arm64|platforms: linux/arm64|arm64-tags|\$\{tag\}-arm64'`
+  - 结果：通过，确认 workflow 包含 QEMU、ARM64 tag 派生、Dockerfile.arm64、linux/arm64 平台和 ARM64 tag 输出引用。
+- Node 标签转换烟测
+  - 输入：`latest`、`1.2.3`、`sha-abcdef0` 形式的完整镜像 tag。
+  - 结果：输出 `latest-arm64`、`1.2.3-arm64`、`sha-abcdef0-arm64`，符合 tag 区分要求。
+- YAML 工具验证
+  - 结果：本机未安装 `actionlint`、`yq`、Ruby YAML 解析器，项目依赖中也没有 `yaml` 包；已完成静态内容检查，GitHub Actions 运行时仍需以远端执行结果为准。
+
+## 2026-05-10 Codex
+
+- 任务：手机端放大图片时支持拖动图片。
+- 代码验证：`apps/web/src/components/ViewerGallery.tsx` 新增触摸拖拽起点引用；`scale > 1` 时单指移动更新 `position`，触摸结束清理拖拽态并避免误触发切图；两指缩放后剩余单指会重新校准拖拽起点。
+- `npm run lint --workspace @moment-pic/web`：通过。
+- `npm run build --workspace @moment-pic/web`：通过，存在既有 circular chunk 警告。
+- 本地浏览器烟测：通过。手机视口下打开大图查看器，放大后拖动图片，内联样式从 `translate(0px, 0px) scale(1.2)` 更新为 `translate(65px, 48px) scale(1.2)`。
+- 风险评估：浏览器工具不能完整模拟真实多点触控，已通过代码路径确认单指触摸拖动会调用同一 `position` 位移链路；建议在真机上补一次手感确认。
+
+## 2026-05-15 Codex 第三轮深拆验证
+
+- `npm --workspace apps/web test`
+  - 结果：通过，12 个前端细粒度测试通过。
+- `npm run lint:web`
+  - 结果：通过，`tsc --noEmit` 无类型错误。
+- `npm --workspace apps/server test`
+  - 结果：通过，46 个服务端测试通过。
+- `npm run build:server`
+  - 结果：通过。
+- `npm test`
+  - 结果：通过，覆盖服务端测试、前端测试、前端类型检查、服务端构建、前端构建。
+- `npm run test:rust`
+  - 结果：未通过；当前机器未安装或未暴露 `cargo`，无法执行 Rust 子工程测试。
+- 本地运行时冒烟
+  - 结果：通过；`GET /api/v1/health` 返回 `status: ok`，`POST /api/v1/auth/login` 返回 200 与 `expiresAt`。
+
+## 2026-05-15 Codex 全量扫描文档执行验证
+
+- 已执行 `docs/full-refactor-scan-2026-05-15.md` 中 P0 发布阻塞项和一批 P1/P2 架构/维护性清理项。
+- 本轮重点完成：
+  - 清理 Git 跟踪的运行数据、缓存产物、重复 lockfile、个人 compose 路径。
+  - 删除遗留 Prisma/JSON store/mock 路线与未使用依赖。
+  - 前端拆分页面转场、图库列表、查看器工具栏、智能相册规则草稿和认证会话工具。
+  - 后端拆分 archive 协议 reader、thumbnail 原图来源读取和扫描后任务编排。
+- 本地验证结果：
+  - `npm test`：通过。
+  - `npm --workspace apps/server test`：通过，47 项执行，44 通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+  - `npm --workspace apps/web test`：通过，15 项通过。
+  - `npm run lint:web`：通过。
+  - `npm run build:server`：通过。
+  - `npm run build:web`：通过。
+  - `npm run test:rust`：脚本通过，因当前环境无 `cargo` 明确跳过 Rust 子工程测试。
+- 残余风险：
+  - 真实 CBR 集成测试需要在配置 `MOMENT_PIC_REAL_ARCHIVE_ROOTS` 的机器补跑。
+  - Rust 子工程需要在安装 Rust toolchain 的环境补跑 `cargo test --manifest-path apps/server-rs/Cargo.toml`。
+
+## 2026-05-15 Codex 继续执行剩余 P1 验证
+
+- 本轮继续完成：
+  - `gallery-navigation.ts` 统一认证 session 工具，移除对 `auth_token` 的直接读写。
+  - `ViewerGallery` 抽出 viewer 画质 session 工具并新增测试。
+  - `smart-album-service` 抽出 DTO mapper 并新增服务端测试。
+  - albums/assets/smart-albums 路由接入 `request-query`，统一分页、枚举、可选字符串解析并新增测试。
+- 本地验证结果：
+  - `npm test`：通过。
+  - `npm --workspace apps/server test`：通过，51 项执行，48 通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+  - `npm --workspace apps/web test`：通过，16 项通过。
+  - `npm run lint:web`：通过。
+  - `npm run build:server`：通过。
+  - `npm run build:web`：通过。
+  - `npm run test:rust`：脚本通过，当前环境无 `cargo`，明确跳过。
+
+## 2026-05-15 Codex AI Provider 与查看器拆分验证
+
+- 本轮继续完成：
+  - `smart-album-service` 抽出 `smart-album-ai-candidates`，独立承载 OpenAI runtime、prompt 构造、AI 候选生成和 AI 连接测试。
+  - 新增 AI provider 单元测试，覆盖 runtime 归一化、prompt 输出契约、无 Token 连接测试短路。
+  - `ViewerGallery` 抽出 `ViewerImageStage`，将大图画布、加载态、transform 和鼠标拖拽事件承载从主组件剥离。
+- 本地验证结果：
+  - `npm test`：通过。
+  - `npm --workspace apps/server test`：通过，54 项执行，51 通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+  - `npm --workspace apps/web test`：通过，16 项通过。
+  - `npm run lint:web`：通过。
+  - `npm run build:server`：通过。
+  - `npm run build:web`：通过。
+  - `npm run test:rust`：脚本通过，当前环境无 `cargo`，明确跳过。
+
+## 2026-05-15 Codex Viewer Hooks 与智能相册设置 UI 验证
+
+- 本轮继续完成：
+  - `ViewerGallery` 抽出 `useViewerPreloader`，相邻图片预加载副作用从主组件移出。
+  - `ViewerGallery` 抽出 `useViewerDesktopControls`，桌面键盘与滚轮监听从主组件移出。
+  - `SmartAlbumSettingsPanel` 抽出 `SmartAlbumRebuildPanel` 和 `SmartAlbumRuleList`，重建状态区和规则列表区独立维护。
+- 本地验证结果：
+  - `npm test`：通过。
+  - `npm --workspace apps/server test`：通过，54 项执行，51 通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+  - `npm --workspace apps/web test`：通过，16 项通过。
+  - `npm run lint:web`：通过。
+  - `npm run build:server`：通过。
+  - `npm run build:web`：通过。
+  - `npm run test:rust`：脚本通过，当前环境无 `cargo`，明确跳过。
+
+## 2026-05-15 Codex 智能相册 AI 配置面板验证
+
+- 本轮继续完成：
+  - `SmartAlbumSettingsPanel` 抽出 `SmartAlbumAiConfigPanel`，AI 配置表单、连接测试、保存按钮与连接摘要独立维护。
+  - 主设置面板进一步收敛为状态管理、提交处理与子面板编排。
+- 本地验证结果：
+  - `npm test`：通过。
+  - `npm --workspace apps/server test`：通过，54 项执行，51 通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+  - `npm --workspace apps/web test`：通过，16 项通过。
+  - `npm run lint:web`：通过。
+  - `npm run build:server`：通过。
+  - `npm run build:web`：通过。
+  - `npm run test:rust`：脚本通过，当前环境无 `cargo`，明确跳过。
+
+## 2026-05-15 Codex Viewer 手势、缩略图服务与规则编辑验证
+
+- 本轮继续完成：
+  - `ViewerGallery` 抽出 `useViewerGestures`，将缩放、旋转、鼠标拖拽、移动端滑动/点按/双指缩放状态从主组件剥离。
+  - `thumbnail-service.ts` 继续拆分为 `sharp-runtime`、`generation-slot`、`asset-dimensions`、`image-variant-generator`，服务入口保留对外 API 编排。
+  - `SmartAlbumSettingsPanel` 抽出 `SmartAlbumRuleEditor`，规则编辑表单从设置面板拆出。
+  - `App.tsx` 抽出 `smart-album-member-albums`，智能相册成员列表筛选/排序成为可测试纯函数。
+- 新增测试：
+  - `smart-album-member-albums.test.ts` 覆盖关键字/来源过滤、`albumCount` 到 `updatedAt` 的排序回退。
+- 本地验证结果：
+  - `npm --workspace apps/web test`：通过，18 项前端测试通过。
+  - `npm run lint:web`：通过。
+  - `npm --workspace apps/server test`：通过，54 项执行，51 通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+  - `npm run build:server`：通过。
+  - `npm test`：通过，覆盖服务端测试、前端测试、前端类型检查、服务端构建、前端构建。
+  - `npm run test:rust`：脚本通过，当前环境无 `cargo`，明确跳过。
+
+## 2026-05-15 Codex App 与 GalleryScreen 继续拆分验证
+
+- 本轮继续完成：
+  - `App.tsx` 抽出 `useAppAuthBootstrap`，启动鉴权恢复、登录态清理与初始 URL 恢复从根组件移出。
+  - `GalleryScreen` 抽出 `useChunkedAlbumRendering`，相册分块渲染和 IntersectionObserver 加载更多逻辑独立维护。
+  - `GalleryScreen` 抽出 `useGalleryScrollRestoration`，详情返回后的滚动位置保存/恢复独立维护。
+  - `GalleryScreen` 抽出 `gallery-screen-state`，筛选激活状态、排序选项、标题文案和空态文案变为可测试纯函数。
+- 新增测试：
+  - `gallery-screen-state.test.ts` 覆盖图库根目录筛选判定、智能相册排序项、目录相册标题和空态文案覆盖。
+- 本地验证结果：
+  - `npm --workspace apps/web test`：通过，21 项前端测试通过。
+  - `npm run lint:web`：通过。
+  - `npm test`：通过，覆盖服务端测试、前端测试、前端类型检查、服务端构建、前端构建。
+  - `npm run test:rust`：脚本通过，当前环境无 `cargo`，明确跳过。
+
+## 2026-05-15 Codex GalleryAlbumGrid 继续拆分验证
+
+- 本轮继续完成：
+  - `GalleryAlbumGrid` 拆出 `AlbumCard`、`SmartAlbumCard`、`DirectoryNodeCard`，普通图集、自动整理和目录节点卡片独立维护。
+  - 拆出 `GalleryEmptyState` 与 `GalleryLoadingAlbumCards`，空态和骨架屏从网格分派层移出。
+  - 拆出 `gallery-album-types` 与 `gallery-card-motion`，联合类型守卫、标签色、动效配置统一复用。
+  - 拆出 `gallery-album-card-kind`，卡片类型分派成为可测试纯函数。
+- 新增测试：
+  - `gallery-album-card-kind.test.ts` 覆盖目录节点、智能相册、普通图集和非智能相册模式下的 unsupported 分派。
+- 本地验证结果：
+  - `npm --workspace apps/web test`：通过，23 项前端测试通过。
+  - `npm run lint:web`：通过。
+  - `npm test`：通过，覆盖服务端测试、前端测试、前端类型检查、服务端构建、前端构建。
+  - `npm run test:rust`：脚本通过，当前环境无 `cargo`，明确跳过。
+
+## 2026-05-16 Codex App 图库模型与筛选动作拆分验证
+
+- 本轮继续完成：
+  - `App.tsx` 抽出 `gallery-screen-model`，图库首页的列表、加载态、分页、最近访问态、来源筛选可用性统一由纯函数生成。
+  - `App.tsx` 抽出 `resolveNextAlbumId`，相册详情“下一个图集”计算变为可测试纯函数。
+  - `App.tsx` 抽出 `useGalleryFilterActions`，分页、排序、关键词、来源类型、图库根目录、智能相册/目录相册入口的筛选变更动作集中维护。
+- 新增测试：
+  - `gallery-screen-model.test.ts` 覆盖智能相册模式、最近访问模式和下一个图集边界。
+- 本地验证结果：
+  - `npm --workspace apps/web test`：通过，26 项前端测试通过。
+  - `npm run lint:web`：通过。
+  - `npm test`：通过，覆盖服务端测试、前端测试、前端类型检查、服务端构建、前端构建。
+  - `npm run test:rust`：脚本通过，当前环境无 `cargo`，明确跳过。
+
+## 2026-05-16 Codex 缩略图内存回归修复验证
+
+- 本轮修复原因：
+  - 缩略图重构后，缓存命中路径仍可能为了同步宽高读取整张原图。
+  - 普通文件生成缩略图/预览时先读入 Buffer，再交给 Sharp，面对大图或并发请求会显著提高 JS 堆和 libvips 内存峰值。
+  - 请求闸门与 Sharp 生成槽位之间存在并发差距，容易排队积压大图请求。
+- 本轮完成：
+  - Sharp cache 从 64MB/128 items 下调到 32MB/64 items，Sharp 并发降为 1，并在生成后释放 cache。
+  - 缩略图/预览请求闸门从 24 active / 320 queue 收紧为 8 active / 160 queue。
+  - `syncAssetDimensions` 改为只消费已有尺寸或生成链路传入的 Sharp 输入，不再自行读取原图。
+  - 普通文件通过路径传给 Sharp，归档内图片仍使用 Buffer。
+- 新增测试：
+  - `readOriginalSharpInput gives sharp a folder path instead of buffering the file`
+  - `syncAssetDimensions does not read missing originals when no sharp input is provided`
+- 本地验证结果：
+  - `npm --workspace apps/server test`：通过，56 项执行，53 通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+  - `npm run build:server`：通过。
+  - `npm test`：通过，覆盖服务端测试、前端测试、前端类型检查、服务端构建、前端构建。
+
+## 2026-05-16 Codex CBR/RAR 内存错误追溯验证
+
+- 历史修复依据：
+  - `967f27d Fix preview memory fallback`：新增 `/thumbnail`、`/preview` 失败后流式回源；将 Sharp cache 设置为 64MB/128 items，Sharp concurrency 降为 2，生成并发从 6 降为 2。
+  - `0f23de1 perf: reduce thumbnail pipeline memory pressure`：继续降低 Sharp 内存峰值，并补充普通文件路径输入与尺寸同步不读原图测试。
+- 本次新增判断：`Not enough memory` 字面错误来自 `node-unrar-js` 的 `ERAR_NO_MEMORY`，因此 CBR/RAR 读取链路需要避开 unrar wasm 解压输出。
+- 本次完成：
+  - `readCbrBuffer` 改为复用 `read7zBuffer`。
+  - `readCbrStream` 改为复用 `read7zStream`。
+  - 新增 CBR extraction 回归测试，覆盖 Buffer 与流式回源两条路径。
+- 本地验证结果：
+  - `npm --workspace apps/server test`：通过，58 项执行，55 通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+  - `npm run build:server`：通过。
+  - `npm test`：通过，覆盖服务端测试、前端测试、前端类型检查、服务端构建、前端构建。
+
+## 2026-05-16 Codex 图片接口高并发压测报告
+
+- 压测方法：
+  - 生成临时图库：18 张大尺寸 JPEG + 1 个 7z 图片归档。
+  - 使用独立 SQLite 与 cache 目录启动后端。
+  - 自动登录后收集 27 个资产 ID。
+  - 并发请求 `/api/v1/assets/:assetId/thumbnail`、`/preview`、`/original`。
+- 压测结果：
+  - 并发 96，8 轮，513 请求：463 个 200，50 个 503；无 500，无 `Not enough memory`；服务端峰值 WorkingSet 约 160.5 MiB。
+  - 并发 64，8 轮，513 请求：513 个 200；无 500，无 `Not enough memory`；服务端峰值 WorkingSet 约 163.2 MiB。
+- 结论：
+  - 当前大图目录与 7z 图片归档的图片接口高并发下没有复现内存不足。
+  - 并发 96 出现 503 是请求闸门按设计进行背压，不是服务端崩溃或内存不足。
+  - 真实 RAR/CBR 图片归档高并发仍需用户提供样本后补测；当前本机找到的 `.rar` 均为代码压缩包，不适合图片接口压测。
+
+## 2026-05-16 Codex 线上 preview 空响应修复报告
+
+- 线上请求结果：
+  - URL：`/api/v1/assets/ast_0526c5a3150cb3f0fa479a11a52b46c3/preview?preset=balanced`
+  - 状态：HTTP 200
+  - 类型：`image/jpeg`
+  - 长度：`Content-Length: 0`，实际下载 0 字节
+  - 未出现：`Not enough memory`
+- 根因判断：当前线上更像是 0 字节缓存文件被 `findReadyFile` 当作可用文件返回，而不是这次请求直接触发内存不足。
+- 本地修复：
+  - 缓存 ready 判断改为文件存在且大小大于 0。
+  - 变体生成改为写临时文件，校验非空后再 rename 成正式缓存文件。
+  - 新增 0 字节 preview 缓存回归测试。
+- 验证结果：
+  - `npm --workspace apps/server test`：通过，59 项执行，56 通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+  - `npm run build:server`：通过。
+  - `npm test`：通过。
+
+## 2026-05-16 Codex 封面缩略图启动预热报告
+
+- 背景：RAR 空响应修复后，冷缓存首屏会真实解压压缩包封面，首次加载较慢；缓存命中后同一缩略图约 7-8ms。
+- 实现：新增启动后后台封面缩略图预热；目录监听触发增量扫描完成后，自动预热对应库目录封面。
+- 本地验证：dev server 热更新后启动预热完成，38 个封面完成，0 个失败；刷新首屏时缩略图请求日志约 1-2ms。
+- 验证命令：
+  - `npm run build:server`：通过。
+  - `npm run test:server`：通过，61 项服务端测试执行，58 项通过，3 项真实 CBR 集成测试按环境变量缺失跳过。
+
+## 2026-05-16 Codex 大图分页索引回退修复报告
+
+- 问题现象：
+  - 在大图查看器看到第 24 张时，后续图片尚未加载。
+  - 点击下一张触发加载第 2 页后，查看器显示第 2 张，而不是第 25 张。
+- 根因：
+  - `ViewerGallery` 打开初始化逻辑依赖 `images.length`。
+  - 加载更多让列表长度变化后，初始化逻辑重新执行并把 `activeIndex` 重置为 `initialIndex`。
+  - 随后的 pending advance 只在被重置后的索引上加 1，因此出现第 2 张。
+- 修复：
+  - 查看器打开会话只初始化一次 `initialIndex` 和画质状态。
+  - 图片列表变化时只执行有效范围夹紧；扩容时保持当前索引，收缩时夹紧到最后一张。
+  - 新增 viewer 索引纯函数测试覆盖第 24 张追加后进入第 25 张的路径。
+- 验证结果：
+  - `npm --workspace apps/web test`：通过，27 项前端测试通过。
+  - `npm run lint:web`：通过。
+  - `npm run build:web`：通过。
+
+## 2026-05-16 Codex 首页前端异常修复报告
+
+- 问题现象：
+  - 首页主内容区域空白。
+  - 侧栏显示在视口右侧，符合整页横向位移容器停留在屏幕外侧时的表现。
+- 根因：
+  - 已登录会话刷新时，`useAppAuthBootstrap` 在异步鉴权恢复完成前先保留 `LOGIN` 屏幕。
+  - 鉴权成功后再切换到 `GALLERY`，使首页参与 `PageTransitionFrame` 的横向进入动画。
+  - `Sidebar` 位于该整页 motion 容器内部，外层 transform 异常时固定侧栏也会一起偏移。
+- 修复：
+  - `useAppAuthBootstrap` 新增首屏恢复状态返回值，并避免卸载后继续写状态。
+  - `App.tsx` 在首屏鉴权恢复期间显示静态加载层，最终初始页面确定后再挂载 `PageTransitionFrame`。
+- 验证结果：
+  - `npm run lint --workspace @moment-pic/web`：通过。
+  - `npm run test --workspace @moment-pic/web`：通过，27 项前端测试通过。
+  - `npm run build:web`：通过。
+- 未执行验证：
+  - Codex in-app browser 拒绝访问 `http://localhost:3210`，本轮未完成浏览器截图复验，也未绕过该限制。
+
+## 2026-05-16 Codex 大图结束跳转提示修复报告
+
+- 问题现象：当前图集结束后没有出现跳转到下一图集的提示。
+- 根因：
+  - 查看器只在“已经处于最后一张后再点一次下一张”时弹出结束提示。
+  - 从倒数第二张前进到最后一张时不会主动提示，交互上像是图集结束但没有后续动作。
+  - 下一图集 ID 只在进入详情时计算，目录相册和智能相册来源下存在候选丢失风险。
+- 修复：
+  - 到达最后一张且没有更多图片可加载时，自动显示 `ViewerEndPrompt`。
+  - 直接打开最后一张不会立即弹窗，只有通过下一张前进到末尾才触发。
+  - App 侧按普通相册、最近相册、智能相册成员、目录相册来源重新同步下一图集候选。
+- 验证结果：
+  - `npm --workspace apps/web test`：通过，29 项前端测试通过。
+  - `npm run lint:web`：通过。
+  - `npm run build:web`：通过。
+
+## 2026-05-16 Codex 大图结束提示触发时机调整报告
+
+- 需求：到最后一张后，再点击下一步才弹窗；进入最后一张不能立刻弹窗。
+- 修复：
+  - 移除到达最后一张后的自动弹窗 effect。
+  - 保留当前已经是最后一张时点击下一张才显示 `ViewerEndPrompt`。
+  - 新增 `resolveViewerNextAction` 测试表达交互契约。
+- 验证结果：
+  - `npm --workspace apps/web test`：通过，29 项前端测试通过。
+  - `npm run lint:web`：通过。
+  - `npm run build:web`：通过。
+
+## 2026-07-05 Codex 图集收藏与分享功能报告
+
+- 需求：图集详情页左侧菜单新增收藏/分享；图集封面页右下角展示收藏五角星并支持收藏/取消收藏；封面 hover 时左下角展示分享按钮；分享需要密码和有效期，公开链接只用分享密码认证，到期后失效。
+- 修复：
+  - 服务端新增 `is_favorite` 字段和 `album_shares` 表，提供收藏切换、分享创建、公开分享密码认证、公开分页和图片资源接口。
+  - 前端新增复用分享弹窗和公开分享页，封面卡片和详情页都接入收藏/分享按钮。
+  - 查看器预览 URL 支持公开分享资源路径，避免分享页切换画质时访问普通登录接口。
+- 验证结果：
+  - `npm run build:server`：通过。
+  - `npm run lint --workspace @moment-pic/web`：通过。
+  - `npm run test --workspace @moment-pic/server`：通过，58 项通过，3 项集成测试因环境变量未配置跳过。
+  - `npm run test --workspace @moment-pic/web`：通过，29 项通过。
+  - `npm run build --workspace @moment-pic/web`：通过。
+- 未执行验证：未启动真实浏览器做端到端点击烟测；建议在真实相册数据下快速确认复制链接、密码输入和到期失效提示。

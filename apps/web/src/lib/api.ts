@@ -31,7 +31,8 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       (error: AxiosError<ApiErrorResponse>) => {
-        if (error.response?.status === 401) {
+        const requestUrl = error.config?.url ?? '';
+        if (error.response?.status === 401 && !requestUrl.startsWith('/shares/')) {
           clearAuthSession();
           notifyAuthExpired();
         }

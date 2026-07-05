@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 
 import { ok } from "../lib/api.js";
+import { parseBoundedInteger, parseEnumValue, parseOptionalString } from "../lib/request-query.js";
 import { deleteAlbum, getAlbumAssets, getAlbumDetail, listAlbums, recordAlbumView, getRecentAlbums } from "../services/album-service.js";
 import { DirectoryAlbumPathInvalidError, DirectoryAlbumRootNotFoundError, listDirectoryAlbums } from "../services/directory-album-service.js";
 import { rescanAlbum, ScanAlbumNotFoundError, ScanAlbumSourceInvalidError, ScanLibraryRootNotFoundError } from "../services/library-scanner.js";
@@ -11,7 +12,7 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/albums/recent", async (request, reply) => {
     const query = request.query as { limit?: string };
-    const limit = Math.max(1, Math.min(100, Number(query.limit ?? 50)));
+    const limit = parseBoundedInteger(query.limit, { defaultValue: 50, min: 1, max: 100 });
     const payload = await getRecentAlbums(limit);
 
     return ok({ items: payload });
@@ -60,14 +61,14 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
       sortBy?: "name" | "updatedAt" | "assetCount";
       sortOrder?: "asc" | "desc";
     };
-    const page = Math.max(1, Number(query.page ?? 1));
-    const pageSize = Math.max(1, Math.min(100, Number(query.pageSize ?? 24)));
+    const page = parseBoundedInteger(query.page, { defaultValue: 1, min: 1, max: 100000 });
+    const pageSize = parseBoundedInteger(query.pageSize, { defaultValue: 24, min: 1, max: 100 });
     const payload = await listAlbums(page, pageSize, {
-      libraryRootId: query.libraryRootId,
-      sourceType: query.sourceType,
-      keyword: query.keyword,
-      sortBy: query.sortBy,
-      sortOrder: query.sortOrder
+      libraryRootId: parseOptionalString(query.libraryRootId),
+      sourceType: parseEnumValue(query.sourceType, ["folder", "zip"] as const),
+      keyword: parseOptionalString(query.keyword),
+      sortBy: parseEnumValue(query.sortBy, ["name", "updatedAt", "assetCount"] as const),
+      sortOrder: parseEnumValue(query.sortOrder, ["asc", "desc"] as const)
     });
     const etag = `"albums-${crypto.createHash("sha1").update(JSON.stringify(payload)).digest("hex")}"`;
     const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);
@@ -107,8 +108,8 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/v1/albums/:albumId/assets", async (request, reply) => {
     const { albumId } = request.params as { albumId: string };
     const query = request.query as { page?: string; pageSize?: string };
-    const page = Math.max(1, Number(query.page ?? 1));
-    const pageSize = Math.max(1, Math.min(300, Number(query.pageSize ?? 120)));
+    const page = parseBoundedInteger(query.page, { defaultValue: 1, min: 1, max: 100000 });
+    const pageSize = parseBoundedInteger(query.pageSize, { defaultValue: 120, min: 1, max: 300 });
     const payload = await getAlbumAssets(albumId, page, pageSize);
 
     if (!payload) {

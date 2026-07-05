@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { PageTransitionModeDTO, SystemConfigDTO } from '../types/api';
 
-type SystemConfigUpdates = {
+export type SystemConfigUpdates = {
   enablePolling?: boolean;
   pollingInterval?: number;
   preloadBefore?: number;

@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 
 import { isSupportedImageExtension } from "../lib/image-formats.js";
+import { createLogger } from "../lib/logger.js";
 import { normalizeExtension, toPosixPath } from "../lib/paths.js";
 import { nowIso } from "../lib/time.js";
 import type { AlbumRecord, AssetRecord, LibraryRootRecord, SourceType } from "../types/store.js";
@@ -17,7 +17,12 @@ import {
 import { findLibraryRootByIdDb, listLibraryRootsDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
 import { makeId } from "../repositories/ids.js";
 import { isArchiveFile, listRootImageEntries } from "./archive.js";
-import { rebuildSmartAlbums } from "./smart-album-service.js";
+import { runPostLibraryScanTasks } from "./library-scanner/post-scan-tasks.js";
+import { buildAssetsFingerprint, buildStableAssetId, mapWithConcurrency, sortNames } from "./library-scanner-utils.js";
+
+export { buildStableAssetId } from "./library-scanner-utils.js";
+
+const logger = createLogger("LibraryScanner");
 
 type ScannedAlbum = {
   name: string;
@@ -73,34 +78,6 @@ type ScanLibraryInput = {
     totalRoots: number;
   }) => void;
 };
-
-const mapWithConcurrency = async <T, R>(
-  items: T[],
-  concurrency: number,
-  mapper: (item: T) => Promise<R | null>
-): Promise<R[]> => {
-  const safeConcurrency = Math.max(1, Math.min(concurrency, 32));
-  const results: Array<R | null> = new Array(items.length).fill(null);
-  let cursor = 0;
-
-  const worker = async () => {
-    while (cursor < items.length) {
-      const index = cursor;
-      cursor += 1;
-      try {
-        results[index] = await mapper(items[index]);
-      } catch {
-        results[index] = null;
-      }
-    }
-  };
-
-  await Promise.all(Array.from({ length: safeConcurrency }, () => worker()));
-  return results.filter((item): item is R => item !== null);
-};
-
-const sortNames = (left: string, right: string): number =>
-  left.localeCompare(right, "zh-Hans-CN-u-kn-true");
 
 const getScanRoots = async (input?: ScanLibraryInput): Promise<LibraryRootRecord[]> => {
   const enabledRoots = listLibraryRootsDb().filter((root) => root.enabled);
@@ -293,10 +270,7 @@ const iterateArchiveAlbumsRecursively = async function* (
         yield archiveAlbum;
       }
     } catch (error) {
-      console.error(
-        `scan archive failed: ${fullPath}`,
-        error instanceof Error ? error.message : error
-      );
+      logger.error(`扫描归档失败：${fullPath}`, error instanceof Error ? error.message : error);
     }
   }
 };
@@ -332,39 +306,6 @@ const toAssetRecord = (albumId: string, timestamp: string, asset: ScannedAlbum["
   createdAt: timestamp,
   updatedAt: timestamp
 });
-
-const buildAssetsFingerprint = (assets: ScannedAlbum["assets"]): string =>
-  crypto
-    .createHash("sha1")
-    .update(
-      assets
-        .map((asset) =>
-          [
-            asset.name,
-            asset.extension,
-            asset.relativePath ?? "",
-            asset.zipEntryPath ?? "",
-            String(asset.sortIndex),
-            asset.sizeBytes ?? "",
-            asset.sourceMtime ?? ""
-          ].join("|")
-        )
-        .join("\n")
-    )
-    .digest("hex");
-
-export const buildStableAssetId = (asset: {
-  sourceType: SourceType;
-  sourcePath: string;
-  zipEntryPath: string | null;
-}): string => {
-  const hash = crypto
-    .createHash("sha1")
-    .update([asset.sourceType, asset.sourcePath, asset.zipEntryPath ?? ""].join("|"))
-    .digest("hex");
-
-  return `ast_${hash.slice(0, 32)}`;
-};
 
 const shouldReplaceAlbum = (
   existingAlbum: AlbumRecord,
@@ -561,7 +502,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
     }
   }
 
-  await rebuildSmartAlbums();
+  await runPostLibraryScanTasks();
 
   return {
     albumsDiscovered,
@@ -621,7 +562,7 @@ export const rescanAlbum = async (albumId: string) => {
     ]
   });
 
-  await rebuildSmartAlbums();
+  await runPostLibraryScanTasks();
 
   return {
     albumId: existingAlbum.id,

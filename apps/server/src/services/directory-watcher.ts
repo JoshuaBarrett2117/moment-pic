@@ -1,10 +1,14 @@
 import chokidar, { FSWatcher } from "chokidar";
 
+import { startCoverThumbnailWarmup } from "./cover-thumbnail-warmup.js";
 import { listExistingLibraryRoots } from "./library-scanner.js";
 import { scanLibrary } from "./library-scanner.js";
+import { createLogger } from "../lib/logger.js";
 import { nowIso } from "../lib/time.js";
 import { wsService } from "./websocket-service.js";
 import { getSystemConfigDb } from "../repositories/system-config-repository.js";
+
+const logger = createLogger("DirectoryWatcher");
 
 type WatchEventType = "add" | "change" | "unlink";
 
@@ -137,8 +141,15 @@ class DirectoryWatcherService {
         assetsDiscovered: result.assetsDiscovered,
         timestamp: nowIso()
       });
+      startCoverThumbnailWarmup({
+        reason: "watcher",
+        libraryRootId,
+        concurrency: 2,
+        limit: 300,
+        recentLimit: 120
+      });
     } catch (error) {
-      console.error(`[DirectoryWatcher] Incremental scan failed for ${libraryRootId}:`, error);
+      logger.error(`增量扫描失败：libraryRootId=${libraryRootId}`, error);
     } finally {
       const state = this.incrementalScanStates.get(libraryRootId);
       if (!state) {

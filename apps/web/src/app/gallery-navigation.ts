@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Screen } from '../types';
+import { clearAuthSession, hasAuthSession } from './auth-session';
 
 const STORAGE_KEY = 'gallery_filters';
 
@@ -275,7 +276,7 @@ export const useGalleryAppState = () => {
   );
 
   const resetToLogin = useCallback(() => {
-    localStorage.removeItem('auth_token');
+    clearAuthSession();
     setIsAuthenticated(false);
     setCurrentScreen(Screen.LOGIN);
     setActiveTab('gallery');
@@ -319,9 +320,9 @@ export const useGalleryAppState = () => {
   }, [filters]);
 
   useEffect(() => {
-    const hasToken = Boolean(localStorage.getItem('auth_token'));
-    const initialScreen = hasToken ? initialNavigation.screen : Screen.LOGIN;
-    const initialUrl = hasToken
+    const isSessionActive = hasAuthSession();
+    const initialScreen = isSessionActive ? initialNavigation.screen : Screen.LOGIN;
+    const initialUrl = isSessionActive
       ? buildUrl(initialFilters, {
           screen: initialNavigation.screen,
           selectedAlbumId: initialNavigation.selectedAlbumId,
@@ -334,11 +335,11 @@ export const useGalleryAppState = () => {
     window.history.replaceState(
       {
         screen: initialScreen,
-        selectedAlbum: hasToken ? initialNavigation.selectedAlbumId : null,
-        selectedSmartAlbum: hasToken ? initialNavigation.selectedSmartAlbumId : null,
-        activeTab: hasToken && initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery',
-        isRecentActive: hasToken ? initialNavigation.isRecentActive : false,
-        galleryViewMode: hasToken ? initialNavigation.galleryViewMode : 'albums',
+        selectedAlbum: isSessionActive ? initialNavigation.selectedAlbumId : null,
+        selectedSmartAlbum: isSessionActive ? initialNavigation.selectedSmartAlbumId : null,
+        activeTab: isSessionActive && initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery',
+        isRecentActive: isSessionActive ? initialNavigation.isRecentActive : false,
+        galleryViewMode: isSessionActive ? initialNavigation.galleryViewMode : 'albums',
       },
       '',
       initialUrl

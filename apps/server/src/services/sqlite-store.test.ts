@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getSystemConfigDb, updateSystemConfigDb } from "./sqlite-store.js";
+import { getSystemConfigDb, updateSystemConfigDb } from "../repositories/system-config-repository.js";
 
 test("getSystemConfigDb keeps balanced as the default image quality preset", () => {
   const previousConfig = getSystemConfigDb();

@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import { lookup as lookupMimeType } from "mime-types";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 
 import { ok } from "../lib/api.js";
+import { parseBoundedInteger, parseEnumValue } from "../lib/request-query.js";
 import { deleteAsset, getAssetDetail } from "../services/album-service.js";
 import { ThumbnailRequestGate } from "../services/thumbnail-request-gate.js";
 import {
@@ -14,8 +15,8 @@ import {
 } from "../services/thumbnail-service.js";
 
 const thumbnailRequestGate = new ThumbnailRequestGate({
-  maxActive: 24,
-  maxQueue: 320,
+  maxActive: 8,
+  maxQueue: 160,
   queueTimeoutMs: 8000
 });
 
@@ -33,7 +34,7 @@ const resolvePreferredFormat = (
 };
 
 const applyVariantCacheHeaders = async (
-  reply: any,
+  reply: FastifyReply,
   input: {
     etagPrefix: "thumb" | "preview";
     cacheKey: string;
@@ -56,19 +57,19 @@ const applyVariantCacheHeaders = async (
 };
 
 export const assetRoutes: FastifyPluginAsync = async (app) => {
-  const sendAssetNotFound = (reply: any) =>
+  const sendAssetNotFound = (reply: FastifyReply) =>
     reply.status(404).send({
       code: 4002,
       message: "asset not found"
     });
 
-  const sendOriginalSourceMissing = (reply: any) =>
+  const sendOriginalSourceMissing = (reply: FastifyReply) =>
     reply.status(404).send({
       code: 4005,
       message: "original asset source not found"
     });
 
-  const sendOriginalAssetFallback = async (assetId: string, reply: any) => {
+  const sendOriginalAssetFallback = async (assetId: string, reply: FastifyReply) => {
     const { asset, body, sizeBytes } = await openOriginalImage(assetId);
     const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
     if (sizeBytes !== null && Number.isFinite(sizeBytes)) {
@@ -92,10 +93,10 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/v1/assets/:assetId/thumbnail", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
     const query = request.query as { w?: string; h?: string; format?: "webp" | "jpeg" };
-    const requestedWidth = query.w ? Number(query.w) : undefined;
-    const requestedHeight = query.h ? Number(query.h) : undefined;
+    const requestedWidth = query.w ? parseBoundedInteger(query.w, { defaultValue: 0, min: 1, max: 4096 }) : undefined;
+    const requestedHeight = query.h ? parseBoundedInteger(query.h, { defaultValue: 0, min: 1, max: 4096 }) : undefined;
     const acceptHeader = normalizeHeader(request.headers.accept) ?? "";
-    const preferredFormat = resolvePreferredFormat(query.format, acceptHeader);
+    const preferredFormat = resolvePreferredFormat(parseEnumValue(query.format, ["webp", "jpeg"] as const), acceptHeader);
     const releaseSlot = await thumbnailRequestGate.acquire();
     if (!releaseSlot) {
       const stats = thumbnailRequestGate.getStats();
@@ -176,7 +177,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     const { assetId } = request.params as { assetId: string };
     const query = request.query as { preset?: "low" | "balanced" | "high"; format?: "webp" | "jpeg" };
     const acceptHeader = normalizeHeader(request.headers.accept) ?? "";
-    const preferredFormat = resolvePreferredFormat(query.format, acceptHeader);
+    const preferredFormat = resolvePreferredFormat(parseEnumValue(query.format, ["webp", "jpeg"] as const), acceptHeader);
     const releaseSlot = await thumbnailRequestGate.acquire();
     if (!releaseSlot) {
       const stats = thumbnailRequestGate.getStats();
@@ -195,7 +196,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     try {
       try {
         const preview = await ensurePreview(assetId, {
-          preset: query.preset,
+          preset: parseEnumValue(query.preset, ["low", "balanced", "high"] as const),
           format: preferredFormat
         });
         const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);

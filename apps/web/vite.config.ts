@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, loadEnv} from 'vite';
+import {defineConfig} from 'vite';
 
 const withUtf8Charset = (contentType: string): string => {
   if (/;\s*charset=/i.test(contentType)) {
@@ -20,8 +20,7 @@ const withUtf8Charset = (contentType: string): string => {
   return shouldAttach ? `${contentType}; charset=utf-8` : contentType;
 };
 
-export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig(() => {
   return {
     plugins: [
       react(),
@@ -45,9 +44,6 @@ export default defineConfig(({mode}) => {
         },
       },
     ],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -65,35 +61,6 @@ export default defineConfig(({mode}) => {
           target: 'ws://localhost:3211',
           ws: true,
           changeOrigin: true,
-        },
-      },
-    },
-    build: {
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (!id.includes('node_modules')) {
-              return;
-            }
-
-            if (id.includes('react') || id.includes('scheduler')) {
-              return 'vendor-react';
-            }
-
-            if (id.includes('photoswipe')) {
-              return 'vendor-photoswipe';
-            }
-
-            if (id.includes('motion')) {
-              return 'vendor-motion';
-            }
-
-            if (id.includes('lucide-react')) {
-              return 'vendor-icons';
-            }
-
-            return 'vendor-misc';
-          },
         },
       },
     },

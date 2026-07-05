@@ -1,6 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "http";
+import type { Duplex } from "node:stream";
+
+import { createLogger } from "../lib/logger.js";
+
+const logger = createLogger("WebSocket");
 
 type Client = {
   socket: WebSocket;
@@ -52,13 +57,13 @@ class WebSocketService {
       });
 
       ws.on("error", (error) => {
-        console.error(`[WebSocket] Client ${clientId} error:`, error);
+        logger.error(`客户端连接异常：clientId=${clientId}`, error);
         this.clients.delete(clientId);
       });
     });
   }
 
-  private handleUpgrade(request: IncomingMessage, socket: any, head: Buffer): void {
+  private handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
     if (!this.server) return;
 
     this.server.handleUpgrade(request, socket, head, (ws) => {

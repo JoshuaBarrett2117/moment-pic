@@ -8,8 +8,12 @@
   "scripts": {
     "dev:server": "npm run dev --workspace @moment-pic/server",
     "build:server": "npm run build --workspace @moment-pic/server",
+    "build:web": "npm run build --workspace @moment-pic/web",
+    "lint:web": "npm run lint --workspace @moment-pic/web",
     "start:server": "npm run start --workspace @moment-pic/server",
-    "prisma:generate": "npm run prisma:generate --workspace @moment-pic/server",
-    "prisma:migrate": "npm run prisma:migrate --workspace @moment-pic/server"
+    "test:server": "npm run test --workspace @moment-pic/server",
+    "test:web": "npm run test --workspace @moment-pic/web",
+    "test:rust": "node scripts/test-rust.mjs",
+    "test": "npm run test:server && npm run test:web && npm run lint:web && npm run build:server && npm run build:web"
   }
 }

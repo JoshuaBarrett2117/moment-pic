@@ -1,6 +1,6 @@
 ﻿import React, { useState } from 'react';
 import { AlertCircle, ArrowRight, Camera, Info, Lock, PersonStanding } from 'lucide-react';
-import { useWideMobile } from '../hooks';
+import { useAuth, useWideMobile } from '../hooks';
 import { Polaroid } from './Polaroid';
 import { WobblyButton } from './WobblyButton';
 
@@ -11,6 +11,7 @@ interface LoginScreenProps {
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }) => {
   const isWideMobile = useWideMobile();
+  const { login } = useAuth();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -26,21 +27,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
     setError(null);
 
     try {
-      const response = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-        credentials: 'include',
-      });
-
-      const data = await response.json();
-
-      if (data.code === 0) {
+      const didLogin = await login(username, password);
+      if (didLogin) {
         onLogin();
         return;
       }
 
-      const errorMsg = data.message || '登录失败';
+      const errorMsg = '用户名或密码错误';
       setError(errorMsg);
       onAuthError?.(errorMsg);
     } catch {

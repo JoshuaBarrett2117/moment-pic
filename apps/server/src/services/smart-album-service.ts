@@ -15,10 +15,21 @@ import type {
   SmartAlbumMatchRecord,
   SmartAlbumMemberRecord,
   SmartAlbumRecord,
-  SmartAlbumRuleNormalizeOptions,
   SmartAlbumRuleRecord
 } from "../types/store.js";
-import { createOpenAiChatCompletion, normalizeOpenAiEndpoint, parseJsonFromModelText } from "./openai-compatible-service.js";
+import { normalizeOpenAiEndpoint } from "./openai-compatible-service.js";
+import {
+  buildSmartAlbumRuleRecords,
+  normalizeSmartAlbumText,
+  type CandidateRecord,
+  type SmartAlbumScopeAlbum
+} from "./smart-album-ai-rule-builder.js";
+import { DEFAULT_OPENAI_MODEL, toSmartAlbumAiConfigDto, toSmartAlbumRuleDto } from "./smart-album-mappers.js";
+import {
+  buildAiCandidates,
+  testSmartAlbumAiProviderConnection,
+  type SmartAlbumAiConnectionTestInput
+} from "./smart-album-ai-candidates.js";
 import {
   findAlbumByIdDb,
   listAlbumsForSmartRuleScopeDb,
@@ -37,6 +48,8 @@ import {
 } from "../repositories/smart-album-repository.js";
 import { makeId } from "../repositories/ids.js";
 
+export { areAiRulePatternsAligned, buildRulePatternsFromAlbums, buildSmartAlbumRuleRecords } from "./smart-album-ai-rule-builder.js";
+
 type SmartAlbumRuleInput = Omit<SmartAlbumRuleDTO, "id" | "createdAt" | "updatedAt">;
 type SmartAlbumAiConfigInput = {
   enabled: boolean;
@@ -54,205 +67,6 @@ type SmartAlbumAiConfigInput = {
   preferredScopes: SmartAlbumRuleScopeDTO[];
   reviewRequiredBelowConfidence: number;
 };
-type SmartAlbumAiConnectionTestInput = {
-  provider?: "openai";
-  apiEndpoint?: string;
-  apiModel?: string;
-  apiToken?: string | null;
-};
-
-type CandidateRecord = {
-  albumId: string;
-  normalizedKey: string;
-  smartAlbumName: string;
-  confidence: number;
-  sourceEngine: "rule" | "ai";
-  ruleId: string | null;
-  matchedScopes: SmartAlbumRuleScopeDTO[];
-  matchedTokens: string[];
-  reason: string;
-};
-
-type AiCluster = {
-  name: string;
-  albumIds: string[];
-  confidence: number;
-  reason: string;
-};
-
-type SmartAlbumScopeAlbum = {
-  id: string;
-  name: string;
-  sourcePath: string;
-  assetCount: number;
-  sourceType: "folder" | "zip";
-};
-
-type GeneratedRuleCandidate = SmartAlbumRuleRecord & {
-  __albumIds: string[];
-};
-
-const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
-const MAX_AI_ALBUMS_PER_BATCH = 40;
-const OPENAI_GROUPING_TIMEOUT_MS = 90000;
-
-const parseJsonArray = (value: string): string[] => {
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-};
-
-const parseNormalizeOptions = (value: string): SmartAlbumRuleNormalizeOptions => {
-  try {
-    const parsed = JSON.parse(value);
-    return typeof parsed === "object" && parsed ? (parsed as SmartAlbumRuleNormalizeOptions) : {};
-  } catch {
-    return {};
-  }
-};
-
-const toRuleDto = (rule: SmartAlbumRuleRecord): SmartAlbumRuleDTO => ({
-  id: rule.id,
-  name: rule.name,
-  enabled: rule.enabled,
-  sourceEngine: rule.sourceEngine,
-  priority: rule.priority,
-  scope: rule.scope,
-  matchMode: rule.matchMode,
-  patterns: parseJsonArray(rule.patternsJson),
-  normalizeOptions: parseNormalizeOptions(rule.normalizeOptionsJson),
-  action: rule.action,
-  targetName: rule.targetName,
-  targetNameTemplate: rule.targetNameTemplate,
-  minAlbumCount: rule.minAlbumCount,
-  minConfidence: rule.minConfidence,
-  generatedNormalizedKey: rule.generatedNormalizedKey,
-  generatedConfidence: rule.generatedConfidence,
-  generatedReason: rule.generatedReason,
-  generatedRunId: rule.generatedRunId,
-  createdAt: rule.createdAt,
-  updatedAt: rule.updatedAt
-});
-
-const toAiConfigDto = (config: SmartAlbumAiConfigRecord): SmartAlbumAiConfigDTO => ({
-  id: config.id,
-  enabled: config.enabled,
-  mode: config.mode,
-  provider: "openai",
-  apiEndpoint: normalizeOpenAiEndpoint(config.apiEndpoint),
-  apiModel: config.apiModel || DEFAULT_OPENAI_MODEL,
-  hasApiToken: Boolean(config.apiToken?.trim()),
-  apiTokenMasked: config.apiToken?.trim() ? `${config.apiToken.trim().slice(0, 6)}...${config.apiToken.trim().slice(-4)}` : null,
-  minConfidenceAutoApply: config.minConfidenceAutoApply,
-  minClusterAlbumCount: config.minClusterAlbumCount,
-  maxSuggestionsPerRun: config.maxSuggestionsPerRun,
-  allowAliasMerge: config.allowAliasMerge,
-  allowCrossRootGrouping: config.allowCrossRootGrouping,
-  excludedTokens: parseJsonArray(config.excludedTokensJson),
-  preferredScopes: parseJsonArray(config.preferredScopesJson).filter(
-    (item): item is SmartAlbumRuleScopeDTO =>
-      item === "albumName" || item === "sourcePath" || item === "parentPath" || item === "assetFileName"
-  ),
-  reviewRequiredBelowConfidence: config.reviewRequiredBelowConfidence,
-  createdAt: config.createdAt,
-  updatedAt: config.updatedAt
-});
-
-const buildAiRuntimeConfig = (config: SmartAlbumAiConfigRecord, overrides?: SmartAlbumAiConnectionTestInput) => {
-  const endpoint = normalizeOpenAiEndpoint(overrides?.apiEndpoint ?? config.apiEndpoint);
-  const model = (overrides?.apiModel ?? config.apiModel ?? DEFAULT_OPENAI_MODEL).trim() || DEFAULT_OPENAI_MODEL;
-  const apiToken = overrides?.apiToken === undefined
-    ? (config.apiToken?.trim() || "")
-    : (overrides.apiToken?.trim() || "");
-
-  return {
-    endpoint,
-    model,
-    apiToken
-  };
-};
-
-const buildAiPromptAlbums = (
-  albums: Array<{
-    id: string;
-    name: string;
-    sourcePath: string;
-    assetCount: number;
-  }>
-) => albums.map((album) => ({
-  id: album.id,
-  name: album.name,
-  sourcePath: album.sourcePath,
-  parentPath: path.dirname(album.sourcePath),
-  assetCount: album.assetCount
-}));
-
-const buildAiSystemPrompt = () => [
-  "你是一个本地图库自动归纳助手。",
-  "请基于用户自己的图集内容，把明显属于同一人物、作者、系列、品牌或作品线的多个普通图集归纳到同一个自动整理下。",
-  "不要写死示例名称，不要臆造不存在的主体，不要输出单图集分组。",
-  "只有在你高度确信多个图集确实属于同一主题时才分组。",
-  "请严格返回 JSON，不要输出解释性文本。"
-].join("");
-
-const buildAiUserPrompt = (
-  albums: Array<{
-    id: string;
-    name: string;
-    sourcePath: string;
-    assetCount: number;
-  }>,
-  maxSuggestions: number
-) => JSON.stringify({
-  task: "group_albums",
-  requirements: {
-    maxSuggestions,
-    minAlbumsPerGroup: 2,
-    fields: ["name", "albumIds", "confidence", "reason"],
-    confidenceRange: "0-1",
-    avoidSingleAlbumGroups: true,
-    output: {
-      clusters: [
-        {
-          name: "归纳名称",
-          albumIds: ["必须使用输入中的 album id"],
-          confidence: 0.92,
-          reason: "简短说明依据"
-        }
-      ]
-    }
-  },
-  albums: buildAiPromptAlbums(albums)
-});
-
-const normalizeText = (input: string, options: SmartAlbumRuleNormalizeOptions): string => {
-  let output = input.normalize("NFKC");
-  if (options.normalizeCase !== false) {
-    output = output.toLowerCase();
-  }
-  if (options.stripSequenceNo !== false) {
-    output = output
-      .replace(/\b(?:no|vol|part)\.?\s*\d+\b/gi, " ")
-      .replace(/^\s*\d+[-_.\s]+/g, " ");
-  }
-  if (options.stripDate !== false) {
-    output = output.replace(/\b\d{4}([./-]\d{1,2}){1,2}\b/g, " ");
-  }
-  if (options.stripPageStats !== false) {
-    output = output.replace(/\b\d+\s*p(?:\d+\s*v)?\b/gi, " ");
-  }
-  if (options.stripSizeStats !== false) {
-    output = output.replace(/\b\d+(?:\.\d+)?\s*(?:kb|mb|gb|tb)\b/gi, " ");
-  }
-  if (options.trimSpaces !== false) {
-    output = output.replace(/[_\-()[\]{}]+/g, " ").replace(/\s+/g, " ").trim();
-  }
-  return output;
-};
-
 const extractScopeTexts = (scope: SmartAlbumRuleScopeDTO, album: { id: string; name: string; sourcePath: string }): string[] => {
   if (scope === "albumName") {
     return [album.name];
@@ -274,134 +88,6 @@ const buildTargetName = (rule: SmartAlbumRuleDTO, matchedToken: string): string 
     return rule.targetNameTemplate.replace(/\{\{\s*token\s*\}\}/gi, matchedToken).trim();
   }
   return matchedToken;
-};
-
-const tokenizeNormalizedText = (value: string): string[] =>
-  Array.from(new Set(value.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}A-Za-z0-9]+/gu) ?? []));
-
-const normalizePathSegment = (value: string): string => value.replace(/\\/g, "/").replace(/\/+$/, "").trim();
-
-const AI_TARGET_SUFFIXES = ["系列", "作品", "合集", "写真", "图集", "相关", "主题", "套图"] as const;
-
-const isValidAiKeywordPattern = (value: string): boolean => {
-  const normalized = value.trim();
-  if (!normalized || /^\d+$/.test(normalized)) {
-    return false;
-  }
-
-  if (/^\p{Script=Han}+$/u.test(normalized)) {
-    return Array.from(normalized).length >= 2;
-  }
-
-  if (/^[A-Za-z]+(?:\s+[A-Za-z]+)+$/.test(normalized)) {
-    return normalized.split(/\s+/).filter(Boolean).length >= 2;
-  }
-
-  if (/^[A-Za-z]+$/.test(normalized)) {
-    return normalized.length >= 4;
-  }
-
-  return normalized.length >= 2;
-};
-
-const expandAiSemanticTokens = (tokens: string[]): string[] => {
-  const expanded = new Set<string>();
-  for (const token of tokens) {
-    if (!token) {
-      continue;
-    }
-
-    let candidate = token.trim();
-    let trimmedAny = false;
-    while (candidate) {
-      let trimmed = false;
-      for (const suffix of AI_TARGET_SUFFIXES) {
-        if (!candidate.endsWith(suffix) || candidate.length <= suffix.length + 1) {
-          continue;
-        }
-        candidate = candidate.slice(0, -suffix.length).trim();
-        if (candidate) {
-          expanded.add(candidate);
-        }
-        trimmed = true;
-        trimmedAny = true;
-        break;
-      }
-      if (!trimmed) {
-        break;
-      }
-    }
-
-    if (!trimmedAny) {
-      expanded.add(token);
-    }
-  }
-
-  return Array.from(expanded).filter(Boolean);
-};
-
-const buildAiTargetTokens = (targetName: string, normalizeOptions: SmartAlbumRuleNormalizeOptions): string[] => {
-  const normalizedTargetName = normalizeText(targetName, normalizeOptions);
-  return expandAiSemanticTokens(
-    tokenizeNormalizedText(normalizedTargetName).filter((token) => isValidAiKeywordPattern(token))
-  );
-};
-
-const buildAiPathSegments = (sourcePath: string): string[] => {
-  const segments = normalizePathSegment(sourcePath).split("/").filter(Boolean);
-  let currentIndex = -1;
-  for (let index = segments.length - 1; index >= 0; index -= 1) {
-    const segment = segments[index] ?? "";
-    if (!segment || /^\d+$/.test(segment)) {
-      continue;
-    }
-    currentIndex = index;
-    break;
-  }
-
-  if (currentIndex < 0) {
-    return [];
-  }
-
-  const currentSegment = segments[currentIndex] ?? "";
-  const parentSegment = currentIndex > 0 ? (segments[currentIndex - 1] ?? "") : "";
-  return [currentSegment, parentSegment].filter(Boolean);
-};
-
-const extractAiScopeTexts = (scope: SmartAlbumRuleScopeDTO, album: SmartAlbumScopeAlbum): string[] => {
-  if (scope === "albumName") {
-    return [album.name];
-  }
-  if (scope === "sourcePath") {
-    return buildAiPathSegments(album.sourcePath);
-  }
-  if (scope === "parentPath") {
-    return buildAiPathSegments(album.sourcePath).slice(1, 2);
-  }
-  return [];
-};
-
-export const areAiRulePatternsAligned = (patterns: string[], targetName: string): boolean => {
-  const normalizeOptions: SmartAlbumRuleNormalizeOptions = {
-    trimSpaces: true,
-    normalizeCase: true,
-    stripSequenceNo: true,
-    stripDate: true,
-    stripPageStats: true,
-    stripSizeStats: true
-  };
-  const normalizedTargetName = normalizeText(targetName, normalizeOptions);
-  if (!normalizedTargetName) {
-    return false;
-  }
-
-  const targetTokens = new Set(buildAiTargetTokens(targetName, normalizeOptions));
-
-  return patterns.length > 0 && patterns.every((pattern) => {
-    const normalizedPattern = normalizeText(pattern, normalizeOptions);
-    return isValidAiKeywordPattern(normalizedPattern)
-      && (normalizedPattern === normalizedTargetName || targetTokens.has(normalizedPattern));
-  });
 };
 
 const matchPattern = (mode: SmartAlbumRuleDTO["matchMode"], haystack: string, pattern: string): boolean => {
@@ -432,9 +118,9 @@ const buildRuleCandidates = (rule: SmartAlbumRuleDTO, albums: SmartAlbumScopeAlb
     const texts = extractScopeTexts(rule.scope, album);
     let matched = false;
     for (const rawText of texts) {
-      const normalizedText = normalizeText(rawText, rule.normalizeOptions);
+      const normalizedText = normalizeSmartAlbumText(rawText, rule.normalizeOptions);
       for (const rawPattern of rule.patterns) {
-        const normalizedPattern = normalizeText(rawPattern, rule.normalizeOptions);
+        const normalizedPattern = normalizeSmartAlbumText(rawPattern, rule.normalizeOptions);
         if (!normalizedPattern) {
           continue;
         }
@@ -443,7 +129,7 @@ const buildRuleCandidates = (rule: SmartAlbumRuleDTO, albums: SmartAlbumScopeAlb
         }
 
         const targetName = buildTargetName(rule, rawPattern);
-        const normalizedKey = normalizeText(targetName, rule.normalizeOptions);
+        const normalizedKey = normalizeSmartAlbumText(targetName, rule.normalizeOptions);
         if (!normalizedKey) {
           continue;
         }
@@ -470,314 +156,6 @@ const buildRuleCandidates = (rule: SmartAlbumRuleDTO, albums: SmartAlbumScopeAlb
   }
 
   return matches.filter((match) => (albumCounts.get(match.normalizedKey) ?? 0) >= rule.minAlbumCount);
-};
-
-const buildScopeTokenSet = (
-  album: SmartAlbumScopeAlbum,
-  scope: SmartAlbumRuleScopeDTO,
-  normalizeOptions: SmartAlbumRuleNormalizeOptions
-): Set<string> => {
-  const texts = extractScopeTexts(scope, album);
-  const tokens = new Set<string>();
-
-  for (const text of texts) {
-    const normalized = normalizeText(text, normalizeOptions);
-    for (const token of tokenizeNormalizedText(normalized)) {
-      if (!isValidAiKeywordPattern(token)) {
-        continue;
-      }
-      tokens.add(token);
-    }
-  }
-
-  return tokens;
-};
-
-const buildAiScopeTokenSet = (
-  album: SmartAlbumScopeAlbum,
-  scope: SmartAlbumRuleScopeDTO,
-  normalizeOptions: SmartAlbumRuleNormalizeOptions
-): Set<string> => {
-  const texts = extractAiScopeTexts(scope, album);
-  const tokens = new Set<string>();
-
-  for (const text of texts) {
-    const normalized = normalizeText(text, normalizeOptions);
-    for (const token of expandAiSemanticTokens(tokenizeNormalizedText(normalized))) {
-      if (!isValidAiKeywordPattern(token)) {
-        continue;
-      }
-      tokens.add(token);
-    }
-  }
-
-  return tokens;
-};
-
-const getPreferredAiScopes = (config?: SmartAlbumAiConfigRecord): SmartAlbumRuleScopeDTO[] => {
-  const configuredScopes = config
-    ? parseJsonArray(config.preferredScopesJson).filter(
-        (item): item is SmartAlbumRuleScopeDTO => item === "albumName" || item === "sourcePath" || item === "parentPath"
-      )
-    : [];
-  const fallbackScopes: SmartAlbumRuleScopeDTO[] = ["albumName", "sourcePath", "parentPath"];
-  return [...configuredScopes, ...fallbackScopes].filter((scope, index, list) => list.indexOf(scope) === index);
-};
-
-const deriveAiRuleScope = (albums: SmartAlbumScopeAlbum[], config?: SmartAlbumAiConfigRecord): SmartAlbumRuleScopeDTO => {
-  const normalizeOptions: SmartAlbumRuleNormalizeOptions = {
-    trimSpaces: true,
-    normalizeCase: true,
-    stripSequenceNo: true,
-    stripDate: true,
-    stripPageStats: true,
-    stripSizeStats: true
-  };
-  const scopes = getPreferredAiScopes(config);
-  let bestScope: SmartAlbumRuleScopeDTO = "albumName";
-  let bestScore = -1;
-
-  for (const scope of scopes) {
-    const tokenCounts = new Map<string, number>();
-    for (const album of albums) {
-      for (const token of buildAiScopeTokenSet(album, scope, normalizeOptions)) {
-        tokenCounts.set(token, (tokenCounts.get(token) ?? 0) + 1);
-      }
-    }
-
-    const score = Array.from(tokenCounts.values()).filter((count) => count >= 2).length;
-    if (score > 0 && scope === scopes[0]) {
-      return scope;
-    }
-    if (score > bestScore) {
-      bestScope = scope;
-      bestScore = score;
-    }
-  }
-
-  return bestScope;
-};
-
-export const buildRulePatternsFromAlbums = (
-  albums: SmartAlbumScopeAlbum[],
-  scope: SmartAlbumRuleScopeDTO,
-  config: SmartAlbumAiConfigRecord,
-  targetName?: string
-): string[] => {
-  const genericNormalizeOptions: SmartAlbumRuleNormalizeOptions = {
-    trimSpaces: true,
-    normalizeCase: true,
-    stripSequenceNo: true,
-    stripDate: true,
-    stripPageStats: true,
-    stripSizeStats: true
-  };
-  const excludedTokens = new Set(
-    [
-      "moment",
-      "写真",
-      "套图",
-      "合集",
-      "图片",
-      "中国",
-      ...parseJsonArray(config.excludedTokensJson).map((item) => normalizeText(item, genericNormalizeOptions))
-    ].filter(Boolean)
-  );
-  const tokenToAlbums = new Map<string, Set<string>>();
-  const targetTokens = targetName
-    ? buildAiTargetTokens(targetName, genericNormalizeOptions)
-        .filter((token) => !excludedTokens.has(token))
-    : [];
-
-  for (const album of albums) {
-    for (const token of buildAiScopeTokenSet(album, scope, genericNormalizeOptions)) {
-      if (excludedTokens.has(token)) {
-        continue;
-      }
-      const bucket = tokenToAlbums.get(token) ?? new Set<string>();
-      bucket.add(album.id);
-      tokenToAlbums.set(token, bucket);
-    }
-  }
-
-  const prioritizedTargetTokens = targetTokens
-    .filter((token, index, list) => list.indexOf(token) === index)
-    .filter((token) => (tokenToAlbums.get(token)?.size ?? 0) >= config.minClusterAlbumCount)
-
-  if (prioritizedTargetTokens.length > 0) {
-    return prioritizedTargetTokens;
-  }
-
-  return Array.from(tokenToAlbums.entries())
-    .filter(([, albumIds]) => albumIds.size >= config.minClusterAlbumCount)
-    .sort((left, right) => {
-      const coverageDiff = right[1].size - left[1].size;
-      if (coverageDiff !== 0) {
-        return coverageDiff;
-      }
-      return right[0].length - left[0].length;
-    })
-    .map(([token]) => token);
-};
-
-const buildHeuristicAiCandidates = (config: SmartAlbumAiConfigRecord, albums: SmartAlbumScopeAlbum[]): CandidateRecord[] => {
-  const scope = deriveAiRuleScope(albums, config);
-  const genericNormalizeOptions: SmartAlbumRuleNormalizeOptions = {
-    trimSpaces: true,
-    normalizeCase: true,
-    stripSequenceNo: true,
-    stripDate: true,
-    stripPageStats: true,
-    stripSizeStats: true
-  };
-  const excludedTokens = new Set(
-    [
-      "moment",
-      "写真",
-      "套图",
-      "合集",
-      "图片",
-      "中国",
-      ...parseJsonArray(config.excludedTokensJson).map((item) => normalizeText(item, genericNormalizeOptions))
-    ].filter(Boolean)
-  );
-  const tokenToAlbums = new Map<string, Set<string>>();
-
-  for (const album of albums) {
-    const tokens = Array.from(buildAiScopeTokenSet(album, scope, genericNormalizeOptions)).filter((token) => !excludedTokens.has(token));
-    for (const token of tokens) {
-      const bucket = tokenToAlbums.get(token) ?? new Set<string>();
-      bucket.add(album.id);
-      tokenToAlbums.set(token, bucket);
-    }
-  }
-
-  const candidates: CandidateRecord[] = [];
-  for (const [token, albumIds] of tokenToAlbums.entries()) {
-    if (albumIds.size < config.minClusterAlbumCount) {
-      continue;
-    }
-
-    const confidence = Math.min(0.98, 0.55 + Math.min(albumIds.size, 8) * 0.06 + Math.min(token.length, 8) * 0.015);
-    for (const albumId of albumIds) {
-      candidates.push({
-        albumId,
-        normalizedKey: token,
-        smartAlbumName: token,
-        confidence,
-        sourceEngine: "ai",
-        ruleId: null,
-        matchedScopes: ["albumName"],
-        matchedTokens: [token],
-        reason: `matched by ai-cluster:${token}`
-      });
-    }
-  }
-
-  return candidates;
-};
-
-const mapAiClustersToCandidates = (
-  clusters: AiCluster[],
-  albumMap: Map<string, SmartAlbumScopeAlbum>
-): CandidateRecord[] =>
-  clusters.flatMap((cluster) => {
-    const uniqueAlbumIds = Array.from(new Set(cluster.albumIds)).filter((albumId) => albumMap.has(albumId));
-    if (uniqueAlbumIds.length < 2) {
-      return [];
-    }
-
-    const normalizedName = normalizeText(cluster.name, {
-      trimSpaces: true,
-      normalizeCase: true
-    });
-    if (!normalizedName) {
-      return [];
-    }
-
-    const confidence = Math.max(0, Math.min(1, Number(cluster.confidence) || 0));
-    return uniqueAlbumIds.map((albumId) => ({
-      albumId,
-      normalizedKey: normalizedName,
-      smartAlbumName: cluster.name.trim(),
-      confidence,
-      sourceEngine: "ai" as const,
-      ruleId: null,
-      matchedScopes: ["albumName"],
-      matchedTokens: [cluster.name.trim()],
-      reason: cluster.reason?.trim() || "matched by openai"
-    }));
-  });
-
-const requestOpenAiClusters = async (
-  config: SmartAlbumAiConfigRecord,
-  albums: SmartAlbumScopeAlbum[]
-): Promise<AiCluster[]> => {
-  const runtime = buildAiRuntimeConfig(config);
-  if (!runtime.apiToken) {
-    return [];
-  }
-
-  const text = await createOpenAiChatCompletion(
-    {
-      endpoint: runtime.endpoint,
-      apiToken: runtime.apiToken,
-      model: runtime.model
-    },
-    {
-      messages: [
-        { role: "system", content: buildAiSystemPrompt() },
-        { role: "user", content: buildAiUserPrompt(albums, config.maxSuggestionsPerRun) }
-      ],
-      maxTokens: 2400,
-      temperature: 0.1,
-      timeoutMs: OPENAI_GROUPING_TIMEOUT_MS
-    }
-  );
-
-  const parsed = parseJsonFromModelText<{ clusters?: AiCluster[] }>(text);
-  return Array.isArray(parsed?.clusters) ? parsed.clusters : [];
-};
-
-const buildOpenAiCandidates = async (config: SmartAlbumAiConfigRecord, albums: SmartAlbumScopeAlbum[]): Promise<CandidateRecord[]> => {
-  if (albums.length < config.minClusterAlbumCount) {
-    return [];
-  }
-
-  const albumMap = new Map(albums.map((album) => [album.id, album]));
-  const candidates: CandidateRecord[] = [];
-  for (let index = 0; index < albums.length; index += MAX_AI_ALBUMS_PER_BATCH) {
-    const batch = albums.slice(index, index + MAX_AI_ALBUMS_PER_BATCH);
-    const clusters = await requestOpenAiClusters(config, batch);
-    candidates.push(...mapAiClustersToCandidates(clusters, albumMap));
-  }
-
-  return candidates.filter((candidate) => {
-    return candidate.confidence > 0;
-  });
-};
-
-const buildAiCandidates = async (albums: SmartAlbumScopeAlbum[]): Promise<CandidateRecord[]> => {
-  const config = getSmartAlbumAiConfigDb();
-  if (!config.enabled) {
-    return [];
-  }
-
-  const runtime = buildAiRuntimeConfig(config);
-  if (!runtime.apiToken) {
-    return buildHeuristicAiCandidates(config, albums);
-  }
-
-  try {
-    return await buildOpenAiCandidates(config, albums);
-  } catch (error) {
-    const runtime = buildAiRuntimeConfig(config);
-    console.error(
-      `[smart-album-service] OpenAI grouping failed, fallback to heuristic AI: endpoint=${runtime.endpoint} model=${runtime.model} batchSize=${MAX_AI_ALBUMS_PER_BATCH} timeoutMs=${OPENAI_GROUPING_TIMEOUT_MS}`,
-      error
-    );
-    return buildHeuristicAiCandidates(config, albums);
-  }
 };
 
 const buildSmartAlbumRecords = (candidates: CandidateRecord[], runId: string) => {
@@ -852,102 +230,13 @@ const buildSmartAlbumRecords = (candidates: CandidateRecord[], runId: string) =>
   return { smartAlbums, members, matchRecords };
 };
 
-export const buildSmartAlbumRuleRecords = (
-  candidates: CandidateRecord[],
-  albums: SmartAlbumScopeAlbum[],
-  runId: string,
-  config: SmartAlbumAiConfigRecord
-): SmartAlbumRuleRecord[] => {
-  const grouped = new Map<string, CandidateRecord[]>();
-  for (const candidate of candidates) {
-    const current = grouped.get(candidate.normalizedKey) ?? [];
-    current.push(candidate);
-    grouped.set(candidate.normalizedKey, current);
-  }
-
-  const albumMap = new Map(albums.map((album) => [album.id, album]));
-  const timestamp = new Date().toISOString();
-
-  const rawRules = Array.from(grouped.entries()).flatMap(([normalizedKey, items]) => {
-    const albumRows = Array.from(new Set(items.map((item) => item.albumId))).map((albumId) => albumMap.get(albumId)).filter((item): item is SmartAlbumScopeAlbum => Boolean(item));
-    if (albumRows.length < 2) {
-      return [];
-    }
-
-    const scope = deriveAiRuleScope(albumRows, config);
-    const targetName = items[0]?.smartAlbumName?.trim() || normalizedKey;
-    const patterns = buildRulePatternsFromAlbums(albumRows, scope, config, targetName).slice(0, 5);
-    const normalizedPatterns = (patterns.length > 0 ? patterns : [targetName]).filter((pattern) => isValidAiKeywordPattern(pattern));
-    if (!areAiRulePatternsAligned(normalizedPatterns, targetName)) {
-      return [];
-    }
-    const confidence = Math.max(0, Math.min(1, Number(items.reduce((sum, item) => sum + item.confidence, 0) / items.length) || 0));
-
-    const createdRule: SmartAlbumRuleRecord = {
-      id: makeId("sar"),
-      name: `AI生成：${targetName}`,
-      enabled: true,
-      sourceEngine: "ai",
-      priority: 20,
-      scope,
-      matchMode: "contains",
-      patternsJson: JSON.stringify(Array.from(new Set(normalizedPatterns))),
-      normalizeOptionsJson: JSON.stringify({
-        trimSpaces: true,
-        normalizeCase: true,
-        stripSequenceNo: true,
-        stripDate: true,
-        stripPageStats: true,
-        stripSizeStats: true
-      }),
-      action: "assignSmartAlbum",
-      targetName,
-      targetNameTemplate: null,
-      minAlbumCount: Math.max(2, albumRows.length),
-      minConfidence: confidence,
-      generatedNormalizedKey: normalizedKey,
-      generatedConfidence: confidence,
-      generatedReason: `generated from ai run ${runId}`,
-      generatedRunId: runId,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    };
-
-    return [createdRule];
-  });
-
-  const mergedRules = new Map<string, SmartAlbumRuleRecord>();
-  for (const rule of rawRules) {
-    const patterns = parseJsonArray(rule.patternsJson);
-    const mergeKey = JSON.stringify([...patterns].sort());
-    const existing = mergedRules.get(mergeKey);
-    if (!existing) {
-      mergedRules.set(mergeKey, rule);
-      continue;
-    }
-
-    const shouldReplace = rule.minAlbumCount > existing.minAlbumCount
-      || (rule.minAlbumCount === existing.minAlbumCount && rule.minConfidence > existing.minConfidence)
-      || (
-        rule.minAlbumCount === existing.minAlbumCount
-        && rule.minConfidence === existing.minConfidence
-        && (rule.targetName?.length ?? 0) < (existing.targetName?.length ?? 0)
-      );
-    if (shouldReplace) {
-      mergedRules.set(mergeKey, rule);
-    }
-  }
-
-  return Array.from(mergedRules.values());
-};
-
 const collectCandidateAlbumIds = (candidates: CandidateRecord[]): Set<string> => new Set(candidates.map((candidate) => candidate.albumId));
 
 export const rebuildSmartAlbums = async (): Promise<{ smartAlbumsDiscovered: number; membersDiscovered: number }> => {
   const albums = listAlbumsForSmartRuleScopeDb();
   const rules = listSmartAlbumRulesDb().filter((rule) => rule.enabled && rule.action === "assignSmartAlbum");
   const baseRules = rules.filter((rule) => rule.sourceEngine !== "ai");
-  const baseRuleDtos = baseRules.map(toRuleDto);
+  const baseRuleDtos = baseRules.map(toSmartAlbumRuleDto);
   const baseCandidates = baseRuleDtos.flatMap((rule) => buildRuleCandidates(rule, albums));
   const coveredAlbumIds = collectCandidateAlbumIds(baseCandidates);
   const remainingAlbums = albums.filter((album) => !coveredAlbumIds.has(album.id));
@@ -955,7 +244,7 @@ export const rebuildSmartAlbums = async (): Promise<{ smartAlbumsDiscovered: num
 
   if (aiConfig.enabled) {
     const aiCandidates = remainingAlbums.length >= aiConfig.minClusterAlbumCount
-      ? await buildAiCandidates(remainingAlbums)
+      ? await buildAiCandidates(aiConfig, remainingAlbums)
       : [];
     const aiRules = aiCandidates.length > 0
       ? buildSmartAlbumRuleRecords(aiCandidates, remainingAlbums, makeId("srun"), aiConfig)
@@ -965,7 +254,7 @@ export const rebuildSmartAlbums = async (): Promise<{ smartAlbumsDiscovered: num
 
   const refreshedRules = listSmartAlbumRulesDb().filter((rule) => rule.enabled && rule.action === "assignSmartAlbum");
   const candidates = refreshedRules
-    .flatMap((rule) => buildRuleCandidates(toRuleDto(rule), albums))
+    .flatMap((rule) => buildRuleCandidates(toSmartAlbumRuleDto(rule), albums))
     .reduce((map, candidate) => {
       const key = `${candidate.albumId}:${candidate.normalizedKey}`;
       const existing = map.get(key);
@@ -1058,9 +347,9 @@ export const getSmartAlbumMembers = async (smartAlbumId: string): Promise<SmartA
     .filter((item): item is SmartAlbumMemberDTO => item !== null);
 };
 
-export const listSmartAlbumRules = async (): Promise<SmartAlbumRuleDTO[]> => listSmartAlbumRulesDb().map(toRuleDto);
+export const listSmartAlbumRules = async (): Promise<SmartAlbumRuleDTO[]> => listSmartAlbumRulesDb().map(toSmartAlbumRuleDto);
 
-export const getSmartAlbumAiConfig = async (): Promise<SmartAlbumAiConfigDTO> => toAiConfigDto(getSmartAlbumAiConfigDb());
+export const getSmartAlbumAiConfig = async (): Promise<SmartAlbumAiConfigDTO> => toSmartAlbumAiConfigDto(getSmartAlbumAiConfigDb());
 
 export const updateSmartAlbumAiConfig = async (input: SmartAlbumAiConfigInput): Promise<SmartAlbumAiConfigDTO> => {
   const existing = getSmartAlbumAiConfigDb();
@@ -1084,58 +373,12 @@ export const updateSmartAlbumAiConfig = async (input: SmartAlbumAiConfigInput): 
     preferredScopesJson: JSON.stringify(input.preferredScopes),
     reviewRequiredBelowConfidence: input.reviewRequiredBelowConfidence
   });
-  return toAiConfigDto(updated);
+  return toSmartAlbumAiConfigDto(updated);
 };
 
 export const testSmartAlbumAiConnection = async (input?: SmartAlbumAiConnectionTestInput): Promise<SmartAlbumAiConnectionTestDTO> => {
   const config = getSmartAlbumAiConfigDb();
-  const runtime = buildAiRuntimeConfig(config, input);
-
-  if (!runtime.apiToken) {
-    return {
-      success: false,
-      message: "请先填写 OpenAI Token",
-      endpoint: runtime.endpoint,
-      model: runtime.model,
-      latencyMs: 0
-    };
-  }
-
-  const startedAt = Date.now();
-  try {
-    const text = await createOpenAiChatCompletion(
-      {
-        endpoint: runtime.endpoint,
-        apiToken: runtime.apiToken,
-        model: runtime.model
-      },
-      {
-        messages: [
-          { role: "system", content: "你是连接测试助手，请只回复 OK。" },
-          { role: "user", content: "请回复 OK" }
-        ],
-        maxTokens: 16,
-        temperature: 0,
-        timeoutMs: 20000
-      }
-    );
-
-    return {
-      success: true,
-      message: `连接成功，模型返回：${text.slice(0, 80)}`,
-      endpoint: runtime.endpoint,
-      model: runtime.model,
-      latencyMs: Date.now() - startedAt
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "连接测试失败",
-      endpoint: runtime.endpoint,
-      model: runtime.model,
-      latencyMs: Date.now() - startedAt
-    };
-  }
+  return testSmartAlbumAiProviderConnection(config, input);
 };
 
 export const testSmartAlbumRule = async (ruleId: string): Promise<SmartAlbumRuleTestResultDTO | null> => {
@@ -1143,7 +386,7 @@ export const testSmartAlbumRule = async (ruleId: string): Promise<SmartAlbumRule
   if (!rule) {
     return null;
   }
-  const ruleDto = toRuleDto(rule);
+  const ruleDto = toSmartAlbumRuleDto(rule);
   const matchedAlbums = buildRuleCandidates(ruleDto, listAlbumsForSmartRuleScopeDb())
     .map((item) => {
       const album = findAlbumByIdDb(item.albumId);

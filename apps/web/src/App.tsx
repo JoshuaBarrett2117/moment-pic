@@ -1,13 +1,18 @@
 import { useCallback, useEffect, lazy, Suspense, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
 import { PaperGrain } from './components/PaperGrain';
 import { useRecentAlbums, recordAlbumView, useSystemConfig } from './hooks';
 import { api } from './lib/api';
-import type { AlbumListItemDTO, DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
-import { buildUrl, useGalleryAppState } from './app/gallery-navigation';
+import type { DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
+import { clearAuthSession, markAuthSession } from './app/auth-session';
+import { useGalleryAppState } from './app/gallery-navigation';
+import { buildDirectoryNavigationAlbums, buildGalleryScreenModel, resolveNextAlbumId } from './app/gallery-screen-model';
+import { buildSmartAlbumMemberAlbums, resolveSmartAlbumMemberSortBy } from './app/smart-album-member-albums';
 import { useGalleryDataController } from './app/use-gallery-data-controller';
+import { useAppAuthBootstrap } from './app/useAppAuthBootstrap';
+import { useGalleryFilterActions } from './app/useGalleryFilterActions';
+import { PageTransitionFrame } from './app/PageTransitionFrame';
 
 const GalleryScreen = lazy(() =>
   import('./components/GalleryScreen').then((module) => ({
@@ -93,66 +98,7 @@ export default function App() {
     }
   }, [fetchSystemConfig, isAuthenticated]);
 
-  useEffect(() => {
-    const verifyAuth = async () => {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        localStorage.removeItem('auth_token');
-        setIsAuthenticated(false);
-        setCurrentScreen(Screen.LOGIN);
-        setActiveTab('gallery');
-        setIsRecentActive(false);
-        setGalleryViewMode('albums');
-        setSelectedAlbum(null);
-        setSelectedSmartAlbum(null);
-        setNextAlbumId(null);
-        window.history.replaceState(null, '', window.location.pathname);
-        return;
-      }
-
-      try {
-        await api.get('/albums', { page: 1, pageSize: 1 });
-        setIsAuthenticated(true);
-        setSelectedAlbum(initialNavigation.selectedAlbumId);
-        setSelectedSmartAlbum(initialNavigation.selectedSmartAlbumId);
-        setIsRecentActive(initialNavigation.isRecentActive);
-        setGalleryViewMode(initialNavigation.galleryViewMode);
-        setActiveTab(initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery');
-        window.history.replaceState(
-          {
-            screen: initialNavigation.screen,
-            selectedAlbum: initialNavigation.selectedAlbumId,
-            selectedSmartAlbum: initialNavigation.selectedSmartAlbumId,
-            activeTab: initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery',
-            isRecentActive: initialNavigation.isRecentActive,
-            galleryViewMode: initialNavigation.galleryViewMode,
-          },
-          '',
-          buildUrl(initialFilters, {
-            screen: initialNavigation.screen,
-            selectedAlbumId: initialNavigation.selectedAlbumId,
-            selectedSmartAlbumId: initialNavigation.selectedSmartAlbumId,
-            isRecentActive: initialNavigation.isRecentActive,
-            galleryViewMode: initialNavigation.galleryViewMode,
-          })
-        );
-        setCurrentScreen(initialNavigation.screen);
-      } catch {
-        localStorage.removeItem('auth_token');
-        setIsAuthenticated(false);
-        setCurrentScreen(Screen.LOGIN);
-        setActiveTab('gallery');
-        setIsRecentActive(false);
-        setGalleryViewMode('albums');
-        setSelectedAlbum(null);
-        setSelectedSmartAlbum(null);
-        setNextAlbumId(null);
-        window.history.replaceState(null, '', window.location.pathname);
-      }
-    };
-
-    void verifyAuth();
-  }, [
+  const isAuthBootstrapping = useAppAuthBootstrap({
     initialFilters,
     initialNavigation,
     setActiveTab,
@@ -163,29 +109,76 @@ export default function App() {
     setNextAlbumId,
     setSelectedAlbum,
     setSelectedSmartAlbum,
+  });
+  const {
+    activateDirectoryAlbumsFilters,
+    activateSmartAlbumsFilters,
+    enterDirectoryNodeFilters,
+    handleKeywordChange,
+    handleLibraryRootChangeFilters,
+    handlePageChange,
+    handlePageSizeChange,
+    handleSortByChange,
+    handleSortOrderChange,
+    handleSourceTypeChange,
+    resetToAlbumFilters,
+  } = useGalleryFilterActions({
+    filters,
+    setFilters,
+    setScrollPosition,
+  });
+
+  const smartAlbumMemberSortBy = resolveSmartAlbumMemberSortBy(filters.sortBy);
+  const smartAlbumMemberAlbums = useMemo(() => {
+    return buildSmartAlbumMemberAlbums(smartAlbumMembers, filters);
+  }, [filters, smartAlbumMembers]);
+  const directoryNavigationAlbums = useMemo(() => buildDirectoryNavigationAlbums(directoryAlbums?.items), [directoryAlbums?.items]);
+  const albumNavigationSource = useMemo(() => {
+    if (galleryViewMode === 'smartAlbums' && selectedSmartAlbum) {
+      return smartAlbumMemberAlbums;
+    }
+
+    if (galleryViewMode === 'directoryAlbums') {
+      return directoryNavigationAlbums;
+    }
+
+    return isRecentActive ? (recentAlbums || []) : (albums?.items || []);
+  }, [
+    albums?.items,
+    directoryNavigationAlbums,
+    galleryViewMode,
+    isRecentActive,
+    recentAlbums,
+    selectedSmartAlbum,
+    smartAlbumMemberAlbums,
   ]);
 
   const handleLogin = useCallback(() => {
-    const nextFilters = { ...filters, libraryRootId: '', page: 1 };
-    localStorage.setItem('auth_token', 'authenticated');
+    const nextFilters = resetToAlbumFilters();
+    markAuthSession();
     setIsAuthenticated(true);
-    setFilters(nextFilters);
     setGalleryViewMode('albums');
     void api.get('/albums', { page: nextFilters.page, pageSize: 1 });
     void loadAlbums();
     navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'albums' });
-  }, [filters, loadAlbums, navigate, setFilters, setGalleryViewMode, setIsAuthenticated]);
+  }, [loadAlbums, navigate, resetToAlbumFilters, setGalleryViewMode, setIsAuthenticated]);
 
   const handleNavigateToAlbum = useCallback((albumId: string) => {
-    const sourceAlbums = isRecentActive ? (recentAlbums || []) : (albums?.items || []);
-    const currentIndex = sourceAlbums.findIndex((album) => album.id === albumId);
-    const nextId = currentIndex >= 0 ? sourceAlbums[currentIndex + 1]?.id ?? null : null;
+    const nextId = resolveNextAlbumId(albumNavigationSource, albumId);
 
     setSelectedAlbum(albumId);
     setNextAlbumId(nextId);
     void recordAlbumView(albumId);
     navigate(Screen.ALBUM_DETAIL, 1, { selectedAlbumId: albumId, isRecentActive, galleryViewMode });
-  }, [albums?.items, galleryViewMode, isRecentActive, navigate, recentAlbums, setNextAlbumId, setSelectedAlbum]);
+  }, [albumNavigationSource, galleryViewMode, isRecentActive, navigate, setNextAlbumId, setSelectedAlbum]);
+
+  useEffect(() => {
+    if (currentScreen !== Screen.ALBUM_DETAIL || !selectedAlbum) {
+      return;
+    }
+
+    setNextAlbumId(resolveNextAlbumId(albumNavigationSource, selectedAlbum));
+  }, [albumNavigationSource, currentScreen, selectedAlbum, setNextAlbumId]);
 
   const handleNavigateToSmartAlbum = useCallback((smartAlbumId: string) => {
     setSelectedSmartAlbum(smartAlbumId);
@@ -193,7 +186,7 @@ export default function App() {
   }, [navigate, setSelectedSmartAlbum]);
 
   const handleProfileClick = useCallback(() => {
-    localStorage.removeItem('auth_token');
+    clearAuthSession();
     setIsAuthenticated(false);
     setNextAlbumId(null);
     navigate(Screen.LOGIN, -1);
@@ -220,50 +213,39 @@ export default function App() {
     setActiveTab(tab);
     setIsRecentActive(false);
     if (tab === 'gallery') {
-      const nextFilters = { ...filters, libraryRootId: '', page: 1 };
-      setFilters(nextFilters);
-      setScrollPosition(0);
+      resetToAlbumFilters();
       setGalleryViewMode('albums');
       void loadAlbums();
       navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'albums' });
     } else {
       navigate(Screen.SETTINGS, 1);
     }
-  }, [filters, loadAlbums, navigate, setActiveTab, setFilters, setGalleryViewMode, setIsRecentActive, setScrollPosition]);
+  }, [loadAlbums, navigate, resetToAlbumFilters, setActiveTab, setGalleryViewMode, setIsRecentActive]);
 
   const handleRecentClick = useCallback(() => {
     setActiveTab('gallery');
     setIsRecentActive(true);
     setGalleryViewMode('albums');
-    setFilters((prev) => ({ ...prev, libraryRootId: '', page: 1 }));
-    setScrollPosition(0);
+    resetToAlbumFilters();
     void fetchRecentAlbums({ limit: 50 });
     navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: true, galleryViewMode: 'albums' });
-  }, [fetchRecentAlbums, navigate, setActiveTab, setFilters, setGalleryViewMode, setIsRecentActive, setScrollPosition]);
+  }, [fetchRecentAlbums, navigate, resetToAlbumFilters, setActiveTab, setGalleryViewMode, setIsRecentActive]);
 
   const handleSmartAlbumsClick = useCallback(() => {
     setActiveTab('gallery');
     setIsRecentActive(false);
     setGalleryViewMode('smartAlbums');
-    setFilters((prev) => ({ ...prev, libraryRootId: '', page: 1, sortBy: 'albumCount', sortOrder: 'desc' }));
-    setScrollPosition(0);
+    activateSmartAlbumsFilters();
     navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'smartAlbums' });
-  }, [navigate, setActiveTab, setFilters, setGalleryViewMode, setIsRecentActive, setScrollPosition]);
+  }, [activateSmartAlbumsFilters, navigate, setActiveTab, setGalleryViewMode, setIsRecentActive]);
 
   const handleDirectoryAlbumsClick = useCallback(() => {
     setActiveTab('gallery');
     setIsRecentActive(false);
     setGalleryViewMode('directoryAlbums');
-    setFilters((prev) => ({
-      ...prev,
-      libraryRootId: '',
-      directoryLibraryRootId: '',
-      directoryRelativePath: '',
-      page: 1,
-    }));
-    setScrollPosition(0);
+    activateDirectoryAlbumsFilters();
     navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'directoryAlbums' });
-  }, [navigate, setActiveTab, setFilters, setGalleryViewMode, setIsRecentActive, setScrollPosition]);
+  }, [activateDirectoryAlbumsFilters, navigate, setActiveTab, setGalleryViewMode, setIsRecentActive]);
 
   const handleDirectoryNodeClick = useCallback((node: DirectoryAlbumNodeDTO) => {
     if (node.kind === 'album' && node.albumId) {
@@ -271,65 +253,27 @@ export default function App() {
       return;
     }
 
-    setFilters((prev) => ({
-      ...prev,
-      directoryLibraryRootId: node.libraryRootId,
-      directoryRelativePath: node.relativePath,
-      page: 1,
-    }));
-    setScrollPosition(0);
-  }, [handleNavigateToAlbum, setFilters, setScrollPosition]);
+    enterDirectoryNodeFilters({
+      libraryRootId: node.libraryRootId,
+      relativePath: node.relativePath,
+    });
+  }, [enterDirectoryNodeFilters, handleNavigateToAlbum]);
 
   const handleDirectoryBreadcrumbClick = useCallback((crumb: DirectoryAlbumBreadcrumbDTO) => {
-    setFilters((prev) => ({
-      ...prev,
-      directoryLibraryRootId: crumb.libraryRootId ?? '',
-      directoryRelativePath: crumb.relativePath,
-      page: 1,
-    }));
-    setScrollPosition(0);
-  }, [setFilters, setScrollPosition]);
-
-  const handlePageChange = useCallback((page: number) => {
-    setFilters((prev) => ({ ...prev, page }));
-    setScrollPosition(0);
-  }, [setFilters, setScrollPosition]);
-
-  const handleSortByChange = useCallback((sortBy: 'name' | 'updatedAt' | 'assetCount' | 'albumCount') => {
-    setFilters((prev) => ({ ...prev, sortBy, page: 1 }));
-    setScrollPosition(0);
-  }, [setFilters, setScrollPosition]);
-
-  const handleSortOrderChange = useCallback((sortOrder: 'asc' | 'desc') => {
-    setFilters((prev) => ({ ...prev, sortOrder }));
-    setScrollPosition(0);
-  }, [setFilters, setScrollPosition]);
-
-  const handlePageSizeChange = useCallback((pageSize: number) => {
-    setFilters((prev) => ({ ...prev, pageSize, page: 1 }));
-    setScrollPosition(0);
-  }, [setFilters, setScrollPosition]);
-
-  const handleKeywordChange = useCallback((keyword: string) => {
-    setFilters((prev) => ({ ...prev, keyword, page: 1 }));
-    setScrollPosition(0);
-  }, [setFilters, setScrollPosition]);
-
-  const handleSourceTypeChange = useCallback((sourceType: '' | 'folder' | 'zip') => {
-    setFilters((prev) => ({ ...prev, sourceType, page: 1 }));
-    setScrollPosition(0);
-  }, [setFilters, setScrollPosition]);
+    enterDirectoryNodeFilters({
+      libraryRootId: crumb.libraryRootId ?? '',
+      relativePath: crumb.relativePath,
+    });
+  }, [enterDirectoryNodeFilters]);
 
   const handleLibraryRootChange = useCallback((libraryRootId: string) => {
-    const nextFilters = { ...filters, libraryRootId, page: 1 };
+    handleLibraryRootChangeFilters(libraryRootId);
     setIsRecentActive(false);
     setGalleryViewMode('albums');
-    setFilters(nextFilters);
-    setScrollPosition(0);
     setActiveTab('gallery');
     void loadAlbums();
     navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'albums' });
-  }, [filters, loadAlbums, navigate, setActiveTab, setFilters, setGalleryViewMode, setIsRecentActive, setScrollPosition]);
+  }, [handleLibraryRootChangeFilters, loadAlbums, navigate, setActiveTab, setGalleryViewMode, setIsRecentActive]);
 
   const handleRefreshAll = useCallback(async () => {
     await scan();
@@ -339,92 +283,52 @@ export default function App() {
     await scan(libraryRootId);
   }, [scan]);
 
-  const smartAlbumMemberSortBy = filters.sortBy === 'albumCount' ? 'updatedAt' : filters.sortBy;
-  const smartAlbumMemberAlbums = useMemo(() => {
-    return ((smartAlbumMembers || []).map((member) => ({
-      id: member.albumId,
-      name: member.name,
-      sourceType: member.sourceType,
-      assetCount: member.assetCount,
-      coverUrl: member.coverUrl,
-      updatedAt: member.updatedAt,
-    })) as AlbumListItemDTO[])
-      .filter((album) => {
-        if (filters.sourceType && album.sourceType !== filters.sourceType) {
-          return false;
-        }
-
-        if (!filters.keyword.trim()) {
-          return true;
-        }
-
-        return album.name.toLowerCase().includes(filters.keyword.trim().toLowerCase());
-      })
-      .sort((left, right) => {
-        const directionFactor = filters.sortOrder === 'asc' ? 1 : -1;
-
-        if (smartAlbumMemberSortBy === 'name') {
-          return left.name.localeCompare(right.name, 'zh-CN') * directionFactor;
-        }
-
-        if (smartAlbumMemberSortBy === 'assetCount') {
-          return (left.assetCount - right.assetCount) * directionFactor;
-        }
-
-        return (new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime()) * directionFactor;
-      });
-  }, [filters.keyword, filters.sortOrder, filters.sourceType, smartAlbumMemberSortBy, smartAlbumMembers]);
-
-  const pageTransitionMode = systemConfig?.pageTransitionMode ?? 'page';
-  const pageVariants = {
-    enter: (slideDirection: number) => ({
-      x: slideDirection > 0 ? '100%' : '-100%',
-      opacity: 0
-    }),
-    center: {
-      x: 0,
-      opacity: 1
-    },
-    exit: (slideDirection: number) => ({
-      x: slideDirection < 0 ? '100%' : '-100%',
-      opacity: 0
-    })
-  };
-  const normalVariants = {
-    enter: {
-      opacity: 0
-    },
-    center: {
-      opacity: 1
-    },
-    exit: {
-      opacity: 0
-    }
-  };
-  const variants = pageTransitionMode === 'page' ? pageVariants : normalVariants;
-  const pageTransition = pageTransitionMode === 'page'
-    ? {
-        x: { type: "spring", stiffness: 200, damping: 35, mass: 1 },
-        opacity: { duration: 0.15 }
-      }
-    : {
-        opacity: { duration: 0.18, ease: 'easeOut' }
-      };
+  const galleryScreenModel = useMemo(() => buildGalleryScreenModel({
+    galleryViewMode,
+    isRecentActive,
+    libraryRootId: filters.libraryRootId,
+    albums,
+    recentAlbums,
+    smartAlbums,
+    directoryAlbums,
+    isLoading,
+    isRecentLoading,
+    isSmartAlbumsLoading,
+    isDirectoryAlbumsLoading,
+  }), [
+    albums,
+    directoryAlbums,
+    filters.libraryRootId,
+    galleryViewMode,
+    isDirectoryAlbumsLoading,
+    isLoading,
+    isRecentActive,
+    isRecentLoading,
+    isSmartAlbumsLoading,
+    recentAlbums,
+    smartAlbums,
+  ]);
+  const galleryRefreshHandler = galleryViewMode === 'smartAlbums'
+    ? loadSmartAlbums
+    : galleryViewMode === 'directoryAlbums'
+      ? loadDirectoryAlbums
+      : isRecentActive
+        ? handleRecentClick
+        : loadAlbums;
 
   return (
     <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
       <PaperGrain />
 
-      <AnimatePresence initial={false} custom={direction} mode="sync">
-        <motion.div
-          key={currentScreen}
-          custom={direction}
-          variants={variants}
-          initial="enter"
-          animate="center"
-          exit="exit"
-          transition={pageTransition}
-          className="absolute inset-0 w-full h-full will-change-transform"
+      {isAuthBootstrapping ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-surface text-outline">
+          正在进入图库...
+        </div>
+      ) : (
+        <PageTransitionFrame
+          screenKey={currentScreen}
+          direction={direction}
+          mode={systemConfig?.pageTransitionMode ?? 'page'}
         >
           {(currentScreen === Screen.LOGIN || !isAuthenticated) && (
             <LoginScreen onLogin={handleLogin} />
@@ -439,29 +343,17 @@ export default function App() {
             >
               <GalleryScreen
                 displayMode={galleryViewMode}
-                albums={galleryViewMode === 'smartAlbums'
-                  ? (smartAlbums?.items || [])
-                  : galleryViewMode === 'directoryAlbums'
-                    ? (directoryAlbums?.items || [])
-                  : (isRecentActive ? (recentAlbums || []) : (albums?.items || []))}
-                isLoading={galleryViewMode === 'smartAlbums'
-                  ? isSmartAlbumsLoading
-                  : galleryViewMode === 'directoryAlbums'
-                    ? isDirectoryAlbumsLoading
-                  : (isRecentActive ? isRecentLoading : isLoading)}
-                pagination={galleryViewMode === 'smartAlbums'
-                  ? (smartAlbums?.pagination || null)
-                  : galleryViewMode === 'directoryAlbums'
-                    ? null
-                  : (isRecentActive ? null : (albums?.pagination || null))}
+                albums={galleryScreenModel.albums}
+                isLoading={galleryScreenModel.isLoading}
+                pagination={galleryScreenModel.pagination}
                 onNavigateToAlbum={galleryViewMode === 'smartAlbums' ? handleNavigateToSmartAlbum : handleNavigateToAlbum}
                 onProfileClick={handleProfileClick}
-                onRefresh={galleryViewMode === 'smartAlbums' ? loadSmartAlbums : galleryViewMode === 'directoryAlbums' ? loadDirectoryAlbums : (isRecentActive ? handleRecentClick : loadAlbums)}
+                onRefresh={galleryRefreshHandler}
                 onPageChange={handlePageChange}
                 onSortByChange={handleSortByChange}
                 onSortOrderChange={handleSortOrderChange}
                 onPageSizeChange={handlePageSizeChange}
-                onSourceTypeChange={galleryViewMode === 'smartAlbums' || galleryViewMode === 'directoryAlbums' ? undefined : handleSourceTypeChange}
+                onSourceTypeChange={galleryScreenModel.canChangeSourceType ? handleSourceTypeChange : undefined}
                 currentSortBy={filters.sortBy}
                 currentSortOrder={filters.sortOrder}
                 currentPageSize={filters.pageSize}
@@ -470,7 +362,7 @@ export default function App() {
                 activeTab={activeTab}
                 onSidebarNavigate={handleSidebarNavigate}
                 libraryRoots={libraryRoots}
-                currentLibraryRootId={galleryViewMode === 'smartAlbums' || galleryViewMode === 'directoryAlbums' ? '' : filters.libraryRootId}
+                currentLibraryRootId={galleryScreenModel.currentLibraryRootId}
                 onLibraryRootChange={handleLibraryRootChange}
                 onKeywordChange={handleKeywordChange}
                 onScanAll={handleRefreshAll}
@@ -479,7 +371,7 @@ export default function App() {
                 isScanning={isScanning}
                 onAlbumDeleted={loadAlbums}
                 onRecentClick={handleRecentClick}
-                isRecentActive={galleryViewMode === 'smartAlbums' || galleryViewMode === 'directoryAlbums' ? false : isRecentActive}
+                isRecentActive={galleryScreenModel.isRecentActive}
                 scrollPosition={scrollPosition}
                 onScrollPositionChange={setScrollPosition}
                 onSmartAlbumsClick={handleSmartAlbumsClick}
@@ -580,8 +472,8 @@ export default function App() {
               />
             </Suspense>
           )}
-        </motion.div>
-      </AnimatePresence>
+        </PageTransitionFrame>
+      )}
     </div>
   );
 }

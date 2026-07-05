@@ -3,16 +3,26 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import test from "node:test";
 
 import { path7za } from "7zip-bin";
 import sharp from "sharp";
 
-import { detectArchiveType, isArchiveFile, listRootImageEntries, readArchiveEntryBuffer } from "./archive.js";
+import {
+  detectArchiveType,
+  isArchiveFile,
+  listRootImageEntries,
+  openArchiveEntryBody,
+  readArchiveEntryBuffer
+} from "./archive.js";
 
-const testArchiveRoots = ["C:/Users/a3875/Pictures/test2", "C:/Users/a3875/Pictures/test"];
+const testArchiveRoots = (process.env.MOMENT_PIC_REAL_ARCHIVE_ROOTS ?? "")
+  .split(/[;\r\n]+/)
+  .map((item) => item.trim())
+  .filter(Boolean);
 
-const getRealArchive = async (pattern: RegExp): Promise<string> => {
+const findRealArchive = async (pattern: RegExp): Promise<string | null> => {
   for (const root of testArchiveRoots) {
     try {
       const entries = await fs.promises.readdir(root);
@@ -25,7 +35,7 @@ const getRealArchive = async (pattern: RegExp): Promise<string> => {
     }
   }
 
-  throw new Error(`test archive not found for pattern: ${pattern}`);
+  return null;
 };
 
 const run7z = async (args: string[], cwd?: string) =>
@@ -46,6 +56,18 @@ const run7z = async (args: string[], cwd?: string) =>
     });
   });
 
+const readBody = async (body: Buffer | Readable): Promise<Buffer> => {
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of body) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+};
+
 const createMixedZipFixture = async (): Promise<{ archivePath: string; tempDir: string }> => {
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-archive-root-"));
   const archivePath = path.join(tempDir, "mixed.zip");
@@ -59,6 +81,54 @@ const createMixedZipFixture = async (): Promise<{ archivePath: string; tempDir: 
   await run7z(["a", "-tzip", archivePath, "thumb.jpg", "pages/page-01.jpg"], tempDir);
 
   return { archivePath, tempDir };
+};
+
+const create7zFixture = async (): Promise<{ archivePath: string; tempDir: string }> => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-archive-7z-"));
+  const archivePath = path.join(tempDir, "sample.7z");
+  const pagesDir = path.join(tempDir, "pages");
+  await fs.promises.mkdir(pagesDir, { recursive: true });
+  await fs.promises.writeFile(path.join(pagesDir, "page-01.jpg"), Buffer.alloc(1024, 0x33));
+  await run7z(["a", "-t7z", archivePath, "pages/page-01.jpg"], tempDir);
+  return { archivePath, tempDir };
+};
+
+const createCbrExtractionFixture = async (): Promise<{
+  archivePath: string;
+  tempDir: string;
+  entryPath: string;
+  content: Buffer;
+}> => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-archive-cbr-7z-"));
+  const archivePath = path.join(tempDir, "sample.cbr");
+  const entryPath = "pages/page-01.jpg";
+  const entryFullPath = path.join(tempDir, entryPath);
+  const content = Buffer.from("cbr-entry-content-through-7z", "utf8");
+
+  await fs.promises.mkdir(path.dirname(entryFullPath), { recursive: true });
+  await fs.promises.writeFile(entryFullPath, content);
+  await run7z(["a", "-tzip", archivePath, entryPath], tempDir);
+
+  return { archivePath, tempDir, entryPath, content };
+};
+
+const createLargeZipFixture = async (): Promise<{ archivePath: string; tempDir: string; entryPath: string }> => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-archive-large-jpeg-"));
+  const entryPath = "pages/large.jpg";
+  const entryFullPath = path.join(tempDir, entryPath);
+  const archivePath = path.join(tempDir, "large.zip");
+  await fs.promises.mkdir(path.dirname(entryFullPath), { recursive: true });
+  const imageBuffer = await sharp({
+    create: {
+      width: 1200,
+      height: 1800,
+      channels: 3,
+      background: { r: 40, g: 80, b: 120 }
+    }
+  }).jpeg({ quality: 90 }).toBuffer();
+  await fs.promises.writeFile(entryFullPath, imageBuffer);
+  await run7z(["a", "-tzip", archivePath, entryPath], tempDir);
+  return { archivePath, tempDir, entryPath };
 };
 
 test("detectArchiveType recognizes rar archives as cbr", () => {
@@ -85,8 +155,13 @@ test("isArchiveFile accepts rar archives", async () => {
   }
 });
 
-test("listRootImageEntries reads a real cbr archive through unrar", async () => {
-  const archivePath = await getRealArchive(/Gold Photobook/i);
+test("listRootImageEntries reads a real cbr archive through unrar when integration fixtures are configured", async (t) => {
+  const archivePath = await findRealArchive(/Gold Photobook/i);
+  if (!archivePath) {
+    t.skip("MOMENT_PIC_REAL_ARCHIVE_ROOTS 未配置，跳过真实 CBR 集成测试");
+    return;
+  }
+
   const entries = await listRootImageEntries(archivePath);
 
   assert.equal(entries.length, 110);
@@ -94,16 +169,26 @@ test("listRootImageEntries reads a real cbr archive through unrar", async () => 
   assert.equal(entries[0]?.extension, "jpg");
 });
 
-test("readArchiveEntryBuffer reads a real cbr entry through unrar", async () => {
-  const archivePath = await getRealArchive(/Silver Photobook/i);
+test("readArchiveEntryBuffer reads a real cbr entry through 7z extraction when integration fixtures are configured", async (t) => {
+  const archivePath = await findRealArchive(/Silver Photobook/i);
+  if (!archivePath) {
+    t.skip("MOMENT_PIC_REAL_ARCHIVE_ROOTS 未配置，跳过真实 CBR 读取集成测试");
+    return;
+  }
+
   const entries = await listRootImageEntries(archivePath);
   const buffer = await readArchiveEntryBuffer(archivePath, entries[0]!.entryPath);
 
   assert.equal(buffer.length > 0, true);
 });
 
-test("listRootImageEntries reads a large real cbr archive through unrar", async () => {
-  const archivePath = await getRealArchive(/Bangni/i);
+test("listRootImageEntries reads a large real cbr archive through unrar when integration fixtures are configured", async (t) => {
+  const archivePath = await findRealArchive(/Bangni/i);
+  if (!archivePath) {
+    t.skip("MOMENT_PIC_REAL_ARCHIVE_ROOTS 未配置，跳过真实 CBR 集成测试");
+    return;
+  }
+
   const entries = await listRootImageEntries(archivePath);
 
   assert.equal(entries.length, 81);
@@ -122,12 +207,65 @@ test("listRootImageEntries prefers the larger image set when ZIP has root thumbn
   }
 });
 
-test("readArchiveEntryBuffer preserves full JPEG dimensions for Photoshop-tagged ZIP entries", async () => {
-  const archivePath = await getRealArchive(/海音旋律/i);
-  const entryPath = "海音旋律/STM07937.jpg";
-  const buffer = await readArchiveEntryBuffer(archivePath, entryPath);
-  const metadata = await sharp(buffer, { animated: true }).metadata();
+test("listRootImageEntries reads generated 7z fixtures", async () => {
+  const { archivePath, tempDir } = await create7zFixture();
+  try {
+    const entries = await listRootImageEntries(archivePath);
 
-  assert.equal(metadata.width, 4672);
-  assert.equal(metadata.height, 7008);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0]?.entryPath, "pages/page-01.jpg");
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("readArchiveEntryBuffer reads cbr entries through 7z extraction", async () => {
+  const { archivePath, tempDir, entryPath, content } = await createCbrExtractionFixture();
+  try {
+    const buffer = await readArchiveEntryBuffer(archivePath, entryPath);
+
+    assert.deepEqual(buffer, content);
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("openArchiveEntryBody streams cbr entries through 7z extraction", async () => {
+  const { archivePath, tempDir, entryPath, content } = await createCbrExtractionFixture();
+  try {
+    const body = await openArchiveEntryBody(archivePath, entryPath);
+
+    assert.deepEqual(await readBody(body), content);
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("openArchiveEntryBody rejects failed 7z streams instead of returning an empty body", async () => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-archive-invalid-7z-"));
+  const archivePath = path.join(tempDir, "broken.7z");
+
+  try {
+    await fs.promises.writeFile(archivePath, Buffer.from("not-a-real-archive", "utf8"));
+
+    await assert.rejects(
+      () => openArchiveEntryBody(archivePath, "pages/page-01.jpg"),
+      /7z command failed/
+    );
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("readArchiveEntryBuffer preserves generated ZIP JPEG dimensions", async () => {
+  const { archivePath, tempDir, entryPath } = await createLargeZipFixture();
+  try {
+    const buffer = await readArchiveEntryBuffer(archivePath, entryPath);
+    const metadata = await sharp(buffer, { animated: true }).metadata();
+
+    assert.equal(metadata.width, 1200);
+    assert.equal(metadata.height, 1800);
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
 });

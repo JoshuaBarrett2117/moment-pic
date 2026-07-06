@@ -1,0 +1,35 @@
+{
+  "date": "2026-05-16",
+  "executor": "Codex",
+  "task": "修复当前图集结束后没有提示跳转到下一图集的问题",
+  "toolingNotes": [
+    "当前会话未暴露 sequential-thinking、shrimp-task-manager、code-index 与 exa MCP 工具，已改用本地 rg、Get-Content、update_plan 和测试命令完成上下文收集与验证。"
+  ],
+  "module": "apps/web",
+  "findings": {
+    "location": [
+      "apps/web/src/components/ViewerGallery.tsx",
+      "apps/web/src/components/viewer-gallery-utils.ts",
+      "apps/web/src/App.tsx",
+      "apps/web/src/app/gallery-screen-model.ts"
+    ],
+    "currentBehavior": [
+      "ViewerGallery 原先只在停留于最后一张后再次点击下一张时显示结束提示。",
+      "从倒数第二张前进到最后一张不会主动显示 ViewerEndPrompt，用户会感觉图集结束后没有跳转提示。",
+      "App 原先只在进入相册详情时计算 nextAlbumId，智能相册成员和目录相册来源下可能无法稳定提供下一图集候选。"
+    ],
+    "fixSummary": [
+      "新增 shouldShowViewerEndPromptAfterNext，前进到最终图片且没有更多图片时自动显示结束提示。",
+      "ViewerGallery 记录本次是否通过下一张前进，避免直接打开最后一张时立即弹窗。",
+      "App 根据当前图库来源同步 albumNavigationSource，并在相册详情期间重新计算 nextAlbumId。",
+      "目录相册节点转换为下一图集候选的逻辑抽到 buildDirectoryNavigationAlbums 并覆盖测试。"
+    ],
+    "verification": ["npm --workspace apps/web test", "npm run lint:web", "npm run build:web"]
+  },
+  "sufficiencyCheck": {
+    "interfaceContract": true,
+    "technicalChoice": true,
+    "riskIdentified": true,
+    "verificationKnown": true
+  }
+}

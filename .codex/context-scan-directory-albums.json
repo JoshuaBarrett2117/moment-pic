@@ -1,0 +1,35 @@
+{
+  "date": "2026-05-09",
+  "executor": "Codex",
+  "task": "新增系统相册：目录相册",
+  "tooling_note": {
+    "sequential_thinking": "当前环境未提供 sequential-thinking MCP，已用本地代码检索与计划工具替代。",
+    "shrimp_task_manager": "当前环境未提供 shrimp-task-manager MCP，已用 update_plan 替代。",
+    "code_index": "当前环境未提供 code-index MCP，已用 rg 与定向文件读取替代。"
+  },
+  "scan": {
+    "system_album_entry": [
+      "apps/web/src/components/Sidebar.tsx",
+      "apps/web/src/App.tsx",
+      "apps/web/src/app/gallery-navigation.ts"
+    ],
+    "album_listing_api": [
+      "apps/server/src/routes/albums.ts",
+      "apps/server/src/services/album-service.ts",
+      "apps/server/src/repositories/album-repository.ts"
+    ],
+    "library_scan_logic": [
+      "apps/server/src/services/library-scanner.ts"
+    ],
+    "existing_tests": [
+      "apps/server/src/services/library-scanner.test.ts",
+      "apps/server/src/routes/smart-albums.test.ts"
+    ]
+  },
+  "knowns": [
+    "普通文件夹图集由扫描器在目录根层存在图片时生成，sourceType 为 folder。",
+    "压缩包图集由扫描器识别 archive 文件并生成，sourceType 为 zip。",
+    "系统相册当前由前端视图状态区分，包括全部图片、最近浏览、自动整理。"
+  ],
+  "decision": "目录相册不新增数据表，从 library_roots 与 albums.sourcePath 推导树节点；直接子节点已存在 album 记录时进入图集详情，否则继续展示目录树。"
+}

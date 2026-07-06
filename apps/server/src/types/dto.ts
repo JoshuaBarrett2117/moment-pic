@@ -242,6 +242,22 @@ export type AlbumShareDTO = {
   expiresAt: string;
 };
 
+export type ManagedAlbumShareDTO = {
+  id: string;
+  albumId: string;
+  albumName: string;
+  albumCoverUrl: string | null;
+  albumAssetCount: number;
+  token: string;
+  shareUrl: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export type ManagedAlbumSharesDTO = {
+  items: ManagedAlbumShareDTO[];
+};
+
 export type SharedAlbumAuthDTO = {
   token: string;
   accessToken: string;

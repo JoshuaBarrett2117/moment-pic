@@ -1,0 +1,36 @@
+{
+  "date": "2026-05-10 00:03:24 +08:00",
+  "executor": "Codex",
+  "task": "手机端放大图片时支持拖动图片",
+  "toolingFallback": {
+    "sequentialThinking": "当前会话未提供 sequential-thinking MCP 工具，已使用本地代码阅读与计划记录替代。",
+    "shrimpTaskManager": "当前会话未提供 shrimp-task-manager MCP 工具，已使用 update_plan 替代。",
+    "codeIndex": "当前会话未提供 code-index 工具，已使用 rg 与 PowerShell 读取替代。"
+  },
+  "location": {
+    "primaryFile": "apps/web/src/components/ViewerGallery.tsx",
+    "entry": "ViewerGallery 组件负责大图查看器、缩放、旋转、切图、触摸手势与画质选择。"
+  },
+  "currentBehavior": {
+    "desktopDrag": "鼠标在 scale > 1 时通过 handleMouseDown/handleMouseMove 更新 position，已支持拖动。",
+    "mobileZoom": "两指触摸通过 lastTouchDistance 计算缩放比例并更新 scale。",
+    "mobileGap": "单指触摸在 scale > 1 时没有更新 position，触摸结束还可能被当作左右切图或点按工具栏切换。"
+  },
+  "similarPatterns": [
+    "ViewerGallery.handleMouseDown 使用 clientX/clientY 减去 position 作为拖拽起点。",
+    "ViewerGallery.handleMouseMove 使用当前 clientX/clientY 减去拖拽起点更新 position。",
+    "ViewerGallery.handleTouchEnd 已通过 isZooming.current 抑制缩放后的切图和工具栏切换。"
+  ],
+  "implementationPlan": [
+    "为触摸拖拽增加 touchDragStartX/touchDragStartY 引用。",
+    "单指触摸开始时在 scale > 1 进入拖拽态并记录相对位移。",
+    "单指触摸移动且 scale > 1 时阻止默认滚动、更新 position，并标记为触摸变换以屏蔽切图。",
+    "触摸结束时清理拖拽态；两指缩放后剩余一指时重新校准拖拽起点。"
+  ],
+  "sufficiencyCheck": {
+    "interfaceContract": true,
+    "technicalChoice": true,
+    "majorRisks": true,
+    "verificationMethod": true
+  }
+}

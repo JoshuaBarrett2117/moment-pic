@@ -4,7 +4,7 @@ import { clearAuthSession, hasAuthSession } from './auth-session';
 
 const STORAGE_KEY = 'gallery_filters';
 
-export type GalleryViewMode = 'albums' | 'smartAlbums' | 'directoryAlbums';
+export type GalleryViewMode = 'albums' | 'smartAlbums' | 'directoryAlbums' | 'favorites';
 export type GallerySortBy = 'name' | 'updatedAt' | 'assetCount' | 'albumCount';
 
 export interface GalleryFilters {
@@ -80,6 +80,8 @@ export const parseNavigationFromUrl = (): UrlNavigationState => {
     ? 'smartAlbums'
     : viewParam === 'directory'
       ? 'directoryAlbums'
+      : viewParam === 'favorites'
+        ? 'favorites'
       : 'albums';
 
   if (screenParam === 'album' && albumId) {
@@ -105,6 +107,16 @@ export const parseNavigationFromUrl = (): UrlNavigationState => {
   if (screenParam === 'settings') {
     return {
       screen: Screen.SETTINGS,
+      selectedAlbumId: null,
+      selectedSmartAlbumId: null,
+      isRecentActive: false,
+      galleryViewMode: view,
+    };
+  }
+
+  if (screenParam === 'share-management') {
+    return {
+      screen: Screen.SHARE_MANAGEMENT,
       selectedAlbumId: null,
       selectedSmartAlbumId: null,
       isRecentActive: false,
@@ -168,6 +180,8 @@ export const buildUrl = (
     params.set('smartAlbumId', navigation.selectedSmartAlbumId);
   } else if (navigation.screen === Screen.SETTINGS) {
     params.set('screen', 'settings');
+  } else if (navigation.screen === Screen.SHARE_MANAGEMENT) {
+    params.set('screen', 'share-management');
   }
 
   if (navigation.galleryViewMode === 'smartAlbums') {
@@ -175,6 +189,9 @@ export const buildUrl = (
   }
   if (navigation.galleryViewMode === 'directoryAlbums') {
     params.set('view', 'directory');
+  }
+  if (navigation.galleryViewMode === 'favorites') {
+    params.set('view', 'favorites');
   }
 
   if (navigation.isRecentActive) {

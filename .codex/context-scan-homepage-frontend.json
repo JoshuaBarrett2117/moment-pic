@@ -1,0 +1,42 @@
+{
+  "date": "2026-05-16",
+  "executor": "Codex",
+  "task": "首页前端异常：主内容空白且侧栏出现在右侧",
+  "toolFallback": {
+    "unavailable": ["sequential-thinking", "shrimp-task-manager", "code-index", "exa"],
+    "used": ["rg", "Get-Content", "update_plan", "apply_patch", "npm scripts"],
+    "browserVerification": "Codex in-app browser 拒绝访问 http://localhost:3210，本轮未绕过该限制。"
+  },
+  "location": {
+    "root": "apps/web/src/App.tsx",
+    "authBootstrap": "apps/web/src/app/useAppAuthBootstrap.ts",
+    "transitionFrame": "apps/web/src/app/PageTransitionFrame.tsx",
+    "galleryScreen": "apps/web/src/components/GalleryScreen.tsx",
+    "sidebar": "apps/web/src/components/Sidebar.tsx"
+  },
+  "currentImplementation": {
+    "screenFrame": "App.tsx 使用 PageTransitionFrame 包裹登录页、图库页、设置页和详情页。",
+    "transition": "PageTransitionFrame 在 page 模式下通过 x=100%/-100% 做整页横向位移。",
+    "authBootstrap": "useAppAuthBootstrap 初始渲染时 currentScreen 为 LOGIN，鉴权恢复成功后再切换到初始导航页面。"
+  },
+  "observation": "截图中固定侧栏位于视口右侧，符合整页 motion 容器停留在 translateX(100%) 时的表现。由于 Sidebar 在带 transform 的祖先内，fixed 定位会随整页容器一起偏移。",
+  "keyQuestions": [
+    {
+      "priority": "high",
+      "question": "为什么刷新已登录首页时真实首页会参与横向进入动画？",
+      "answer": "鉴权恢复前先渲染 LOGIN，恢复成功后 setCurrentScreen(GALLERY)，导致首页作为后续页面进入 PageTransitionFrame。"
+    },
+    {
+      "priority": "medium",
+      "question": "是否需要重写图库布局？",
+      "answer": "不需要；图库和侧栏布局本身正常，异常来自外层整页位移容器的首屏挂载时机。"
+    }
+  ],
+  "decision": "鉴权恢复期间先显示静态加载层，等最终初始页面和登录态确定后再挂载 PageTransitionFrame，避免首页首屏从屏幕外侧进入。",
+  "sufficiencyCheck": {
+    "interfaceContract": true,
+    "technicalChoiceUnderstood": true,
+    "mainRisksIdentified": true,
+    "verificationKnown": true
+  }
+}

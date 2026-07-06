@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { api } from '../lib/api';
-import type { AlbumFavoriteDTO, AlbumShareDTO, AlbumsListDTO, AlbumAssetsDTO, RecentAlbumsDTO, AlbumListItemDTO, SharedAlbumAuthDTO } from '../types/api';
+import type { AlbumFavoriteDTO, AlbumShareDTO, AlbumsListDTO, AlbumAssetsDTO, ManagedAlbumSharesDTO, RecentAlbumsDTO, AlbumListItemDTO, SharedAlbumAuthDTO } from '../types/api';
 
 interface UseAlbumsOptions {
   page?: number;
@@ -10,6 +10,7 @@ interface UseAlbumsOptions {
   sourceType?: 'folder' | 'zip';
   sortBy?: 'name' | 'updatedAt' | 'assetCount';
   sortOrder?: 'asc' | 'desc';
+  favoriteOnly?: boolean;
 }
 
 interface UseAlbumsReturn {
@@ -36,6 +37,7 @@ export function useAlbums(): UseAlbumsReturn {
       if (options.sourceType) params.append('sourceType', options.sourceType);
       if (options.sortBy) params.append('sortBy', options.sortBy);
       if (options.sortOrder) params.append('sortOrder', options.sortOrder);
+      if (options.favoriteOnly) params.append('favoriteOnly', 'true');
 
       const query = params.toString() ? `?${params.toString()}` : '';
       const result = await api.get<AlbumsListDTO>(`/albums${query}`);
@@ -171,6 +173,23 @@ export const fetchSharedAlbumAssets = async (
     return await api.get<AlbumAssetsDTO>(`/shares/${token}/assets${query}`);
   } catch {
     return null;
+  }
+};
+
+export const fetchManagedAlbumShares = async (): Promise<ManagedAlbumSharesDTO | null> => {
+  try {
+    return await api.get<ManagedAlbumSharesDTO>('/album-shares');
+  } catch {
+    return null;
+  }
+};
+
+export const deleteManagedAlbumShare = async (shareId: string): Promise<boolean> => {
+  try {
+    await api.delete<{ success: boolean }>(`/album-shares/${shareId}`);
+    return true;
+  } catch {
+    return false;
   }
 };
 

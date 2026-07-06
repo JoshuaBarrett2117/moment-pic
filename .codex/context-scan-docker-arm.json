@@ -1,0 +1,47 @@
+{
+  "date": "2026-05-09",
+  "executor": "Codex",
+  "task": "新增用于构建 ARM 架构镜像的 Dockerfile",
+  "toolingFallback": {
+    "sequentialThinking": "当前会话未提供 sequential-thinking MCP 工具，使用本地代码检索和计划记录替代。",
+    "shrimpTaskManager": "当前会话未提供 shrimp-task-manager MCP 工具，使用本地记录替代。",
+    "codeIndex": "当前会话未提供 code-index MCP 工具，使用 rg 和 PowerShell 读取替代。"
+  },
+  "locations": {
+    "existingDockerfile": "Dockerfile",
+    "compose": "docker-compose.yml",
+    "serverPackage": "apps/server/package.json",
+    "webPackage": "apps/web/package.json",
+    "newDockerfile": "Dockerfile.arm64"
+  },
+  "currentImplementation": {
+    "buildStages": [
+      "web-builder 使用 node:22-slim 构建 Vite 前端。",
+      "builder 使用 node:22-slim 安装后端依赖、生成 Prisma Client 并编译 TypeScript。",
+      "runtime 使用 node:22-slim 安装 libvips42，并复制后端 dist、Prisma 文件和前端静态产物。"
+    ],
+    "nativeDependencies": [
+      "sharp",
+      "better-sqlite3",
+      "@prisma/client"
+    ],
+    "runtimePort": 3210
+  },
+  "decision": {
+    "approach": "新增 Dockerfile.arm64，不修改现有 Dockerfile，以降低对当前默认构建流程的影响。",
+    "platformStrategy": "通过 ARG TARGETPLATFORM=linux/arm64 和 FROM --platform=$TARGETPLATFORM 设置默认 ARM64 目标平台，确保 npm 原生依赖按目标平台安装或编译。",
+    "buildCommand": "docker buildx build --platform linux/arm64 -f Dockerfile.arm64 -t moment-pic:arm64 .",
+    "githubActions": "在 .github/workflows/docker.yml 中新增 QEMU 初始化、ARM64 tag 派生和 Dockerfile.arm64 专用构建步骤；ARM64 tag 统一追加 -arm64 后缀，与常规 tag 区分。"
+  },
+  "sufficiencyCheck": {
+    "interfaceContractKnown": true,
+    "technicalChoiceUnderstood": true,
+    "risksIdentified": true,
+    "verificationKnown": true
+  },
+  "risks": [
+    "跨架构构建依赖 Docker Buildx 与 QEMU 支持。",
+    "ARM64 构建会比本机 amd64 构建更慢。",
+    "sharp、better-sqlite3、Prisma 等原生依赖必须在目标平台安装，不能复用 amd64 node_modules。"
+  ]
+}

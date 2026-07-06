@@ -1,0 +1,52 @@
+{
+  "date": "2026-05-16",
+  "executor": "Codex",
+  "task": "修复大图查看器在第24张加载更多后点击下一张回到第2张的问题",
+  "toolingNotes": [
+    "当前会话未暴露 sequential-thinking、shrimp-task-manager、code-index 与 exa MCP 工具，已改用本地 rg、Get-Content、update_plan 和测试命令完成上下文收集与验证。"
+  ],
+  "module": "apps/web/src/components",
+  "findings": {
+    "location": [
+      "apps/web/src/components/ViewerGallery.tsx",
+      "apps/web/src/components/AlbumDetailScreen.tsx",
+      "apps/web/src/components/viewer-gallery-utils.ts",
+      "apps/web/src/components/viewer-gallery-utils.test.ts"
+    ],
+    "currentBehavior": [
+      "AlbumDetailScreen 每页加载 24 张，ViewerGallery 在末尾通过 onRequestMoreItems 请求下一页。",
+      "ViewerGallery 的打开初始化 effect 依赖 images.length，追加第 2 页时会把 activeIndex 重置到 initialIndex。",
+      "pendingAdvanceAfterLoad 随后在新列表长度下把索引加 1，因此从初始第 1 张打开并看到第 24 张时会跳到第 2 张。"
+    ],
+    "similarImplementations": [
+      "viewer-gallery-utils.test.ts 已用纯函数测试覆盖 viewer 画质、预加载窗口和触摸距离。",
+      "viewer-quality-session.test.ts 使用 node:test 覆盖 viewer 会话状态边界。",
+      "gallery-screen-model.test.ts 使用纯函数锁定页面模型和边界计算。"
+    ],
+    "techStack": ["React 19", "Vite", "TypeScript", "node:test"],
+    "verification": ["npm --workspace apps/web test", "npm run lint:web", "npm run build:web"]
+  },
+  "keyQuestions": [
+    {
+      "question": "当前索引是否绑定完整相册列表还是已加载列表？",
+      "priority": "high",
+      "answer": "绑定已加载列表；追加列表时需要保持当前 activeIndex，而不是重新应用 initialIndex。"
+    },
+    {
+      "question": "列表变化时是否仍需要索引修正？",
+      "priority": "medium",
+      "answer": "需要；列表收缩时仍应夹紧到最后一张，列表扩容时保持原索引。"
+    },
+    {
+      "question": "如何验证第24张加载更多后进入第25张？",
+      "priority": "high",
+      "answer": "新增 viewer 索引纯函数测试，覆盖 activeIndex 23、total 48 时追加后保持 23，pending advance 后进入 24，即界面第25张。"
+    }
+  ],
+  "sufficiencyCheck": {
+    "interfaceContract": true,
+    "technicalChoice": true,
+    "riskIdentified": true,
+    "verificationKnown": true
+  }
+}

@@ -1,5 +1,5 @@
 ﻿import { AnimatePresence, motion } from 'motion/react';
-import { Camera, Clock, FolderTree, Images, Layers3, Loader2, Menu, RefreshCw, Settings, X } from 'lucide-react';
+import { Camera, Clock, FolderTree, Images, Layers3, Loader2, Menu, RefreshCw, Settings, Share2, Star, X } from 'lucide-react';
 import { type FC, useState } from 'react';
 import { useMobile, useWideMobile } from '../hooks';
 import type { LibraryRootDTO } from '../types/api';
@@ -21,6 +21,10 @@ interface SidebarProps {
   isSmartAlbumsActive: boolean;
   onDirectoryAlbumsClick: () => void;
   isDirectoryAlbumsActive: boolean;
+  onFavoritesClick: () => void;
+  isFavoritesActive: boolean;
+  onShareManagementClick: () => void;
+  isShareManagementActive: boolean;
 }
 
 export const Sidebar: FC<SidebarProps> = ({
@@ -40,6 +44,10 @@ export const Sidebar: FC<SidebarProps> = ({
   isSmartAlbumsActive,
   onDirectoryAlbumsClick,
   isDirectoryAlbumsActive,
+  onFavoritesClick,
+  isFavoritesActive,
+  onShareManagementClick,
+  isShareManagementActive,
 }) => {
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
@@ -111,7 +119,7 @@ export const Sidebar: FC<SidebarProps> = ({
             }
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
-            currentLibraryRootId === '' && !isRecentActive && !isSmartAlbumsActive && !isDirectoryAlbumsActive
+            currentLibraryRootId === '' && !isRecentActive && !isSmartAlbumsActive && !isDirectoryAlbumsActive && !isFavoritesActive && !isShareManagementActive
               ? 'bg-primary-container font-bold text-on-primary-container'
               : 'hover:bg-primary-container/10'
           }`}
@@ -156,6 +164,23 @@ export const Sidebar: FC<SidebarProps> = ({
 
         <button
           onClick={() => {
+            onFavoritesClick();
+            if (isMobile) {
+              setIsOpen(false);
+            }
+          }}
+          className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
+            isFavoritesActive
+              ? 'bg-primary-container font-bold text-on-primary-container'
+              : 'hover:bg-primary-container/10'
+          }`}
+        >
+          <Star className="h-5 w-5" />
+          <span className="text-sm font-semibold">收藏图集</span>
+        </button>
+
+        <button
+          onClick={() => {
             onDirectoryAlbumsClick();
             if (isMobile) {
               setIsOpen(false);
@@ -169,6 +194,23 @@ export const Sidebar: FC<SidebarProps> = ({
         >
           <FolderTree className="h-5 w-5" />
           <span className="text-sm font-semibold">目录相册</span>
+        </button>
+
+        <button
+          onClick={() => {
+            onShareManagementClick();
+            if (isMobile) {
+              setIsOpen(false);
+            }
+          }}
+          className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
+            isShareManagementActive
+              ? 'bg-primary-container font-bold text-on-primary-container'
+              : 'hover:bg-primary-container/10'
+          }`}
+        >
+          <Share2 className="h-5 w-5" />
+          <span className="text-sm font-semibold">分享管理</span>
         </button>
 
         {libraryRoots.map((root) => (

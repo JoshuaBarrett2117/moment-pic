@@ -83,6 +83,7 @@ export const listAlbumsDb = (
     keyword?: string;
     sortBy?: AlbumSortBy;
     sortOrder?: SortOrder;
+    favoriteOnly?: boolean;
   }
 ) => {
   const db = getDb();
@@ -105,6 +106,10 @@ export const listAlbumsDb = (
   if (input?.keyword?.trim()) {
     conditions.push("name LIKE @keyword");
     params.keyword = `%${input.keyword.trim()}%`;
+  }
+
+  if (input?.favoriteOnly) {
+    conditions.push("is_favorite = 1");
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -247,6 +252,36 @@ export const deleteExpiredAlbumSharesDb = (nowIso: string): void => {
 export const deleteAlbumShareDb = (shareId: string): void => {
   const db = getDb();
   db.prepare("DELETE FROM album_shares WHERE id = ?").run(shareId);
+};
+
+export const listActiveAlbumSharesDb = (nowIso: string): Array<AlbumShareRecord & {
+  albumName: string;
+  albumCoverAssetId: string | null;
+  albumAssetCount: number;
+}> => {
+  const db = getDb();
+  return db
+    .prepare(`
+      SELECT
+        album_shares.*,
+        albums.name AS album_name,
+        albums.cover_asset_id AS album_cover_asset_id,
+        albums.asset_count AS album_asset_count
+      FROM album_shares
+      INNER JOIN albums ON albums.id = album_shares.album_id
+      WHERE album_shares.expires_at > ?
+      ORDER BY album_shares.created_at DESC
+    `)
+    .all(nowIso)
+    .map((row: unknown) => {
+      const current = row as Record<string, unknown>;
+      return {
+        ...rowToAlbumShare(current),
+        albumName: String(current.album_name),
+        albumCoverAssetId: current.album_cover_asset_id ? String(current.album_cover_asset_id) : null,
+        albumAssetCount: Number(current.album_asset_count)
+      };
+    });
 };
 
 export const isAssetInAlbumDb = (albumId: string, assetId: string): boolean => {

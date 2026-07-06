@@ -1,0 +1,36 @@
+{
+  "date": "2026-05-09",
+  "executor": "Codex",
+  "task": "将页面跳转形式改为可配置，支持翻页滑动和常规形式",
+  "toolFallback": {
+    "unavailable": ["sequential-thinking", "shrimp-task-manager", "code-index", "exa"],
+    "used": ["rg", "PowerShell", "update_plan", "apply_patch", "node:test", "npm scripts"]
+  },
+  "location": {
+    "transition": "apps/web/src/App.tsx",
+    "settingsUi": "apps/web/src/components/SettingsScreen.tsx",
+    "settingsForm": "apps/web/src/hooks/useSettingsConfigForm.ts",
+    "systemConfigHook": "apps/web/src/hooks/useSystemConfig.ts",
+    "apiTypes": "apps/web/src/types/api.ts",
+    "serverRoute": "apps/server/src/routes/system-config.ts",
+    "serverRepository": "apps/server/src/repositories/system-config-repository.ts",
+    "sqliteBootstrap": "apps/server/src/db/sqlite.ts"
+  },
+  "currentImplementation": {
+    "transition": "App.tsx 使用 AnimatePresence 和 motion.div，按 direction 设置 x=100%/-100% 的横向滑入滑出。",
+    "configuration": "项目已有 system_config SQLite 表、/api/v1/system-config 接口、useSystemConfig hook 和设置页配置表单。"
+  },
+  "decision": "复用既有系统配置链路，新增 pageTransitionMode 字段；默认 page 保持原效果，normal 使用短淡入淡出。",
+  "verification": [
+    "npm run lint --workspace @moment-pic/web",
+    "npm run build --workspace @moment-pic/server",
+    "npm run build --workspace @moment-pic/web",
+    "node --import tsx --test apps/server/src/services/sqlite-store.test.ts"
+  ],
+  "sufficiencyCheck": {
+    "interfaceContract": true,
+    "technicalChoiceUnderstood": true,
+    "mainRisksIdentified": true,
+    "verificationKnown": true
+  }
+}

@@ -603,3 +603,31 @@
   - `npm run test --workspace @moment-pic/web`：通过，29 项通过。
   - `npm run build --workspace @moment-pic/web`：通过。
 - 未执行验证：未启动真实浏览器做端到端点击烟测；建议在真实相册数据下快速确认复制链接、密码输入和到期失效提示。
+
+## 2026-07-06 Codex 收藏入口与分享管理报告
+
+- 需求：图集封面的收藏和分享按钮默认隐藏，鼠标移动到封面上才展示；图集菜单新增收藏图集和分享管理页面。
+- 修复：
+  - 封面卡片收藏按钮和分享按钮统一改为 hover/focus 展示。
+  - 侧栏新增“收藏图集”和“分享管理”入口。
+  - 收藏图集复用图库网格，并通过 `favoriteOnly=true` 从服务端筛选收藏图集。
+  - 分享管理页展示活跃分享链接，支持复制链接和删除分享。
+- 验证结果：
+  - `npm run build:server`：通过。
+  - `npm run lint --workspace @moment-pic/web`：通过。
+  - `npm run test --workspace @moment-pic/server`：通过，58 项通过，3 项集成测试因环境变量未配置跳过。
+  - `npm run test --workspace @moment-pic/web`：通过，29 项通过。
+  - `npm run build --workspace @moment-pic/web`：通过。
+
+## 2026-07-06 Codex 分享密码复制体验报告
+
+- 需求：分享图集时默认随机生成明文密码，同时支持手动输入；复制时一键复制 URL 和明文密码；复制成功后提示。
+- 修复：
+  - 分享弹窗默认生成 8 位随机密码，并明文展示。
+  - 密码输入框旁新增随机生成按钮，用户也可直接手动编辑。
+  - 创建分享后自动复制“图集、链接、密码、有效期”。
+  - 点击复制按钮复制同一份分享文本，并通过 Toast 提示复制成功。
+- 验证结果：
+  - `npm run lint --workspace @moment-pic/web`：通过。
+  - `npm run test --workspace @moment-pic/web`：通过，29 项通过。
+  - `npm run build --workspace @moment-pic/web`：通过。

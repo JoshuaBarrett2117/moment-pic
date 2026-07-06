@@ -63,7 +63,7 @@ export function AlbumCard({
             }}
             className={`absolute right-6 bottom-24 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 shadow-md backdrop-blur transition-all hover:scale-105 ${
               album.isFavorite ? 'text-amber-500' : 'text-outline'
-            }`}
+            } opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`}
             title={album.isFavorite ? '取消收藏' : '收藏图集'}
           >
             <Star className={`h-5 w-5 ${album.isFavorite ? 'fill-amber-400' : ''}`} />
@@ -74,7 +74,7 @@ export function AlbumCard({
               event.stopPropagation();
               onShare?.(album);
             }}
-            className="absolute left-6 bottom-24 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 text-outline opacity-100 shadow-md backdrop-blur transition-all hover:scale-105 hover:text-primary md:opacity-0 md:group-hover:opacity-100"
+            className="absolute left-6 bottom-24 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 text-outline opacity-0 shadow-md backdrop-blur transition-all hover:scale-105 hover:text-primary group-hover:opacity-100 group-focus-within:opacity-100"
             title="分享图集"
           >
             <Share2 className="h-5 w-5" />

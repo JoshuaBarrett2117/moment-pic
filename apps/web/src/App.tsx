@@ -29,6 +29,11 @@ const SettingsScreen = lazy(() =>
     default: module.SettingsScreen
   }))
 );
+const ShareManagementScreen = lazy(() =>
+  import('./components/ShareManagementScreen').then((module) => ({
+    default: module.ShareManagementScreen
+  }))
+);
 const SharedAlbumScreen = lazy(() =>
   import('./components/SharedAlbumScreen').then((module) => ({
     default: module.SharedAlbumScreen
@@ -102,6 +107,7 @@ function AuthenticatedMomentPicApp() {
     libraryRoots,
     loadAlbums,
     loadDirectoryAlbums,
+    loadFavoriteAlbums,
     loadSmartAlbums,
     recentAlbums,
     refreshCurrentGallery,
@@ -275,6 +281,21 @@ function AuthenticatedMomentPicApp() {
     navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'directoryAlbums' });
   }, [activateDirectoryAlbumsFilters, navigate, setActiveTab, setGalleryViewMode, setIsRecentActive]);
 
+  const handleFavoritesClick = useCallback(() => {
+    setActiveTab('gallery');
+    setIsRecentActive(false);
+    setGalleryViewMode('favorites');
+    resetToAlbumFilters();
+    void loadFavoriteAlbums();
+    navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'favorites' });
+  }, [loadFavoriteAlbums, navigate, resetToAlbumFilters, setActiveTab, setGalleryViewMode, setIsRecentActive]);
+
+  const handleShareManagementClick = useCallback(() => {
+    setActiveTab('gallery');
+    setIsRecentActive(false);
+    navigate(Screen.SHARE_MANAGEMENT, 1, { replace: true, isRecentActive: false, galleryViewMode });
+  }, [galleryViewMode, navigate, setActiveTab, setIsRecentActive]);
+
   const handleDirectoryNodeClick = useCallback((node: DirectoryAlbumNodeDTO) => {
     if (node.kind === 'album' && node.albumId) {
       handleNavigateToAlbum(node.albumId);
@@ -349,6 +370,8 @@ function AuthenticatedMomentPicApp() {
     ? loadSmartAlbums
     : galleryViewMode === 'directoryAlbums'
       ? loadDirectoryAlbums
+      : galleryViewMode === 'favorites'
+        ? loadFavoriteAlbums
       : isRecentActive
         ? handleRecentClick
         : loadAlbums;
@@ -415,6 +438,10 @@ function AuthenticatedMomentPicApp() {
                 isSmartAlbumsActive={galleryViewMode === 'smartAlbums'}
                 onDirectoryAlbumsClick={handleDirectoryAlbumsClick}
                 isDirectoryAlbumsActive={galleryViewMode === 'directoryAlbums'}
+                onFavoritesClick={handleFavoritesClick}
+                isFavoritesActive={galleryViewMode === 'favorites'}
+                onShareManagementClick={handleShareManagementClick}
+                isShareManagementActive={currentScreen === Screen.SHARE_MANAGEMENT}
                 onDirectoryNodeClick={handleDirectoryNodeClick}
                 directoryBreadcrumbs={directoryAlbums?.breadcrumbs || []}
                 onDirectoryBreadcrumbClick={handleDirectoryBreadcrumbClick}
@@ -450,6 +477,34 @@ function AuthenticatedMomentPicApp() {
                 onBack={handleBackToGallery}
                 onScanComplete={refreshCurrentGallery}
                 onSystemConfigChange={fetchSystemConfig}
+              />
+            </Suspense>
+          )}
+          {currentScreen === Screen.SHARE_MANAGEMENT && (
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center text-outline">
+                  正在加载分享管理...
+                </div>
+              }
+            >
+              <ShareManagementScreen
+                activeTab={activeTab}
+                albumCount={galleryScreenModel.pagination?.total || albums?.pagination.total || 0}
+                libraryRoots={libraryRoots}
+                currentLibraryRootId={galleryScreenModel.currentLibraryRootId}
+                isAnyScanning={isAnyScanning}
+                isScanning={isScanning}
+                onBack={handleBackToGallery}
+                onNavigate={handleSidebarNavigate}
+                onLibraryRootChange={handleLibraryRootChange}
+                onScanAll={handleRefreshAll}
+                onScanOne={handleRefreshOne}
+                onRecentClick={handleRecentClick}
+                onSmartAlbumsClick={handleSmartAlbumsClick}
+                onDirectoryAlbumsClick={handleDirectoryAlbumsClick}
+                onFavoritesClick={handleFavoritesClick}
+                onShareManagementClick={handleShareManagementClick}
               />
             </Suspense>
           )}
@@ -500,6 +555,10 @@ function AuthenticatedMomentPicApp() {
                 isSmartAlbumsActive
                 onDirectoryAlbumsClick={handleDirectoryAlbumsClick}
                 isDirectoryAlbumsActive={false}
+                onFavoritesClick={handleFavoritesClick}
+                isFavoritesActive={false}
+                onShareManagementClick={handleShareManagementClick}
+                isShareManagementActive={currentScreen === Screen.SHARE_MANAGEMENT}
                 headerTitle={smartAlbumDetail?.name || '分类图集'}
                 headerDescription={smartAlbumDetail
                   ? `当前自动整理共收纳 ${smartAlbumDetail.albumCount} 个分类图集，继续进入后才是图集内部图片。`

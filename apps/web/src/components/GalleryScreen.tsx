@@ -56,6 +56,10 @@ interface GalleryScreenProps {
   isSmartAlbumsActive: boolean;
   onDirectoryAlbumsClick: () => void;
   isDirectoryAlbumsActive: boolean;
+  onFavoritesClick: () => void;
+  isFavoritesActive: boolean;
+  onShareManagementClick: () => void;
+  isShareManagementActive: boolean;
   onDirectoryNodeClick?: (node: DirectoryAlbumNodeDTO) => void;
   directoryBreadcrumbs?: DirectoryAlbumBreadcrumbDTO[];
   onDirectoryBreadcrumbClick?: (crumb: DirectoryAlbumBreadcrumbDTO) => void;
@@ -108,6 +112,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   isSmartAlbumsActive,
   onDirectoryAlbumsClick,
   isDirectoryAlbumsActive,
+  onFavoritesClick,
+  isFavoritesActive,
+  onShareManagementClick,
+  isShareManagementActive,
   onDirectoryNodeClick,
   directoryBreadcrumbs = [],
   onDirectoryBreadcrumbClick,
@@ -190,6 +198,10 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
         isSmartAlbumsActive={isSmartAlbumsActive}
         onDirectoryAlbumsClick={onDirectoryAlbumsClick}
         isDirectoryAlbumsActive={isDirectoryAlbumsActive}
+        onFavoritesClick={onFavoritesClick}
+        isFavoritesActive={isFavoritesActive}
+        onShareManagementClick={onShareManagementClick}
+        isShareManagementActive={isShareManagementActive}
       />
 
       <main

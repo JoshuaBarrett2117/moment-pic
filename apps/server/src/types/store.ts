@@ -76,6 +76,7 @@ export type AlbumShareRecord = {
   albumId: string;
   token: string;
   passwordHash: string;
+  passwordPlain: string;
   expiresAt: string;
   createdAt: string;
 };

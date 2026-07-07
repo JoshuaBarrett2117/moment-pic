@@ -55,30 +55,32 @@ export function AlbumCard({
               ))
             )}
           </div>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onFavoriteToggle?.(album);
-            }}
-            className={`absolute right-6 bottom-24 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 shadow-md backdrop-blur transition-all hover:scale-105 ${
-              album.isFavorite ? 'text-amber-500' : 'text-outline'
-            }`}
-            title={album.isFavorite ? '取消收藏' : '收藏图集'}
-          >
-            <Star className={`h-5 w-5 ${album.isFavorite ? 'fill-amber-400' : ''}`} />
-          </button>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onShare?.(album);
-            }}
-            className="absolute left-6 bottom-24 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 text-outline opacity-100 shadow-md backdrop-blur transition-all hover:scale-105 hover:text-primary md:opacity-0 md:group-hover:opacity-100"
-            title="分享图集"
-          >
-            <Share2 className="h-5 w-5" />
-          </button>
+          <div className="pointer-events-none absolute inset-x-6 bottom-24 z-20 flex items-center justify-between opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onShare?.(album);
+              }}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 text-outline shadow-md backdrop-blur transition-all hover:scale-105 hover:text-primary"
+              title="分享图集"
+            >
+              <Share2 className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onFavoriteToggle?.(album);
+              }}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 shadow-md backdrop-blur transition-all hover:scale-105 ${
+                album.isFavorite ? 'text-amber-500' : 'text-outline'
+              }`}
+              title={album.isFavorite ? '取消收藏' : '收藏图集'}
+            >
+              <Star className={`h-5 w-5 ${album.isFavorite ? 'fill-amber-400' : ''}`} />
+            </button>
+          </div>
           <div className="mt-4 px-2 pb-2">
             <h3 className="mb-1 truncate font-headline text-lg font-bold leading-tight text-on-surface" title={album.name}>
               {album.name}

@@ -82,6 +82,7 @@ export const rowToAlbumShare = (row: Record<string, unknown>): AlbumShareRecord 
   albumId: String(row.album_id),
   token: String(row.token),
   passwordHash: String(row.password_hash),
+  passwordPlain: row.password_plain ? String(row.password_plain) : "",
   expiresAt: String(row.expires_at),
   createdAt: String(row.created_at)
 });

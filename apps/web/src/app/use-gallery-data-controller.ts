@@ -51,6 +51,19 @@ export const useGalleryDataController = ({
     });
   }, [debouncedKeyword, fetchAlbums, filters.libraryRootId, filters.page, filters.pageSize, filters.sortBy, filters.sortOrder, filters.sourceType]);
 
+  const loadFavoriteAlbums = useCallback(() => {
+    return fetchAlbums({
+      page: filters.page,
+      pageSize: filters.pageSize,
+      keyword: debouncedKeyword || undefined,
+      sortBy: filters.sortBy === 'albumCount' ? 'updatedAt' : filters.sortBy,
+      sortOrder: filters.sortOrder,
+      sourceType: filters.sourceType || undefined,
+      libraryRootId: filters.libraryRootId || undefined,
+      favoriteOnly: true,
+    });
+  }, [debouncedKeyword, fetchAlbums, filters.libraryRootId, filters.page, filters.pageSize, filters.sortBy, filters.sortOrder, filters.sourceType]);
+
   const loadSmartAlbums = useCallback(() => {
     return fetchSmartAlbums({
       page: filters.page,
@@ -88,13 +101,17 @@ export const useGalleryDataController = ({
       await loadSmartAlbums();
       return;
     }
+    if (galleryViewMode === 'favorites') {
+      await loadFavoriteAlbums();
+      return;
+    }
     if (isRecentActive) {
       await fetchRecentAlbums({ limit: 50 });
       return;
     }
 
     await loadAlbums();
-  }, [fetchLibraryRoots, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadSmartAlbums]);
+  }, [fetchLibraryRoots, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums]);
 
   const { isScanning, scan, scanningLibraryRootIds, isAnyScanning } = useLibraryScan({
     onScanComplete: refreshCurrentGallery
@@ -121,7 +138,7 @@ export const useGalleryDataController = ({
   );
 
   useEffect(() => {
-    if (currentScreen === Screen.GALLERY && isAuthenticated) {
+    if ((currentScreen === Screen.GALLERY || currentScreen === Screen.SHARE_MANAGEMENT) && isAuthenticated) {
       void fetchLibraryRoots();
     }
   }, [currentScreen, fetchLibraryRoots, isAuthenticated]);
@@ -136,9 +153,13 @@ export const useGalleryDataController = ({
         void loadSmartAlbums();
         return;
       }
+      if (galleryViewMode === 'favorites') {
+        void loadFavoriteAlbums();
+        return;
+      }
       void loadAlbums();
     }
-  }, [currentScreen, galleryViewMode, isAuthenticated, loadAlbums, loadDirectoryAlbums, loadSmartAlbums]);
+  }, [currentScreen, galleryViewMode, isAuthenticated, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums]);
 
   useEffect(() => {
     if (!isAuthenticated || currentScreen !== Screen.SMART_ALBUM_DETAIL || !selectedSmartAlbum) {
@@ -162,13 +183,17 @@ export const useGalleryDataController = ({
         void loadDirectoryAlbums();
         return;
       }
+      if (galleryViewMode === 'favorites') {
+        void loadFavoriteAlbums();
+        return;
+      }
       void loadAlbums();
     }, 3000);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [galleryViewMode, isAnyScanning, isAuthenticated, loadAlbums, loadDirectoryAlbums, loadSmartAlbums, wsConnected]);
+  }, [galleryViewMode, isAnyScanning, isAuthenticated, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums, wsConnected]);
 
   return {
     albums,
@@ -186,6 +211,7 @@ export const useGalleryDataController = ({
     libraryRoots,
     loadAlbums,
     loadDirectoryAlbums,
+    loadFavoriteAlbums,
     loadSmartAlbums,
     recentAlbums,
     refreshCurrentGallery,

@@ -98,6 +98,7 @@ const bootstrap = (db: Database.Database) => {
       album_id TEXT NOT NULL,
       token TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
+      password_plain TEXT NOT NULL DEFAULT '',
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
@@ -233,6 +234,9 @@ const bootstrap = (db: Database.Database) => {
   } catch (e) {}
   try {
     db.exec('ALTER TABLE albums ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0');
+  } catch (e) {}
+  try {
+    db.exec("ALTER TABLE album_shares ADD COLUMN password_plain TEXT NOT NULL DEFAULT ''");
   } catch (e) {}
   try {
     db.exec("ALTER TABLE smart_album_ai_configs ADD COLUMN provider TEXT NOT NULL DEFAULT 'openai'");

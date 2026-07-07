@@ -41,6 +41,17 @@ export const buildGalleryScreenModel = (input: {
     };
   }
 
+  if (input.galleryViewMode === 'favorites') {
+    return {
+      albums: input.albums?.items || [],
+      isLoading: input.isLoading,
+      pagination: input.albums?.pagination || null,
+      isRecentActive: false,
+      currentLibraryRootId: input.libraryRootId,
+      canChangeSourceType: true,
+    };
+  }
+
   if (input.galleryViewMode === 'directoryAlbums') {
     return {
       albums: input.directoryAlbums?.items || [],

@@ -238,8 +238,25 @@ export type AlbumFavoriteDTO = {
 
 export type AlbumShareDTO = {
   token: string;
+  password: string;
   shareUrl: string;
   expiresAt: string;
+};
+
+export type ManagedAlbumShareDTO = {
+  id: string;
+  albumId: string;
+  albumName: string;
+  albumCoverUrl: string | null;
+  albumAssetCount: number;
+  token: string;
+  shareUrl: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export type ManagedAlbumSharesDTO = {
+  items: ManagedAlbumShareDTO[];
 };
 
 export type SharedAlbumAuthDTO = {

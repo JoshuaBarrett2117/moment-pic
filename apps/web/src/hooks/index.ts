@@ -6,6 +6,8 @@ export {
   createAlbumShare,
   deleteAlbum,
   deleteAsset,
+  deleteManagedAlbumShare,
+  fetchManagedAlbumShares,
   fetchSharedAlbumAssets,
   useRecentAlbums,
   recordAlbumView,

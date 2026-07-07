@@ -1,6 +1,7 @@
 import { type FC, useMemo, useState } from 'react';
-import { Copy, Loader2, Share2, X } from 'lucide-react';
+import { Copy, Loader2, RefreshCw, Share2, X } from 'lucide-react';
 import { createAlbumShare } from '../hooks';
+import { useToast } from './Toast';
 
 type AlbumShareDialogProps = {
   albumId: string;
@@ -13,17 +14,33 @@ const toDatetimeLocalValue = (date: Date): string => {
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 };
 
+const generateSharePassword = (): string => {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+};
+
 export const AlbumShareDialog: FC<AlbumShareDialogProps> = ({ albumId, albumName, onClose }) => {
+  const { toast } = useToast();
   const defaultExpiresAt = useMemo(() => {
     const date = new Date();
     date.setDate(date.getDate() + 7);
     return toDatetimeLocalValue(date);
   }, []);
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState(() => generateSharePassword());
   const [expiresAt, setExpiresAt] = useState(defaultExpiresAt);
   const [shareUrl, setShareUrl] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const shareText = shareUrl
+    ? [
+      `图集：${albumName}`,
+      `链接：${shareUrl}`,
+      `密码：${password}`,
+      `有效期：${new Date(expiresAt).toLocaleString('zh-CN')}`
+    ].join('\n')
+    : '';
 
   const handleSubmit = async () => {
     setError('');
@@ -52,7 +69,13 @@ export const AlbumShareDialog: FC<AlbumShareDialogProps> = ({ albumId, albumName
 
     setShareUrl(result.shareUrl);
     try {
-      await navigator.clipboard.writeText(result.shareUrl);
+      await navigator.clipboard.writeText([
+        `图集：${albumName}`,
+        `链接：${result.shareUrl}`,
+        `密码：${password}`,
+        `有效期：${new Date(expiresAtMs).toLocaleString('zh-CN')}`
+      ].join('\n'));
+      toast('分享链接和密码已复制', 'success');
     } catch {
       // 浏览器可能拒绝剪贴板权限，保留链接让用户手动复制。
     }
@@ -64,7 +87,8 @@ export const AlbumShareDialog: FC<AlbumShareDialogProps> = ({ albumId, albumName
     }
 
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(shareText);
+      toast('分享链接和密码已复制', 'success');
     } catch {
       setError('复制失败，请手动复制链接');
     }
@@ -91,12 +115,22 @@ export const AlbumShareDialog: FC<AlbumShareDialogProps> = ({ albumId, albumName
         <div className="space-y-4">
           <label className="block">
             <span className="mb-1 block text-xs font-semibold text-outline">分享密码</span>
-            <input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              className="w-full rounded-md border border-outline/20 bg-surface-container-low px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary"
-            />
+            <div className="flex gap-2">
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="text"
+                className="min-w-0 flex-1 rounded-md border border-outline/20 bg-surface-container-low px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary"
+              />
+              <button
+                type="button"
+                onClick={() => setPassword(generateSharePassword())}
+                className="flex h-10 w-10 items-center justify-center rounded-md bg-surface-container-high text-outline transition-colors hover:text-on-surface"
+                title="随机生成密码"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            </div>
           </label>
 
           <label className="block">
@@ -111,7 +145,7 @@ export const AlbumShareDialog: FC<AlbumShareDialogProps> = ({ albumId, albumName
 
           {shareUrl && (
             <div className="rounded-md bg-surface-container-high p-3">
-              <p className="break-all text-xs leading-5 text-on-surface">{shareUrl}</p>
+              <pre className="whitespace-pre-wrap break-all font-sans text-xs leading-5 text-on-surface">{shareText}</pre>
             </div>
           )}
 
@@ -125,7 +159,7 @@ export const AlbumShareDialog: FC<AlbumShareDialogProps> = ({ albumId, albumName
                 className="flex items-center gap-1.5 rounded-md bg-secondary-container px-4 py-2 text-sm font-semibold text-on-secondary-container transition-all hover:brightness-95"
               >
                 <Copy className="h-4 w-4" />
-                复制链接
+                复制链接和密码
               </button>
             ) : (
               <button

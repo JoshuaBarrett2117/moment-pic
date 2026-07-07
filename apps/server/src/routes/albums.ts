@@ -17,8 +17,10 @@ import {
   getAlbumDetail,
   getRecentAlbums,
   getSharedAlbumAssets,
+  listManagedAlbumShares,
   listAlbums,
   recordAlbumView,
+  deleteManagedAlbumShare,
   setAlbumFavorite
 } from "../services/album-service.js";
 import { DirectoryAlbumPathInvalidError, DirectoryAlbumRootNotFoundError, listDirectoryAlbums } from "../services/directory-album-service.js";
@@ -180,6 +182,24 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     return ok({ success: true });
   });
 
+  app.get("/api/v1/album-shares", async (request) => {
+    const origin = `${request.protocol}://${request.host}`;
+    return ok(await listManagedAlbumShares(origin));
+  });
+
+  app.delete("/api/v1/album-shares/:shareId", async (request, reply) => {
+    const { shareId } = request.params as { shareId: string };
+    const success = await deleteManagedAlbumShare(shareId);
+    if (!success) {
+      return reply.status(404).send({
+        code: 4008,
+        message: "share not found"
+      });
+    }
+
+    return ok({ success: true });
+  });
+
   app.patch("/api/v1/albums/:albumId/favorite", async (request, reply) => {
     const { albumId } = request.params as { albumId: string };
     const body = (request.body ?? {}) as { isFavorite?: boolean };
@@ -236,6 +256,7 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
       keyword?: string;
       sortBy?: "name" | "updatedAt" | "assetCount";
       sortOrder?: "asc" | "desc";
+      favoriteOnly?: string;
     };
     const page = parseBoundedInteger(query.page, { defaultValue: 1, min: 1, max: 100000 });
     const pageSize = parseBoundedInteger(query.pageSize, { defaultValue: 24, min: 1, max: 100 });
@@ -244,7 +265,8 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
       sourceType: parseEnumValue(query.sourceType, ["folder", "zip"] as const),
       keyword: parseOptionalString(query.keyword),
       sortBy: parseEnumValue(query.sortBy, ["name", "updatedAt", "assetCount"] as const),
-      sortOrder: parseEnumValue(query.sortOrder, ["asc", "desc"] as const)
+      sortOrder: parseEnumValue(query.sortOrder, ["asc", "desc"] as const),
+      favoriteOnly: query.favoriteOnly === "true"
     });
     const etag = `"albums-${crypto.createHash("sha1").update(JSON.stringify(payload)).digest("hex")}"`;
     const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);

@@ -6,6 +6,7 @@ import type {
   AlbumFavoriteDTO,
   AlbumListItemDTO,
   AlbumShareDTO,
+  ManagedAlbumSharesDTO,
   SharedAlbumAuthDTO,
   AssetDetailDTO,
   LibraryRootDTO
@@ -22,6 +23,7 @@ import {
   findAlbumShareByTokenDb,
   insertAlbumShareDb,
   isAssetInAlbumDb,
+  listActiveAlbumSharesDb,
   listAlbumsDb,
   listAssetsByAlbumIdDb,
   deleteAlbumShareDb,
@@ -57,6 +59,7 @@ const buildAlbumListCacheKey = (
     keyword?: string;
     sortBy?: AlbumSortBy;
     sortOrder?: SortOrder;
+    favoriteOnly?: boolean;
   }
 ) =>
   JSON.stringify({
@@ -65,6 +68,7 @@ const buildAlbumListCacheKey = (
     libraryRootId: input?.libraryRootId ?? "",
     sourceType: input?.sourceType ?? "",
     keyword: input?.keyword?.trim() ?? "",
+    favoriteOnly: input?.favoriteOnly ?? false,
     sortBy: input?.sortBy ?? "updatedAt",
     sortOrder: input?.sortOrder ?? "desc"
   });
@@ -102,6 +106,7 @@ export const listAlbums = async (
     keyword?: string;
     sortBy?: AlbumSortBy;
     sortOrder?: SortOrder;
+    favoriteOnly?: boolean;
   }
 ) => {
   const cacheKey = buildAlbumListCacheKey(page, pageSize, input);
@@ -304,15 +309,47 @@ export const createAlbumShare = async (
     albumId,
     token,
     passwordHash: hashSharePassword(password),
+    passwordPlain: password,
     expiresAt,
     createdAt: new Date().toISOString()
   });
 
   return {
     token,
+    password,
     shareUrl: `${input.origin.replace(/\/$/, "")}/share/${token}`,
     expiresAt
   };
+};
+
+export const listManagedAlbumShares = async (origin: string): Promise<ManagedAlbumSharesDTO> => {
+  const nowIso = new Date().toISOString();
+  deleteExpiredAlbumSharesDb(nowIso);
+  return {
+    items: listActiveAlbumSharesDb(nowIso).map((share) => ({
+      id: share.id,
+      albumId: share.albumId,
+      albumName: share.albumName,
+      albumCoverUrl: share.albumCoverAssetId ? `/api/v1/assets/${share.albumCoverAssetId}/thumbnail` : null,
+      albumAssetCount: share.albumAssetCount,
+      token: share.token,
+      password: share.passwordPlain,
+      shareUrl: `${origin.replace(/\/$/, "")}/share/${share.token}`,
+      expiresAt: share.expiresAt,
+      createdAt: share.createdAt
+    }))
+  };
+};
+
+export const deleteManagedAlbumShare = async (shareId: string): Promise<boolean> => {
+  const nowIso = new Date().toISOString();
+  deleteExpiredAlbumSharesDb(nowIso);
+  const exists = listActiveAlbumSharesDb(nowIso).some((share) => share.id === shareId);
+  if (!exists) {
+    return false;
+  }
+  deleteAlbumShareDb(shareId);
+  return true;
 };
 
 export class AlbumShareInputInvalidError extends Error {

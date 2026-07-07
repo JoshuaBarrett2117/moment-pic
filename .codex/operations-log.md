@@ -301,3 +301,13 @@
   - 新增分享接口 `POST /api/v1/albums/:albumId/share`，公开接口 `/api/v1/shares/:token/...` 支持密码认证、分页读取、缩略图、预览图和原图访问。
   - 前端新增 `AlbumShareDialog`、`SharedAlbumScreen`，封面卡片和详情页菜单接入收藏/分享按钮。
 - 验证：`npm run build:server`、`npm run lint --workspace @moment-pic/web`、`npm run test --workspace @moment-pic/server`、`npm run test --workspace @moment-pic/web`、`npm run build --workspace @moment-pic/web` 均通过。
+
+## 2026-07-06 Codex 收藏入口与分享管理
+
+- 任务：封面收藏/分享按钮默认隐藏并在 hover 展示；图集菜单新增收藏图集和分享管理页面。
+- 实现：
+  - `AlbumCard` 两个操作按钮统一使用 `group-hover`/`group-focus-within` 展示。
+  - `/api/v1/albums` 支持 `favoriteOnly=true` 筛选。
+  - 新增 `/api/v1/album-shares` 列表与删除接口。
+  - 前端新增收藏模式和 `ShareManagementScreen`，侧栏新增“收藏图集”“分享管理”。
+- 验证：`npm run build:server`、`npm run lint --workspace @moment-pic/web`、`npm run test --workspace @moment-pic/server`、`npm run test --workspace @moment-pic/web`、`npm run build --workspace @moment-pic/web` 均通过。

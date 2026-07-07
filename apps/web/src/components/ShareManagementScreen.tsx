@@ -4,6 +4,7 @@ import { deleteManagedAlbumShare, fetchManagedAlbumShares } from '../hooks';
 import type { LibraryRootDTO, ManagedAlbumShareDTO } from '../types/api';
 import { Sidebar } from './Sidebar';
 import { ThrottledImage } from './ThrottledImage';
+import { useToast } from './Toast';
 
 type ShareManagementScreenProps = {
   activeTab: 'gallery' | 'settings';
@@ -42,6 +43,7 @@ export const ShareManagementScreen: FC<ShareManagementScreenProps> = ({
   onFavoritesClick,
   onShareManagementClick,
 }) => {
+  const { toast } = useToast();
   const [items, setItems] = useState<ManagedAlbumShareDTO[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -62,9 +64,17 @@ export const ShareManagementScreen: FC<ShareManagementScreenProps> = ({
     void loadShares();
   }, [loadShares]);
 
-  const handleCopy = async (shareUrl: string) => {
+  const buildShareText = (item: ManagedAlbumShareDTO) => [
+    `图集：${item.albumName}`,
+    `链接：${item.shareUrl}`,
+    `密码：${item.password || '未记录明文密码'}`,
+    `有效期：${new Date(item.expiresAt).toLocaleString('zh-CN')}`
+  ].join('\n');
+
+  const handleCopy = async (item: ManagedAlbumShareDTO) => {
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(buildShareText(item));
+      toast('分享链接和密码已复制', 'success');
     } catch {
       setError('复制失败，请手动复制链接');
     }
@@ -145,6 +155,7 @@ export const ShareManagementScreen: FC<ShareManagementScreenProps> = ({
                   <h2 className="truncate font-headline text-xl font-bold text-on-surface">{item.albumName}</h2>
                   <p className="mt-1 text-sm text-outline">{item.albumAssetCount} 张图片</p>
                   <p className="mt-2 break-all text-xs text-outline/80">{item.shareUrl}</p>
+                  <p className="mt-2 text-xs font-semibold text-on-surface">密码：{item.password || '未记录明文密码'}</p>
                   <p className="mt-2 text-xs text-outline/70">
                     有效期至 {new Date(item.expiresAt).toLocaleString('zh-CN')}
                   </p>
@@ -152,9 +163,9 @@ export const ShareManagementScreen: FC<ShareManagementScreenProps> = ({
                 <div className="flex gap-2 md:flex-col">
                   <button
                     type="button"
-                    onClick={() => void handleCopy(item.shareUrl)}
+                    onClick={() => void handleCopy(item)}
                     className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container text-on-secondary-container transition-all hover:brightness-95"
-                    title="复制链接"
+                    title="复制链接和密码"
                   >
                     <Copy className="h-4 w-4" />
                   </button>

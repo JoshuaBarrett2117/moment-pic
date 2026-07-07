@@ -232,8 +232,8 @@ export const deleteAlbumDb = (albumId: string) => {
 export const insertAlbumShareDb = (share: AlbumShareRecord): AlbumShareRecord => {
   const db = getDb();
   db.prepare(`
-    INSERT INTO album_shares (id, album_id, token, password_hash, expires_at, created_at)
-    VALUES (@id, @albumId, @token, @passwordHash, @expiresAt, @createdAt)
+    INSERT INTO album_shares (id, album_id, token, password_hash, password_plain, expires_at, created_at)
+    VALUES (@id, @albumId, @token, @passwordHash, @passwordPlain, @expiresAt, @createdAt)
   `).run(share);
   return share;
 };

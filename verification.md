@@ -631,3 +631,17 @@
   - `npm run lint --workspace @moment-pic/web`：通过。
   - `npm run test --workspace @moment-pic/web`：通过，29 项通过。
   - `npm run build --workspace @moment-pic/web`：通过。
+
+## 2026-07-07 Codex 分享明文密码管理补齐报告
+
+- 需求补齐：分享管理页需要能复制 URL 和明文密码，不能只复制链接。
+- 修复：
+  - `album_shares` 新增 `password_plain` 字段，新建分享时保存明文密码。
+  - 分享管理接口返回明文密码；历史分享若没有明文密码则显示“未记录明文密码”。
+  - 分享管理页展示密码，复制按钮复制图集名、链接、密码和有效期，并弹出复制成功 Toast。
+- 验证结果：
+  - `npm run build:server`：通过。
+  - `npm run lint --workspace @moment-pic/web`：通过。
+  - `npm run test --workspace @moment-pic/web`：通过，29 项通过。
+  - `npm run build --workspace @moment-pic/web`：通过。
+  - `npm run test --workspace @moment-pic/server`：通过，58 项通过，3 项集成测试因环境变量未配置跳过。

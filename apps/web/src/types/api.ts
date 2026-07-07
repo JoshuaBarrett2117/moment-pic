@@ -288,6 +288,7 @@ export type AlbumFavoriteDTO = {
 
 export type AlbumShareDTO = {
   token: string;
+  password: string;
   shareUrl: string;
   expiresAt: string;
 };
@@ -299,6 +300,7 @@ export type ManagedAlbumShareDTO = {
   albumCoverUrl: string | null;
   albumAssetCount: number;
   token: string;
+  password: string;
   shareUrl: string;
   expiresAt: string;
   createdAt: string;

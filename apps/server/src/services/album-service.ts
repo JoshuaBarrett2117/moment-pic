@@ -309,12 +309,14 @@ export const createAlbumShare = async (
     albumId,
     token,
     passwordHash: hashSharePassword(password),
+    passwordPlain: password,
     expiresAt,
     createdAt: new Date().toISOString()
   });
 
   return {
     token,
+    password,
     shareUrl: `${input.origin.replace(/\/$/, "")}/share/${token}`,
     expiresAt
   };
@@ -331,6 +333,7 @@ export const listManagedAlbumShares = async (origin: string): Promise<ManagedAlb
       albumCoverUrl: share.albumCoverAssetId ? `/api/v1/assets/${share.albumCoverAssetId}/thumbnail` : null,
       albumAssetCount: share.albumAssetCount,
       token: share.token,
+      password: share.passwordPlain,
       shareUrl: `${origin.replace(/\/$/, "")}/share/${share.token}`,
       expiresAt: share.expiresAt,
       createdAt: share.createdAt

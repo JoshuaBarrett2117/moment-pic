@@ -395,3 +395,16 @@
   - 结果：通过，29 项前端测试通过。
 - `npm run build --workspace @moment-pic/web`
   - 结果：通过，Vite 生产构建成功。
+
+## 2026-07-07 Codex 分享明文密码管理补齐验证
+
+- `npm run build:server`
+  - 结果：通过，服务端 TypeScript 构建成功。
+- `npm run lint --workspace @moment-pic/web`
+  - 结果：通过，前端 TypeScript 类型检查无错误。
+- `npm run test --workspace @moment-pic/web`
+  - 结果：通过，29 项前端测试通过。
+- `npm run build --workspace @moment-pic/web`
+  - 结果：通过，Vite 生产构建成功。
+- `npm run test --workspace @moment-pic/server`
+  - 结果：通过，58 项服务端测试通过，3 项真实归档集成测试因未配置 `MOMENT_PIC_REAL_ARCHIVE_ROOTS` 跳过。

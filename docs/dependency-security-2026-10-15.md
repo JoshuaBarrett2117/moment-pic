@@ -15,7 +15,7 @@
 - Fastify：公告分别涉及 Content-Type/根原始值/boolean/header schema 验证、异步验证结果、畸形 URL 与封装 not-found、trustProxy hop-count，以及 HTTP/2 trailer。HTTP/2 trailer 仅在启用 HTTP/2 且设置 trailer 时触发；反向代理需使用显式可信代理，不信任任意转发头。全部升级，不依赖当前业务未使用某功能。
 - @fastify/static：目录列表、编码分隔符、点段和非规范路径可能绕过根目录或路由/allowedPath 边界。当前不开启目录列表，不将静态路径守卫作为唯一认证边界；升级覆盖多轮修复。10.x 的 setHeaders 使用 FastifyReply，需要同步适配源码。
 - Vite/esbuild/PostCSS 等开发/构建依赖也纳入升级；开发服务器不得暴露到不可信网络。axios 公告的可达性与 adapter、重定向及不可信输入有关，不能用“仅浏览器使用”忽略审计。
-- 移除同步 node-unrar-js 路径，RAR/CBR 使用有预算和取消支持的 7z 适配器；RAR 需要系统完整 7z/7zz，不能假定精简 7za 支持所有压缩算法。
+- 2026-10-16 修正（执行者：Codex）：移除的主线程同步 node-unrar-js 路径不再恢复；真实 RAR4/RAR5 改用固定版本 2.0.2 的纯 WASM worker，并接管文件写钩子实施真实字节预算、背压与强制终止。解决 Debian DFSG 7zz / 精简 7za 缺少 RAR 解码器的回归，不新增系统 unrar 依赖。详情及原生解码器边界见 `rar-wasm-verification.md`。
 
 ## 锁文件版本
 

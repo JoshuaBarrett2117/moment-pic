@@ -44,19 +44,19 @@ HTTP Upgrade 必须具有有效会话与严格 Origin（协议、主机和端口
 
 ## 归档取消与资源所有权
 
-ZIP/7z/RAR/CBR 读取共用并发 4、排队 32 的预算，默认墙钟 30 秒、单条目解压 256MiB、列表输出 8MiB、条目数 50,000。子进程输出背压传递给 stdout；错误输出限制 64KiB。正常结束、断开、进程异常和限额都走清理路径；子进程必须真实 close 后才释放槽位，不把 stdout end 当作进程退出。
+ZIP/7z/RAR/CBR 读取共用并发 4、排队 32 的预算，默认墙钟 30 秒、解压输出 256MiB、列表输出 8MiB、条目数 50,000。7z 子进程背压传递给 stdout；RAR WASM worker 背压直接传递到同步写钩子；诊断输出限制 64KiB。正常结束、断开、异常和限额都走清理路径；子进程必须真实 close、worker 必须真实 exit 后才释放槽位，不把 stdout end 或解码 done 消息当作退出。RAR 预算包含目标之前全部解压输出，防止遗漏 solid 工作。
 
 ZIP 在 open 回调前就监听取消：调用方立即收到取消/超时，未归还的文件系统操作仍占用预算，延迟返回的句柄被关闭，真实 close 后才释放槽位。ZIP 查找条目与列举一样遵守列表预算。
 
-取消、预算繁忙、超时、字节/条目/错误输出限制具有可识别错误类型，禁止管理路由 fallback 到原图后重启解压。可用归档程序之间只允许启动 ENOENT/EACCES 时切换，控制类错误不得重试。RAR/CBR 不再走不可取消的同步解压器；缺少支持 RAR 的完整 7z/7zz 时明确失败。
+取消、预算繁忙、超时、字节/条目/错误输出限制具有可识别错误类型，禁止管理路由 fallback 到原图后重启解压。RAR 解码损坏、worker 异常和不支持的 RAR 签名使用 `ARCHIVE_DECODE_ERROR`（HTTP 422），管理与分享路由也不得 fallback。非 RAR 的 7z 程序之间仍仅允许启动 ENOENT/EACCES 时切换。
 
 `archive-followup.log` 22/22 通过，含真实 ZIP/7z、延迟 ZIP open、真实子进程 close 记账、慢消费者、四类清理、实际管理/分享路由与 HTTP 断开；`archive-typecheck.log` 通过。后续最终门禁会单独保留归档四路径日志。
 
-原有 3 个跳过项依赖外部图库中的特定 RAR/CBR。现已替换为临时目录构造的真实 RAR4 stored 格式（含头部与数据 CRC），覆盖 110 页、81 页及实际 JPEG 解压；不再读取环境提供的外部媒体路径。`archive-real-rar.log` 14/14、零跳过，额外覆盖真实 RAR 的条目/字节上限与 PSD 缓冲取消。stored fixture 验证 RAR 容器与完整 7z 读取路径，不声称覆盖所有 RAR 压缩算法或密码/多卷变体。
+原有 3 个跳过项已替换为临时目录构造的真实 RAR4 stored 格式（含头部与数据 CRC），覆盖 110 页、81 页及实际 JPEG 解压；不再读取外部媒体路径。历史 `archive-real-rar.log` 曾验证系统完整 7z 路径，但该证据不能说明 Debian DFSG 运行环境支持 RAR。2026-10-16 新增原创 CC0 RAR4/RAR5 PNG 夹具；真实 WASM 独立解码成功，而旧公共 API 的两个回归确实失败（退出 1）。新实现与新证据见 `rar-wasm-verification.md`。
 
-开发与 CI 需安装带 RAR 解码器的完整 7z/7zz，精简 `7zip-bin` 不是完整 RAR 解码器。Ubuntu Noble 将 RAR 插件拆为 `7zip-rar`，只装 `7zip` 且禁用推荐包不保证 RAR 可读；CI 显式安装两者，发现机制测试也检查此前置依赖。本机仅在 TMPDIR 下载并使用官方独立 7zz 26.04，下载来源和执行结果见 `sevenzip-download-index.log`、`sevenzip-download.log`，未修改系统安装或运行任何容器。发行版拆分证据见 `distro-rar-prerequisites.log`（主包页面读取成功、第二个插件页 TLS 请求失败；不能把整条 shell 的零退出码当作两个请求都成功）。
+RAR 运行时现只需要 Node 与生产依赖 `node-unrar-js` 2.0.2，不依赖系统 unrar、RAR-enabled 7zz 或开发期 tsx。旧 CI 中额外安装的 `7zip-rar` 不再是 RAR 解码前置条件；本次不改发布流程。生产 JS 测试在空 PATH、无 TS loader 的独立 Node 进程验证两种 RAR，并验证 worker 启动异常与诊断输出超限后的资源回收。
 
-部署侧仍需由父任务在实际运行环境确认 RAR 解码器：已有 Dockerfile 只声明 `7zip`，本轮不运行/构建容器，不能保证其 Debian 基础源包含 RAR 插件。缺少解码器时必须明确失败，不恢复同步 WASM 旁路；可由部署方提供完整官方 `7zz` 或启用发行版插件仓库后安装对应插件。本地真实 RAR 回归通过不代表镜像或 NAS 已验收。
+已检查 Dockerfile：构建产物包含 worker JS，复制的生产依赖包含 WASM；运行镜像的清理规则不会删除 `.wasm` 或 `.js`。RAR 不再要求 Debian 7zip 提供插件。仅做静态检查和本地生产 JS 验证，未构建或运行镜像，不能声称镜像已通过实测；未连接 NAS、未部署或推送。
 
 ## 最新请求与前端生命周期
 

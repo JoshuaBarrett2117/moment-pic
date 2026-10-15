@@ -37,3 +37,7 @@ ZIP 在 open 回调前就监听取消：调用方立即收到取消/超时，未
 取消、预算繁忙、超时、字节/条目/错误输出限制具有可识别错误类型，禁止管理路由 fallback 到原图后重启解压。可用归档程序之间只允许启动 ENOENT/EACCES 时切换，控制类错误不得重试。RAR/CBR 不再走不可取消的同步解压器；缺少支持 RAR 的完整 7z/7zz 时明确失败。
 
 `archive-followup.log` 22/22 通过，含真实 ZIP/7z、延迟 ZIP open、真实子进程 close 记账、慢消费者、四类清理、实际管理/分享路由与 HTTP 断开；`archive-typecheck.log` 通过。后续最终门禁会单独保留归档四路径日志。
+
+原有 3 个跳过项依赖外部图库中的特定 RAR/CBR。现已替换为临时目录构造的真实 RAR4 stored 格式（含头部与数据 CRC），覆盖 110 页、81 页及实际 JPEG 解压；不再读取环境提供的外部媒体路径。`archive-real-rar.log` 14/14、零跳过，额外覆盖真实 RAR 的条目/字节上限与 PSD 缓冲取消。stored fixture 验证 RAR 容器与完整 7z 读取路径，不声称覆盖所有 RAR 压缩算法或密码/多卷变体。
+
+开发与 CI 需安装完整 7z/7zz（Ubuntu/Debian 的 `7zip` 包），精简 `7zip-bin` 不是完整 RAR 解码器。CI 质量门禁已声明此依赖。本机仅在 TMPDIR 下载并使用官方独立 7zz 26.04，下载来源和执行结果见 `sevenzip-download-index.log`、`sevenzip-download.log`，未修改系统安装或运行任何容器。

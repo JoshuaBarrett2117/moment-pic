@@ -19,6 +19,7 @@ for (const type of ["zip", "7z"] as const) {
       assert.equal(spawnSync(path7za, ["a", `-t${type}`, archive, "page.jpg"], { cwd: directory }).status, 0);
       assert.equal((await listRootImageEntries(archive, { budget }))[0].name, "page.jpg");
       assert.equal((await readArchiveEntryBuffer(archive, "page.jpg", { budget })).length, 1024 * 1024);
+      await assert.rejects(listRootImageEntries(archive, { budget, maxEntries: 0 }), { code: "ARCHIVE_ENTRY_LIMIT" });
       await assert.rejects(readArchiveEntryBuffer(archive, "page.jpg", { budget, maxBytes: 1024 }), /字节数/);
       await delay(20);
       const release = await budget.acquire();

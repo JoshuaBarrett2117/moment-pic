@@ -8,6 +8,7 @@ import test from "node:test";
 
 import { path7za } from "7zip-bin";
 import sharp from "sharp";
+import { createStoredRarArchive } from "./archive/rar-test-fixture.js";
 
 import {
   detectArchiveType,
@@ -17,25 +18,12 @@ import {
   readArchiveEntryBuffer
 } from "./archive.js";
 
-const testArchiveRoots = (process.env.MOMENT_PIC_REAL_ARCHIVE_ROOTS ?? "")
-  .split(/[;\r\n]+/)
-  .map((item) => item.trim())
-  .filter(Boolean);
-
-const findRealArchive = async (pattern: RegExp): Promise<string | null> => {
-  for (const root of testArchiveRoots) {
-    try {
-      const entries = await fs.promises.readdir(root);
-      const match = entries.find((name) => pattern.test(name));
-      if (match) {
-        return path.join(root, match);
-      }
-    } catch {
-      // Continue to the next fixture root.
-    }
-  }
-
-  return null;
+const createRarFixture = async (count: number, extension: "rar" | "cbr" = "cbr") => {
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-real-rar-"));
+  const archivePath = path.join(tempDir, `sample.${extension}`);
+  const content = await sharp({ create: { width: 16, height: 24, channels: 3, background: "red" } }).jpeg().toBuffer();
+  await fs.promises.writeFile(archivePath, createStoredRarArchive(Array.from({ length: count }, (_, index) => ({ entryPath: `pages/page-${String(index).padStart(3, "0")}.jpg`, content }))));
+  return { tempDir, archivePath };
 };
 
 const run7z = async (args: string[], cwd?: string) =>
@@ -155,44 +143,34 @@ test("isArchiveFile accepts rar archives", async () => {
   }
 });
 
-test("listRootImageEntries reads a real cbr archive through unrar when integration fixtures are configured", async (t) => {
-  const archivePath = await findRealArchive(/Gold Photobook/i);
-  if (!archivePath) {
-    t.skip("MOMENT_PIC_REAL_ARCHIVE_ROOTS 未配置，跳过真实 CBR 集成测试");
-    return;
-  }
-
-  const entries = await listRootImageEntries(archivePath);
-
-  assert.equal(entries.length, 110);
-  assert.equal(entries[0]?.entryPath.startsWith("KenKen"), true);
-  assert.equal(entries[0]?.extension, "jpg");
+test("listRootImageEntries reads a genuine generated 110-page RAR/CBR without external libraries", async () => {
+  const { archivePath, tempDir } = await createRarFixture(110);
+  try {
+    const entries = await listRootImageEntries(archivePath);
+    assert.equal(entries.length, 110);
+    assert.equal(entries[0]?.entryPath.startsWith("pages/"), true);
+    assert.equal(entries[0]?.extension, "jpg");
+  } finally { await fs.promises.rm(tempDir, { recursive: true, force: true }); }
 });
 
-test("readArchiveEntryBuffer reads a real cbr entry through 7z extraction when integration fixtures are configured", async (t) => {
-  const archivePath = await findRealArchive(/Silver Photobook/i);
-  if (!archivePath) {
-    t.skip("MOMENT_PIC_REAL_ARCHIVE_ROOTS 未配置，跳过真实 CBR 读取集成测试");
-    return;
-  }
-
-  const entries = await listRootImageEntries(archivePath);
-  const buffer = await readArchiveEntryBuffer(archivePath, entries[0]!.entryPath);
-
-  assert.equal(buffer.length > 0, true);
+test("readArchiveEntryBuffer decodes a genuine generated RAR image through bounded 7z", async () => {
+  const { archivePath, tempDir } = await createRarFixture(1, "rar");
+  try {
+    const entries = await listRootImageEntries(archivePath);
+    const buffer = await readArchiveEntryBuffer(archivePath, entries[0]!.entryPath);
+    assert.equal((await sharp(buffer).metadata()).width, 16);
+    await assert.rejects(readArchiveEntryBuffer(archivePath, entries[0]!.entryPath, { maxBytes: 16 }), { code: "ARCHIVE_BYTE_LIMIT" });
+    await assert.rejects(listRootImageEntries(archivePath, { maxEntries: 0 }), { code: "ARCHIVE_ENTRY_LIMIT" });
+  } finally { await fs.promises.rm(tempDir, { recursive: true, force: true }); }
 });
 
-test("listRootImageEntries reads a large real cbr archive through unrar when integration fixtures are configured", async (t) => {
-  const archivePath = await findRealArchive(/Bangni/i);
-  if (!archivePath) {
-    t.skip("MOMENT_PIC_REAL_ARCHIVE_ROOTS 未配置，跳过真实 CBR 集成测试");
-    return;
-  }
-
-  const entries = await listRootImageEntries(archivePath);
-
-  assert.equal(entries.length, 81);
-  assert.equal(entries[0]?.entryPath.startsWith("Bangni"), true);
+test("listRootImageEntries reads a genuine generated 81-page CBR without skipping", async () => {
+  const { archivePath, tempDir } = await createRarFixture(81);
+  try {
+    const entries = await listRootImageEntries(archivePath);
+    assert.equal(entries.length, 81);
+    assert.equal(entries[0]?.entryPath.startsWith("pages/"), true);
+  } finally { await fs.promises.rm(tempDir, { recursive: true, force: true }); }
 });
 
 test("listRootImageEntries prefers the larger image set when ZIP has root thumbnails and nested originals", async () => {

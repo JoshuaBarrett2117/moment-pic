@@ -361,7 +361,7 @@ export class AlbumSharePasswordInvalidError extends Error {
 const shareIpLimiter = new AttemptLimiter(20);
 const shareIdLimiter = new AttemptLimiter(10);
 
-export const authenticateAlbumShare = async (token: string, password: string, ip = "internal"): Promise<SharedAlbumAuthDTO> => {
+export const authenticateAlbumShare = async (token: string, password: string, ip = "internal", signal?: AbortSignal): Promise<SharedAlbumAuthDTO> => {
   const ipAllowed = shareIpLimiter.allow(ip);
   const shareAllowed = shareIdLimiter.allow(token);
   if (!ipAllowed || !shareAllowed) throw Object.assign(new Error("分享认证尝试过多，请稍后重试"), { statusCode: 429 });
@@ -373,7 +373,16 @@ export const authenticateAlbumShare = async (token: string, password: string, ip
     throw new AlbumShareNotFoundError();
   }
 
-  if (!(await sharePasswords.verify(password, share.passwordHash))) {
+  if (!(await sharePasswords.verify(password, share.passwordHash, signal))) {
+    throw new AlbumSharePasswordInvalidError();
+  }
+
+  signal?.throwIfAborted();
+  const current = findAlbumShareByTokenDb(token);
+  if (!current || current.id !== share.id || current.albumId !== share.albumId || Date.parse(current.expiresAt) <= Date.now()) {
+    throw new AlbumShareNotFoundError();
+  }
+  if (current.passwordHash !== share.passwordHash || current.expiresAt !== share.expiresAt) {
     throw new AlbumSharePasswordInvalidError();
   }
 

@@ -11,3 +11,11 @@
 `scan-followup-red-retry.log` 记录修复前 4 个真实回归失败；`scan-followup-green.log` 记录 16/16 通过，含 BMP、断链、收藏/分享跨重扫保留、确认删除、falsy rejection、损坏归档与原地覆盖。`scan-typecheck.log` 服务端类型检查通过。证据目录为 `/opt/data/output/momentpic-final-verification/`。
 
 本轮数据库验证只使用测试预加载器创建的临时隔离 SQLite，不执行真实数据库连接、历史数据清理或 DBA 窗口操作。
+
+## 分享密码与异步认证
+
+所有新分享仅保存随机盐的 scrypt 哈希；管理列表不返回密码，创建响应只展示一次，重置会使旧访问令牌失效。历史明文列、历史备份不由启动代码自动清理，仍需 DBA 窗口处理。
+
+密码派生使用共享并发 2、排队 16、排队等待最多 5 秒的预算。客户端取消会立即停止等待，排队取消不启动派生；已经启动的原生 scrypt 必须等真实 callback 完成才释放槽位。认证等待之后重新读取分享的存在性、身份、密码哈希和有效期，撤销、重置或过期均不得签发会话。
+
+`share-race-red.log` 为修复前竞态证据；`share-followup-green.log` 10/10 通过，覆盖原生 callback 取消记账、队列超时、撤销/重置/过期竞态、旧明文不回传、独立 IP/分享限流及真实 scrypt 响应性；`share-typecheck.log` 通过。

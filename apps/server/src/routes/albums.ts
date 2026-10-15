@@ -96,7 +96,7 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     const body = (request.body ?? {}) as { password?: string };
 
     try {
-      return ok(await authenticateAlbumShare(token, String(body.password ?? ""), request.ip));
+      return ok(await authenticateAlbumShare(token, String(body.password ?? ""), request.ip, mediaRequestSignal(request, reply)));
     } catch (error) {
       if (error instanceof AlbumShareNotFoundError) {
         return sendShareNotFound(reply);

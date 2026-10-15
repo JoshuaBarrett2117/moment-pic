@@ -6,6 +6,7 @@ import * as service from "./album-service.js";
 import { insertAlbumWithAssetsDb, deleteAlbumDb, findAlbumShareByTokenDb } from "../repositories/album-repository.js";
 import { upsertLibraryRootDb, deleteLibraryRootDb } from "../repositories/library-root-repository.js";
 import { getDb } from "../db/sqlite.js";
+import { sharePasswords } from "./share-password.js";
 
 const fixture = async () => {
   const id = crypto.randomUUID();
@@ -34,6 +35,24 @@ test("新分享只持久化哈希、只创建时返回密码，列表即使存�
     assert.ok(!Object.hasOwn(findAlbumShareByTokenDb(data.share.token)!, "passwordPlain"));
   } finally { data.cleanup(); }
 });
+
+for (const change of ["revoke", "reset", "expire"] as const) {
+  test(`异步密码校验等待中 ${change} 后不得签发分享会话`, async (context) => {
+    const data = await fixture();
+    let finish!: (valid: boolean) => void;
+    context.mock.method(sharePasswords, "verify", () => new Promise<boolean>((resolve) => { finish = resolve; }));
+    try {
+      const share = findAlbumShareByTokenDb(data.share.token)!;
+      const auth = service.authenticateAlbumShare(data.share.token, data.share.password, crypto.randomUUID());
+      const rejected = assert.rejects(auth, change === "reset" ? service.AlbumSharePasswordInvalidError : service.AlbumShareNotFoundError);
+      if (change === "revoke") await service.deleteManagedAlbumShare(share.id);
+      if (change === "reset") await service.resetManagedAlbumSharePassword(share.id, "changed-in-flight");
+      if (change === "expire") getDb().prepare("UPDATE album_shares SET expires_at = ? WHERE id = ?").run(new Date(Date.now() - 1000).toISOString(), share.id);
+      finish(true);
+      await rejected;
+    } finally { context.mock.restoreAll(); data.cleanup(); }
+  });
+}
 
 test("公开认证不阻塞事件循环，正常/错误密码有明确行为及长度限制", async () => {
   const data = await fixture();

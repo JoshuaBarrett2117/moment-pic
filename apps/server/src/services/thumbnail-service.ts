@@ -48,6 +48,7 @@ export const ensureThumbnail = async (
     width?: number;
     height?: number;
     format?: ThumbnailFormat;
+    signal?: AbortSignal;
   }
 ) => {
   await ensureCacheDir();
@@ -70,6 +71,7 @@ export const ensureThumbnail = async (
     quality
   });
   const dedupeKey = cacheKey;
+  if (input?.signal) return ensureThumbnailVariant({ asset, width, height, format, cacheKey, quality, signal: input.signal });
   const inFlight = inFlightVariantTasks.get(dedupeKey);
   if (inFlight) {
     return inFlight;
@@ -95,6 +97,7 @@ export const ensurePreview = async (
   input?: {
     preset?: PreviewPreset;
     format?: ThumbnailFormat;
+    signal?: AbortSignal;
   }
 ) => {
   await ensureCacheDir();
@@ -118,6 +121,7 @@ export const ensurePreview = async (
     quality
   });
   const dedupeKey = cacheKey;
+  if (input?.signal) return ensurePreviewVariant({ asset, preset, format, cacheKey, quality, signal: input.signal });
   const inFlight = inFlightVariantTasks.get(dedupeKey);
   if (inFlight) {
     return inFlight;
@@ -142,14 +146,14 @@ export const readOriginalImage = async (assetId: string) => {
   return { asset, buffer };
 };
 
-export const openOriginalImage = async (assetId: string) => {
+export const openOriginalImage = async (assetId: string, signal?: AbortSignal) => {
   const asset = findAssetByIdDb(assetId);
 
   if (!asset) {
     throw new AssetNotFoundError(assetId);
   }
 
-  return openOriginalAssetSource(asset);
+  return openOriginalAssetSource(asset, signal);
 };
 
 export type CoverThumbnailWarmupResult = {

@@ -8,7 +8,9 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "3210"
-      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}"
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请显式设置强管理员密码，参阅 README 升级说明}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS:-}
       LIBRARY_ROOTS: "${LIBRARY_ROOTS:-/data/library}"
       CACHE_DIR: "${CACHE_DIR:-/data/cache}"
       SQLITE_PATH: "${SQLITE_PATH:-/data/gallery.sqlite}"

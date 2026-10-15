@@ -1,3 +1,4 @@
+import { useLatestRequest, isRequestCancellation } from './useLatestRequest';
 import { useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { AlbumFavoriteDTO, AlbumShareDTO, AlbumsListDTO, AlbumAssetsDTO, ManagedAlbumSharesDTO, RecentAlbumsDTO, AlbumListItemDTO, SharedAlbumAuthDTO } from '../types/api';
@@ -14,6 +15,7 @@ interface UseAlbumsOptions {
 }
 
 interface UseAlbumsReturn {
+  cancelRequests: () => void;
   albums: AlbumsListDTO | null;
   isLoading: boolean;
   error: string | null;
@@ -21,11 +23,13 @@ interface UseAlbumsReturn {
 }
 
 export function useAlbums(): UseAlbumsReturn {
+  const requests = useLatestRequest();
   const [albums, setAlbums] = useState<AlbumsListDTO | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAlbums = useCallback(async (options: UseAlbumsOptions = {}): Promise<void> => {
+    const request = requests.begin();
     setIsLoading(true);
     setError(null);
     try {
@@ -40,16 +44,17 @@ export function useAlbums(): UseAlbumsReturn {
       if (options.favoriteOnly) params.append('favoriteOnly', 'true');
 
       const query = params.toString() ? `?${params.toString()}` : '';
-      const result = await api.get<AlbumsListDTO>(`/albums${query}`);
+      const result = await api.get<AlbumsListDTO>(`/albums${query}`, undefined, { signal: request.signal });
+      if (!request.isCurrent()) return;
       setAlbums(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取相册失败');
+      if (request.isCurrent() && !isRequestCancellation(err)) setError(err instanceof Error ? err.message : '获取相册失败');
     } finally {
-      setIsLoading(false);
+      if (request.isCurrent()) setIsLoading(false);
     }
   }, []);
 
-  return { albums, isLoading, error, fetchAlbums };
+  return { cancelRequests: requests.cancel, albums, isLoading, error, fetchAlbums };
 }
 
 interface UseAlbumAssetsOptions {
@@ -58,6 +63,7 @@ interface UseAlbumAssetsOptions {
 }
 
 interface UseAlbumAssetsReturn {
+  cancelRequests: () => void;
   assets: AlbumAssetsDTO | null;
   isLoading: boolean;
   error: string | null;
@@ -65,11 +71,13 @@ interface UseAlbumAssetsReturn {
 }
 
 export function useAlbumAssets(): UseAlbumAssetsReturn {
+  const requests = useLatestRequest();
   const [assets, setAssets] = useState<AlbumAssetsDTO | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchAssets = useCallback(async (albumId: string, options: UseAlbumAssetsOptions = {}): Promise<AlbumAssetsDTO | null> => {
+    const request = requests.begin();
     setIsLoading(true);
     setError(null);
     try {
@@ -78,18 +86,19 @@ export function useAlbumAssets(): UseAlbumAssetsReturn {
       if (options.pageSize) params.append('pageSize', String(options.pageSize));
 
       const query = params.toString() ? `?${params.toString()}` : '';
-      const result = await api.get<AlbumAssetsDTO>(`/albums/${albumId}/assets${query}`);
+      const result = await api.get<AlbumAssetsDTO>(`/albums/${albumId}/assets${query}`, undefined, { signal: request.signal });
+      if (!request.isCurrent()) return null;
       setAssets(result);
       return result;
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取图片失败');
+      if (request.isCurrent() && !isRequestCancellation(err)) setError(err instanceof Error ? err.message : '获取图片失败');
       return null;
     } finally {
-      setIsLoading(false);
+      if (request.isCurrent()) setIsLoading(false);
     }
   }, []);
 
-  return { assets, isLoading, error, fetchAssets };
+  return { cancelRequests: requests.cancel, assets, isLoading, error, fetchAssets };
 }
 
 export const deleteAlbum = async (albumId: string): Promise<boolean> => {
@@ -193,11 +202,16 @@ export const deleteManagedAlbumShare = async (shareId: string): Promise<boolean>
   }
 };
 
+export const resetManagedAlbumSharePassword = async (shareId: string, password: string): Promise<void> => {
+  await api.post(`/album-shares/${shareId}/password`, { password });
+};
+
 interface UseRecentAlbumsOptions {
   limit?: number;
 }
 
 interface UseRecentAlbumsReturn {
+  cancelRequests: () => void;
   recentAlbums: AlbumListItemDTO[] | null;
   isLoading: boolean;
   error: string | null;
@@ -205,11 +219,13 @@ interface UseRecentAlbumsReturn {
 }
 
 export function useRecentAlbums(): UseRecentAlbumsReturn {
+  const requests = useLatestRequest();
   const [recentAlbums, setRecentAlbums] = useState<AlbumListItemDTO[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchRecentAlbums = useCallback(async (options: UseRecentAlbumsOptions = {}): Promise<void> => {
+    const request = requests.begin();
     setIsLoading(true);
     setError(null);
     try {
@@ -217,14 +233,15 @@ export function useRecentAlbums(): UseRecentAlbumsReturn {
       if (options.limit) params.append('limit', String(options.limit));
 
       const query = params.toString() ? `?${params.toString()}` : '';
-      const result = await api.get<RecentAlbumsDTO>(`/albums/recent${query}`);
+      const result = await api.get<RecentAlbumsDTO>(`/albums/recent${query}`, undefined, { signal: request.signal });
+      if (!request.isCurrent()) return;
       setRecentAlbums(result.items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取近期查看失败');
+      if (request.isCurrent() && !isRequestCancellation(err)) setError(err instanceof Error ? err.message : '获取近期查看失败');
     } finally {
-      setIsLoading(false);
+      if (request.isCurrent()) setIsLoading(false);
     }
   }, []);
 
-  return { recentAlbums, isLoading, error, fetchRecentAlbums };
+  return { cancelRequests: requests.cancel, recentAlbums, isLoading, error, fetchRecentAlbums };
 }

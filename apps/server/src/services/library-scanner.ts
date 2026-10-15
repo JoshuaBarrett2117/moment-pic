@@ -5,6 +5,8 @@ import { isSupportedImageExtension } from "../lib/image-formats.js";
 import { createLogger } from "../lib/logger.js";
 import { normalizeExtension, toPosixPath } from "../lib/paths.js";
 import { nowIso } from "../lib/time.js";
+import { createSharp } from "./thumbnail/sharp-runtime.js";
+import { normalizeMetadataDimensions } from "./thumbnail-options.js";
 import type { AlbumRecord, AssetRecord, LibraryRootRecord, SourceType } from "../types/store.js";
 import {
   applyLibraryRootScanDiffDb,
@@ -12,6 +14,7 @@ import {
   listAlbumsDb,
   listAssetsByAlbumIdDb,
   updateAlbumScanMetadataDb,
+  updateAlbumScanStatusDb,
   listAlbumsByLibraryRootIdDb
 } from "../repositories/album-repository.js";
 import { findLibraryRootByIdDb, listLibraryRootsDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
@@ -42,6 +45,8 @@ type ScannedAlbum = {
     sortIndex: number;
     sizeBytes: string | null;
     sourceMtime: string | null;
+    width?: number | null;
+    height?: number | null;
   }>;
 };
 
@@ -95,19 +100,7 @@ const scanFolderAlbum = async (
 ): Promise<ScannedAlbum | null> => {
   const folderStats = await fs.promises.stat(folderPath);
   const folderMtime = String(Math.trunc(folderStats.mtimeMs));
-  const existingAlbum = existingBySourcePath.get(folderPath);
-  if (existingAlbum && existingAlbum.sourceMtime === folderMtime) {
-    return {
-      name: existingAlbum.name,
-      sourceType: existingAlbum.sourceType,
-      sourcePath: folderPath,
-      sourceMtime: folderMtime,
-      libraryRootPath,
-      reuseExisting: true,
-      reuseAssetCount: existingAlbum.assetCount,
-      assets: []
-    };
-  }
+
 
   const folderEntries = await fs.promises.readdir(folderPath, { withFileTypes: true });
   const fileEntries = folderEntries.filter((entry) => !entry.isDirectory());
@@ -123,6 +116,9 @@ const scanFolderAlbum = async (
       return null;
     }
 
+    const dimensions = normalizeMetadataDimensions(await createSharp(fullPath).metadata());
+    if (!dimensions.width || !dimensions.height) throw new Error("图片元数据不可用");
+
     return {
       name: entry.name,
       extension,
@@ -131,7 +127,8 @@ const scanFolderAlbum = async (
       relativePath: toPosixPath(path.relative(libraryRootPath, fullPath)),
       zipEntryPath: null,
       sizeBytes: String(stats.size),
-      sourceMtime: String(Math.trunc(stats.mtimeMs))
+      sourceMtime: String(stats.mtimeMs),
+      ...dimensions
     };
   });
 
@@ -161,20 +158,7 @@ const scanZipAlbum = async (
   existingBySourcePath: Map<string, AlbumRecord>
 ): Promise<ScannedAlbum | null> => {
   const zipStats = await fs.promises.stat(zipPath);
-  const zipMtime = String(Math.trunc(zipStats.mtimeMs));
-  const existingAlbum = existingBySourcePath.get(zipPath);
-  if (existingAlbum && existingAlbum.sourceMtime === zipMtime) {
-    return {
-      name: existingAlbum.name,
-      sourceType: existingAlbum.sourceType,
-      sourcePath: zipPath,
-      sourceMtime: zipMtime,
-      libraryRootPath,
-      reuseExisting: true,
-      reuseAssetCount: existingAlbum.assetCount,
-      assets: []
-    };
-  }
+  const zipMtime = String(zipStats.mtimeMs);
 
   const entries = await listRootImageEntries(zipPath);
   if (entries.length === 0) {
@@ -208,24 +192,28 @@ const scanZipAlbum = async (
 const iterateFolderAlbumsRecursively = async function* (
   libraryRootPath: string,
   folderPath: string,
-  existingBySourcePath: Map<string, AlbumRecord>
+  existingBySourcePath: Map<string, AlbumRecord>,
+  failedScopes: Set<string>
 ): AsyncGenerator<ScannedAlbum> {
   let folderEntries: fs.Dirent[];
   try {
     folderEntries = await fs.promises.readdir(folderPath, { withFileTypes: true });
   } catch {
+    failedScopes.add(folderPath);
     return;
   }
 
-  const folderAlbum = await scanFolderAlbum(libraryRootPath, folderPath, existingBySourcePath);
-  if (folderAlbum) {
-    yield folderAlbum;
+  try {
+    const folderAlbum = await scanFolderAlbum(libraryRootPath, folderPath, existingBySourcePath);
+    if (folderAlbum) yield folderAlbum;
+  } catch {
+    failedScopes.add(folderPath);
   }
 
   const childDirectories = folderEntries.filter((entry) => entry.isDirectory()).sort((left, right) => sortNames(left.name, right.name));
   for (const directory of childDirectories) {
     const childPath = path.join(folderPath, directory.name);
-    for await (const childAlbum of iterateFolderAlbumsRecursively(libraryRootPath, childPath, existingBySourcePath)) {
+    for await (const childAlbum of iterateFolderAlbumsRecursively(libraryRootPath, childPath, existingBySourcePath, failedScopes)) {
       yield childAlbum;
     }
   }
@@ -234,12 +222,14 @@ const iterateFolderAlbumsRecursively = async function* (
 const iterateArchiveAlbumsRecursively = async function* (
   libraryRootPath: string,
   folderPath: string,
-  existingBySourcePath: Map<string, AlbumRecord>
+  existingBySourcePath: Map<string, AlbumRecord>,
+  failedScopes: Set<string>
 ): AsyncGenerator<ScannedAlbum> {
   let folderEntries: fs.Dirent[];
   try {
     folderEntries = await fs.promises.readdir(folderPath, { withFileTypes: true });
   } catch {
+    failedScopes.add(folderPath);
     return;
   }
 
@@ -249,7 +239,7 @@ const iterateArchiveAlbumsRecursively = async function* (
     const fullPath = path.join(folderPath, entry.name);
 
     if (entry.isDirectory()) {
-      for await (const childAlbum of iterateArchiveAlbumsRecursively(libraryRootPath, fullPath, existingBySourcePath)) {
+      for await (const childAlbum of iterateArchiveAlbumsRecursively(libraryRootPath, fullPath, existingBySourcePath, failedScopes)) {
         yield childAlbum;
       }
       continue;
@@ -270,20 +260,22 @@ const iterateArchiveAlbumsRecursively = async function* (
         yield archiveAlbum;
       }
     } catch (error) {
-      logger.error(`扫描归档失败：${fullPath}`, error instanceof Error ? error.message : error);
+      failedScopes.add(fullPath);
+      logger.error("扫描归档失败，本轮保留已有索引");
     }
   }
 };
 
 const iterateAlbumsForRoot = async function* (
   libraryRootPath: string,
-  existingBySourcePath: Map<string, AlbumRecord>
+  existingBySourcePath: Map<string, AlbumRecord>,
+  failedScopes: Set<string>
 ): AsyncGenerator<ScannedAlbum> {
-  for await (const album of iterateFolderAlbumsRecursively(libraryRootPath, libraryRootPath, existingBySourcePath)) {
+  for await (const album of iterateFolderAlbumsRecursively(libraryRootPath, libraryRootPath, existingBySourcePath, failedScopes)) {
     yield album;
   }
 
-  for await (const album of iterateArchiveAlbumsRecursively(libraryRootPath, libraryRootPath, existingBySourcePath)) {
+  for await (const album of iterateArchiveAlbumsRecursively(libraryRootPath, libraryRootPath, existingBySourcePath, failedScopes)) {
     yield album;
   }
 };
@@ -298,8 +290,8 @@ const toAssetRecord = (albumId: string, timestamp: string, asset: ScannedAlbum["
   relativePath: asset.relativePath,
   zipEntryPath: asset.zipEntryPath,
   sortIndex: asset.sortIndex,
-  width: null,
-  height: null,
+  width: asset.width ?? null,
+  height: asset.height ?? null,
   sizeBytes: asset.sizeBytes,
   sourceMtime: asset.sourceMtime,
   thumbnailKey: null,
@@ -359,12 +351,14 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
   let albumsDiscovered = 0;
   let assetsDiscovered = 0;
   const totalRoots = libraryRoots.length;
+  let failureCount = 0;
 
   for (let rootIndex = 0; rootIndex < libraryRoots.length; rootIndex += 1) {
     const libraryRoot = libraryRoots[rootIndex];
     const existingAlbums = listAlbumsByLibraryRootIdDb(libraryRoot.id);
     const existingBySourcePath = new Map(existingAlbums.map((album) => [album.sourcePath, album]));
     const discoveredSourcePaths = new Set<string>();
+    const failedScopes = new Set<string>();
     const replacedBatch: Array<{
       existingAlbumId: string | null;
       album: AlbumRecord;
@@ -394,7 +388,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
       });
     };
 
-    for await (const discoveredAlbum of iterateAlbumsForRoot(libraryRoot.path, existingBySourcePath)) {
+    for await (const discoveredAlbum of iterateAlbumsForRoot(libraryRoot.path, existingBySourcePath, failedScopes)) {
       scannedAlbumsInRoot += 1;
       discoveredSourcePaths.add(discoveredAlbum.sourcePath);
       albumsDiscovered += 1;
@@ -446,6 +440,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
         assetCount: assets.length,
         scanStatus: "ready",
         errorMessage: null,
+        isFavorite: existingAlbum?.isFavorite ?? false,
         createdAt: existingAlbum?.createdAt ?? timestamp,
         updatedAt: timestamp
       };
@@ -474,7 +469,12 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
     }
     flushBatch();
 
-    const removedAlbumIds = existingAlbums
+    failureCount += failedScopes.size;
+    for (const existing of existingAlbums) {
+      const failed = [...failedScopes].some((scope) => existing.sourcePath === scope || existing.sourcePath.startsWith(scope + path.sep));
+      updateAlbumScanStatusDb(existing.id, failed ? "error" : "ready", failed ? "部分扫描失败，已跳过清理，请检查媒体目录后重试" : null);
+    }
+    const removedAlbumIds = (failedScopes.size ? [] : existingAlbums)
       .filter((album) => !discoveredSourcePaths.has(album.sourcePath))
       .map((album) => album.id);
     if (removedAlbumIds.length > 0) {
@@ -506,7 +506,10 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
 
   return {
     albumsDiscovered,
-    assetsDiscovered
+    assetsDiscovered,
+    failureCount,
+    outcome: failureCount ? (albumsDiscovered ? "partial" : "failed") : "complete",
+    message: failureCount ? "部分扫描失败，已跳过清理，请检查媒体目录后重试" : null
   };
 };
 

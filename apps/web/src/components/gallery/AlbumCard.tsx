@@ -31,6 +31,7 @@ export function AlbumCard({
       className="group cursor-pointer"
     >
       <div className="relative rounded-xl bg-surface-container-highest p-4 shadow-lg transition-all duration-300 hover:shadow-xl">
+        {album.scanStatus === 'error' && <p role="status" className="mb-2 text-sm text-error">扫描部分失败，已保留原图片，请检查媒体目录后重试</p>}
         <div onClick={() => onNavigateToAlbum(album.id)} className="pointer-events-auto">
           <div
             className={`absolute -top-3 z-10 rounded-full border border-black/5 px-4 py-1 text-xs font-bold shadow-sm ${

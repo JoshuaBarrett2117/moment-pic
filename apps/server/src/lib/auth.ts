@@ -5,12 +5,14 @@ import type { FastifyRequest } from "fastify";
 export const AUTH_COOKIE_NAME = "moment_pic_auth";
 const AUTH_USERNAME = "admin";
 
-const parseCookies = (cookieHeader: string | undefined): Record<string, string> => {
+export const parseCookies = (cookieHeader: string | undefined): Record<string, string> => {
   if (!cookieHeader) {
     return {};
   }
 
-  return cookieHeader
+  if (cookieHeader.length > 8192) return {};
+  try {
+    const cookies = cookieHeader
     .split(";")
     .map((item) => item.trim())
     .filter(Boolean)
@@ -22,9 +24,14 @@ const parseCookies = (cookieHeader: string | undefined): Record<string, string> 
 
       const key = item.slice(0, separatorIndex).trim();
       const value = item.slice(separatorIndex + 1).trim();
+      if (Object.hasOwn(acc, key)) throw new Error("duplicate cookie");
       acc[key] = decodeURIComponent(value);
       return acc;
-    }, {});
+    }, Object.create(null) as Record<string, string>);
+    return cookies;
+  } catch {
+    return {};
+  }
 };
 
 const sign = (payload: string, secret: string): string => {
@@ -54,8 +61,8 @@ export const createAuthToken = (password: string, expiresAtMs: number): string =
 };
 
 export const verifyAuthToken = (token: string, password: string, nowMs = Date.now()): boolean => {
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) {
+  const [payload, signature, extra] = token.split(".");
+  if (!payload || !signature || extra !== undefined || token.length > 2048) {
     return false;
   }
 
@@ -75,7 +82,7 @@ export const verifyAuthToken = (token: string, password: string, nowMs = Date.no
   }
 };
 
-export const isAuthenticated = (request: FastifyRequest, password: string): boolean => {
+export const isAuthenticated = (request: Pick<FastifyRequest, "headers">, password: string): boolean => {
   const cookies = parseCookies(request.headers.cookie);
   const token = cookies[AUTH_COOKIE_NAME];
   if (!token) {
@@ -85,10 +92,10 @@ export const isAuthenticated = (request: FastifyRequest, password: string): bool
   return verifyAuthToken(token, password);
 };
 
-export const buildAuthCookie = (token: string, maxAgeSeconds: number): string => {
-  return `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; SameSite=Lax`;
+export const buildAuthCookie = (token: string, maxAgeSeconds: number, secure = false): string => {
+  return `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; Max-Age=${maxAgeSeconds}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
 };
 
-export const buildClearAuthCookie = (): string => {
-  return `${AUTH_COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`;
+export const buildClearAuthCookie = (secure = false): string => {
+  return `${AUTH_COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
 };

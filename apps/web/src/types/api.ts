@@ -22,6 +22,8 @@ export type LibraryRootDTO = {
 };
 
 export type AlbumListItemDTO = {
+  scanStatus?: 'ready' | 'error';
+  errorMessage?: string | null;
   id: string;
   name: string;
   sourceType: SourceTypeDTO;
@@ -300,7 +302,6 @@ export type ManagedAlbumShareDTO = {
   albumCoverUrl: string | null;
   albumAssetCount: number;
   token: string;
-  password: string;
   shareUrl: string;
   expiresAt: string;
   createdAt: string;

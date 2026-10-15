@@ -41,6 +41,7 @@ export const applyLibraryRootScanDiffDb = (input: {
   const deleteThumbnailByAlbumId = db.prepare("DELETE FROM thumbnails WHERE asset_id IN (SELECT id FROM assets WHERE album_id = ?)");
   const deleteAssetsByAlbumId = db.prepare("DELETE FROM assets WHERE album_id = ?");
   const deleteAlbumById = db.prepare("DELETE FROM albums WHERE id = ?");
+  const deleteSharesByAlbumId = db.prepare("DELETE FROM album_shares WHERE album_id = ?");
   const insertAlbum = db.prepare(`
     INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, assets_fingerprint, cover_asset_id, asset_count, scan_status, error_message, is_favorite, created_at, updated_at)
     VALUES (@id, @libraryRootId, @name, @sourceType, @sourcePath, @sourceMtime, @assetsFingerprint, @coverAssetId, @assetCount, @scanStatus, @errorMessage, @isFavorite, @createdAt, @updatedAt)
@@ -52,6 +53,7 @@ export const applyLibraryRootScanDiffDb = (input: {
 
   const transaction = db.transaction(() => {
     for (const albumId of input.removedAlbumIds) {
+      deleteSharesByAlbumId.run(albumId);
       deleteThumbnailByAlbumId.run(albumId);
       deleteAssetsByAlbumId.run(albumId);
       deleteAlbumById.run(albumId);
@@ -72,6 +74,10 @@ export const applyLibraryRootScanDiffDb = (input: {
   });
 
   transaction();
+};
+
+export const updateAlbumScanStatusDb = (albumId: string, status: "ready" | "error", message: string | null): void => {
+  getDb().prepare("UPDATE albums SET scan_status = ?, error_message = ? WHERE id = ?").run(status, message, albumId);
 };
 
 export const listAlbumsDb = (
@@ -232,16 +238,20 @@ export const deleteAlbumDb = (albumId: string) => {
 export const insertAlbumShareDb = (share: AlbumShareRecord): AlbumShareRecord => {
   const db = getDb();
   db.prepare(`
-    INSERT INTO album_shares (id, album_id, token, password_hash, password_plain, expires_at, created_at)
-    VALUES (@id, @albumId, @token, @passwordHash, @passwordPlain, @expiresAt, @createdAt)
+    INSERT INTO album_shares (id, album_id, token, password_hash, expires_at, created_at)
+    VALUES (@id, @albumId, @token, @passwordHash, @expiresAt, @createdAt)
   `).run(share);
   return share;
 };
 
 export const findAlbumShareByTokenDb = (token: string): AlbumShareRecord | null => {
   const db = getDb();
-  const row = db.prepare("SELECT * FROM album_shares WHERE token = ? LIMIT 1").get(token) as Record<string, unknown> | undefined;
+  const row = db.prepare("SELECT id, album_id, token, password_hash, expires_at, created_at FROM album_shares WHERE token = ? LIMIT 1").get(token) as Record<string, unknown> | undefined;
   return row ? rowToAlbumShare(row) : null;
+};
+
+export const updateAlbumSharePasswordDb = (shareId: string, hash: string): boolean => {
+  return getDb().prepare("UPDATE album_shares SET password_hash = ? WHERE id = ? AND expires_at > ?").run(hash, shareId, new Date().toISOString()).changes > 0;
 };
 
 export const deleteExpiredAlbumSharesDb = (nowIso: string): void => {
@@ -263,7 +273,8 @@ export const listActiveAlbumSharesDb = (nowIso: string): Array<AlbumShareRecord 
   return db
     .prepare(`
       SELECT
-        album_shares.*,
+        album_shares.id, album_shares.album_id, album_shares.token,
+        album_shares.password_hash, album_shares.expires_at, album_shares.created_at,
         albums.name AS album_name,
         albums.cover_asset_id AS album_cover_asset_id,
         albums.asset_count AS album_asset_count

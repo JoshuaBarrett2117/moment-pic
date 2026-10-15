@@ -1,3 +1,4 @@
+import { useLatestRequest, isRequestCancellation } from './useLatestRequest';
 import { useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { PageTransitionModeDTO, SystemConfigDTO } from '../types/api';
@@ -16,6 +17,7 @@ export type SystemConfigUpdates = {
 };
 
 interface UseSystemConfigReturn {
+  cancelRequests: () => void;
   systemConfig: SystemConfigDTO | null;
   isLoading: boolean;
   error: string | null;
@@ -24,20 +26,23 @@ interface UseSystemConfigReturn {
 }
 
 export function useSystemConfig(): UseSystemConfigReturn {
+  const requests = useLatestRequest();
   const [systemConfig, setSystemConfig] = useState<SystemConfigDTO | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchSystemConfig = useCallback(async (): Promise<void> => {
+    const request = requests.begin();
     setIsLoading(true);
     setError(null);
     try {
-      const result = await api.get<SystemConfigDTO>('/system-config');
+      const result = await api.get<SystemConfigDTO>('/system-config', undefined, { signal: request.signal });
+      if (!request.isCurrent()) return;
       setSystemConfig(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取系统配置失败');
+      if (request.isCurrent() && !isRequestCancellation(err)) setError(err instanceof Error ? err.message : '获取系统配置失败');
     } finally {
-      setIsLoading(false);
+      if (request.isCurrent()) setIsLoading(false);
     }
   }, []);
 
@@ -53,5 +58,6 @@ export function useSystemConfig(): UseSystemConfigReturn {
     }
   }, []);
 
-  return { systemConfig, isLoading, error, fetchSystemConfig, updateSystemConfig };
+  return {     cancelRequests: requests.cancel,
+systemConfig, isLoading, error, fetchSystemConfig, updateSystemConfig };
 }

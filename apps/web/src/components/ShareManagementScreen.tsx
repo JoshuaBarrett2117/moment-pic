@@ -1,5 +1,6 @@
 import { type FC, useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Copy, Loader2, Share2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, KeyRound, Loader2, Share2, Trash2 } from 'lucide-react';
+import { resetManagedAlbumSharePassword } from '../hooks/useAlbums';
 import { deleteManagedAlbumShare, fetchManagedAlbumShares } from '../hooks';
 import type { LibraryRootDTO, ManagedAlbumShareDTO } from '../types/api';
 import { Sidebar } from './Sidebar';
@@ -67,14 +68,14 @@ export const ShareManagementScreen: FC<ShareManagementScreenProps> = ({
   const buildShareText = (item: ManagedAlbumShareDTO) => [
     `图集：${item.albumName}`,
     `链接：${item.shareUrl}`,
-    `密码：${item.password || '未记录明文密码'}`,
+
     `有效期：${new Date(item.expiresAt).toLocaleString('zh-CN')}`
   ].join('\n');
 
   const handleCopy = async (item: ManagedAlbumShareDTO) => {
     try {
       await navigator.clipboard.writeText(buildShareText(item));
-      toast('分享链接和密码已复制', 'success');
+      toast('分享链接已复制；密码不可再次查看', 'success');
     } catch {
       setError('复制失败，请手动复制链接');
     }
@@ -87,6 +88,16 @@ export const ShareManagementScreen: FC<ShareManagementScreenProps> = ({
       return;
     }
     await loadShares();
+  };
+
+  const handleReset = async (item: ManagedAlbumShareDTO) => {
+    const password = window.prompt('请输入新分享密码（1–128 字符）。保存后旧访问会话立即失效，密码不可再次查看。');
+    if (password === null) return;
+    if (!password.trim() || password.length > 128) { setError('密码长度必须为 1–128 个字符'); return; }
+    try {
+      await resetManagedAlbumSharePassword(item.id, password);
+      toast('分享密码已重置，旧访问会话已失效', 'success');
+    } catch { setError('重置失败，请稍后重试'); }
   };
 
   return (
@@ -155,7 +166,7 @@ export const ShareManagementScreen: FC<ShareManagementScreenProps> = ({
                   <h2 className="truncate font-headline text-xl font-bold text-on-surface">{item.albumName}</h2>
                   <p className="mt-1 text-sm text-outline">{item.albumAssetCount} 张图片</p>
                   <p className="mt-2 break-all text-xs text-outline/80">{item.shareUrl}</p>
-                  <p className="mt-2 text-xs font-semibold text-on-surface">密码：{item.password || '未记录明文密码'}</p>
+                  <p className="mt-2 text-xs font-semibold text-on-surface">密码仅创建时显示，之后只能重置</p>
                   <p className="mt-2 text-xs text-outline/70">
                     有效期至 {new Date(item.expiresAt).toLocaleString('zh-CN')}
                   </p>
@@ -165,9 +176,12 @@ export const ShareManagementScreen: FC<ShareManagementScreenProps> = ({
                     type="button"
                     onClick={() => void handleCopy(item)}
                     className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container text-on-secondary-container transition-all hover:brightness-95"
-                    title="复制链接和密码"
+                    title="复制链接"
                   >
                     <Copy className="h-4 w-4" />
+                  </button>
+                  <button type="button" onClick={() => void handleReset(item)} className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary-container text-on-secondary-container" title="重置密码">
+                    <KeyRound className="h-4 w-4" />
                   </button>
                   <button
                     type="button"

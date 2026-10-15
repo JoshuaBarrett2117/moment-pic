@@ -1,8 +1,10 @@
+import { useLatestRequest, isRequestCancellation } from './useLatestRequest';
 import { useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { LibraryRootDTO } from '../types/api';
 
 interface UseLibraryRootsReturn {
+  cancelRequests: () => void;
   libraryRoots: LibraryRootDTO[];
   isLoading: boolean;
   error: string | null;
@@ -13,20 +15,23 @@ interface UseLibraryRootsReturn {
 }
 
 export function useLibraryRoots(): UseLibraryRootsReturn {
+  const requests = useLatestRequest();
   const [libraryRoots, setLibraryRoots] = useState<LibraryRootDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchLibraryRoots = useCallback(async (): Promise<void> => {
+    const request = requests.begin();
     setIsLoading(true);
     setError(null);
     try {
-      const result = await api.get<LibraryRootDTO[]>('/library-roots');
+      const result = await api.get<LibraryRootDTO[]>('/library-roots', undefined, { signal: request.signal });
+      if (!request.isCurrent()) return;
       setLibraryRoots(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取库目录失败');
+      if (request.isCurrent() && !isRequestCancellation(err)) setError(err instanceof Error ? err.message : '获取库目录失败');
     } finally {
-      setIsLoading(false);
+      if (request.isCurrent()) setIsLoading(false);
     }
   }, []);
 
@@ -63,5 +68,6 @@ export function useLibraryRoots(): UseLibraryRootsReturn {
     }
   }, []);
 
-  return { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot };
+  return {     cancelRequests: requests.cancel,
+libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot };
 }

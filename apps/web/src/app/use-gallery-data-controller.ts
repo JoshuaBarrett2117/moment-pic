@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan, useRecentAlbums, useSmartAlbums, useDirectoryAlbums } from '../hooks';
 import { Screen } from '../types';
 import type { GalleryFilters, GalleryViewMode } from './gallery-navigation';
@@ -22,7 +22,7 @@ export const useGalleryDataController = ({
   isRecentActive,
   selectedSmartAlbum,
 }: UseGalleryDataControllerInput) => {
-  const { albums, isLoading, error, fetchAlbums } = useAlbums();
+  const { albums, isLoading, error, fetchAlbums, cancelRequests: cancelAlbums } = useAlbums();
   const {
     smartAlbums,
     smartAlbumDetail,
@@ -30,14 +30,25 @@ export const useGalleryDataController = ({
     isLoading: isSmartAlbumsLoading,
     fetchSmartAlbums,
     fetchSmartAlbumDetail
+    , cancelRequests: cancelSmartAlbums
   } = useSmartAlbums();
-  const { recentAlbums, isLoading: isRecentLoading, fetchRecentAlbums } = useRecentAlbums();
+  const { recentAlbums, isLoading: isRecentLoading, fetchRecentAlbums, cancelRequests: cancelRecent } = useRecentAlbums();
   const {
     directoryAlbums,
     isLoading: isDirectoryAlbumsLoading,
     fetchDirectoryAlbums
+    , cancelRequests: cancelDirectory
   } = useDirectoryAlbums();
   const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
+  const queryKey = JSON.stringify([currentScreen, debouncedKeyword, filters, galleryViewMode, isAuthenticated, isRecentActive, selectedSmartAlbum]);
+  const queryRef = useRef(queryKey);
+  queryRef.current = queryKey;
+  useEffect(() => () => {
+    cancelAlbums();
+    cancelSmartAlbums();
+    cancelRecent();
+    cancelDirectory();
+  }, [queryKey, cancelAlbums, cancelSmartAlbums, cancelRecent, cancelDirectory]);
 
   const loadAlbums = useCallback(() => {
     return fetchAlbums({
@@ -93,6 +104,7 @@ export const useGalleryDataController = ({
     }
 
     await fetchLibraryRoots();
+    if (queryRef.current !== queryKey) return;
     if (galleryViewMode === 'directoryAlbums') {
       await loadDirectoryAlbums();
       return;
@@ -111,13 +123,13 @@ export const useGalleryDataController = ({
     }
 
     await loadAlbums();
-  }, [fetchLibraryRoots, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums]);
+  }, [fetchLibraryRoots, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums, queryKey]);
 
-  const { isScanning, scan, scanningLibraryRootIds, isAnyScanning } = useLibraryScan({
+  const { isScanning, scan, scanningLibraryRootIds, isAnyScanning, scanError: taskScanError } = useLibraryScan({
     onScanComplete: refreshCurrentGallery
   });
 
-  const { isConnected: wsConnected } = useWebSocket(
+  const { isConnected: wsConnected, lastScanComplete } = useWebSocket(
     (event) => {
       if (event.type !== 'unlink' || !isAuthenticated) {
         return;
@@ -134,7 +146,8 @@ export const useGalleryDataController = ({
     },
     () => {
       void refreshCurrentGallery();
-    }
+    },
+    isAuthenticated
   );
 
   useEffect(() => {
@@ -217,6 +230,7 @@ export const useGalleryDataController = ({
     refreshCurrentGallery,
     scan,
     scanningLibraryRootIds,
+    scanError: taskScanError ?? (lastScanComplete?.failureCount ? lastScanComplete.message : null),
     smartAlbumDetail,
     smartAlbumMembers,
     smartAlbums,

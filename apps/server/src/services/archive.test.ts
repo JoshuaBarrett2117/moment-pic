@@ -250,7 +250,7 @@ test("openArchiveEntryBody rejects failed 7z streams instead of returning an emp
 
     await assert.rejects(
       () => openArchiveEntryBody(archivePath, "pages/page-01.jpg"),
-      /7z command failed/
+      /归档程序退出异常/
     );
   } finally {
     await fs.promises.rm(tempDir, { recursive: true, force: true });

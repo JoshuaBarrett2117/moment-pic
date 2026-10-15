@@ -1,3 +1,4 @@
+import { useLatestRequest, isRequestCancellation } from './useLatestRequest';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import type {
@@ -45,6 +46,7 @@ type UseSmartAlbumsOptions = {
 const SMART_ALBUM_REBUILD_TASK_STORAGE_KEY = 'moment_pic_active_smart_album_rebuild_task';
 
 export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
+  const requests = useLatestRequest();
   const [smartAlbums, setSmartAlbums] = useState<SmartAlbumsListDTO | null>(null);
   const [smartAlbumDetail, setSmartAlbumDetail] = useState<SmartAlbumDetailDTO | null>(null);
   const [smartAlbumMembers, setSmartAlbumMembers] = useState<SmartAlbumMemberDTO[] | null>(null);
@@ -123,34 +125,39 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
     sortBy?: 'name' | 'updatedAt' | 'albumCount' | 'assetCount';
     sortOrder?: 'asc' | 'desc';
   }) => {
+    const request = requests.begin();
     setIsLoading(true);
     setError(null);
     try {
-      const result = await api.get<SmartAlbumsListDTO>('/smart-albums', params);
+      const result = await api.get<SmartAlbumsListDTO>('/smart-albums', params, { signal: request.signal });
+      if (!request.isCurrent()) return null;
       setSmartAlbums(result);
       return result;
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取自动整理失败');
+      if (request.isCurrent() && !isRequestCancellation(err)) setError(err instanceof Error ? err.message : '获取自动整理失败');
       return null;
     } finally {
-      setIsLoading(false);
+      if (request.isCurrent()) setIsLoading(false);
     }
   }, []);
 
   const fetchSmartAlbumDetail = useCallback(async (smartAlbumId: string) => {
+    const request = requests.begin();
     setIsLoading(true);
     setError(null);
     try {
-      const detail = await api.get<SmartAlbumDetailDTO>(`/smart-albums/${smartAlbumId}`);
-      const membersResult = await api.get<SmartAlbumMembersListDTO>(`/smart-albums/${smartAlbumId}/albums`);
+      const detail = await api.get<SmartAlbumDetailDTO>(`/smart-albums/${smartAlbumId}`, undefined, { signal: request.signal });
+      if (!request.isCurrent()) return null;
+      const membersResult = await api.get<SmartAlbumMembersListDTO>(`/smart-albums/${smartAlbumId}/albums`, undefined, { signal: request.signal });
+      if (!request.isCurrent()) return null;
       setSmartAlbumDetail(detail);
       setSmartAlbumMembers(membersResult.items);
       return { detail, members: membersResult.items };
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取自动整理详情失败');
+      if (request.isCurrent() && !isRequestCancellation(err)) setError(err instanceof Error ? err.message : '获取自动整理详情失败');
       return null;
     } finally {
-      setIsLoading(false);
+      if (request.isCurrent()) setIsLoading(false);
     }
   }, []);
 
@@ -300,6 +307,7 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
   }, [clearRebuildPolling]);
 
   return {
+    cancelRequests: requests.cancel,
     smartAlbums,
     smartAlbumDetail,
     smartAlbumMembers,

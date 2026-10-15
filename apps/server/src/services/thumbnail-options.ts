@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import type sharp from "sharp";
+import type { Metadata } from "sharp";
 
 export const DEFAULT_THUMBNAIL_WIDTH = 360;
 export const DEFAULT_THUMBNAIL_HEIGHT = 360;
@@ -76,7 +76,7 @@ export const getEncodeQuality = (format: ThumbnailFormat, input: { webpQuality: 
 const hasValidDimension = (value: number | null | undefined): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
 
-export const normalizeMetadataDimensions = (metadata: sharp.Metadata): { width: number | null; height: number | null } => {
+export const normalizeMetadataDimensions = (metadata: Partial<Pick<Metadata, "width" | "height" | "orientation">>): { width: number | null; height: number | null } => {
   const rawWidth = hasValidDimension(metadata.width) ? metadata.width : null;
   const rawHeight = hasValidDimension(metadata.height) ? metadata.height : null;
 

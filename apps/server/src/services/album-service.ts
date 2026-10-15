@@ -1,4 +1,7 @@
 import crypto from "node:crypto";
+import { sharePasswords } from "./share-password.js";
+import { AttemptLimiter } from "../lib/rate-limit.js";
+import { MAX_PASSWORD_LENGTH } from "../config/security.js";
 
 import type {
   AlbumAssetsDTO,
@@ -29,6 +32,7 @@ import {
   deleteAlbumShareDb,
   deleteExpiredAlbumSharesDb,
   updateAlbumFavoriteDb,
+  updateAlbumSharePasswordDb,
 } from "../repositories/album-repository.js";
 import { listLibraryRootsDb, deleteLibraryRootDb, upsertLibraryRootDb, updateLibraryRootDb } from "../repositories/library-root-repository.js";
 import { makeId } from "../repositories/ids.js";
@@ -84,6 +88,8 @@ const toAlbumListItem = (row: AlbumRecord): AlbumListItemDTO => ({
   assetCount: row.assetCount,
   coverUrl: row.coverAssetId ? `/api/v1/assets/${row.coverAssetId}/thumbnail` : null,
   isFavorite: Boolean(row.isFavorite),
+  scanStatus: row.scanStatus,
+  errorMessage: row.errorMessage,
   updatedAt: row.updatedAt
 });
 
@@ -226,23 +232,6 @@ export const setAlbumFavorite = async (albumId: string, isFavorite: boolean): Pr
   };
 };
 
-const hashSharePassword = (password: string): string => {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${hash}`;
-};
-
-const verifySharePassword = (password: string, passwordHash: string): boolean => {
-  const [salt, expectedHash] = passwordHash.split(":");
-  if (!salt || !expectedHash) {
-    return false;
-  }
-
-  const actualHash = crypto.scryptSync(password, salt, 64).toString("hex");
-  const actual = Buffer.from(actualHash, "hex");
-  const expected = Buffer.from(expectedHash, "hex");
-  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
-};
 
 const signShareAccessPayload = (payload: string, passwordHash: string): string =>
   crypto.createHmac("sha256", passwordHash).update(payload).digest("hex");
@@ -298,7 +287,7 @@ export const createAlbumShare = async (
 
   const password = input.password.trim();
   const expiresAtMs = Date.parse(input.expiresAt);
-  if (password.length < 1 || Number.isNaN(expiresAtMs) || expiresAtMs <= Date.now()) {
+  if (password.length < 1 || password.length > MAX_PASSWORD_LENGTH || Number.isNaN(expiresAtMs) || expiresAtMs <= Date.now()) {
     throw new AlbumShareInputInvalidError();
   }
 
@@ -308,8 +297,7 @@ export const createAlbumShare = async (
     id: makeId("share"),
     albumId,
     token,
-    passwordHash: hashSharePassword(password),
-    passwordPlain: password,
+    passwordHash: await sharePasswords.hash(password),
     expiresAt,
     createdAt: new Date().toISOString()
   });
@@ -333,7 +321,7 @@ export const listManagedAlbumShares = async (origin: string): Promise<ManagedAlb
       albumCoverUrl: share.albumCoverAssetId ? `/api/v1/assets/${share.albumCoverAssetId}/thumbnail` : null,
       albumAssetCount: share.albumAssetCount,
       token: share.token,
-      password: share.passwordPlain,
+
       shareUrl: `${origin.replace(/\/$/, "")}/share/${share.token}`,
       expiresAt: share.expiresAt,
       createdAt: share.createdAt
@@ -370,7 +358,14 @@ export class AlbumSharePasswordInvalidError extends Error {
   }
 }
 
-export const authenticateAlbumShare = async (token: string, password: string): Promise<SharedAlbumAuthDTO> => {
+const shareIpLimiter = new AttemptLimiter(20);
+const shareIdLimiter = new AttemptLimiter(10);
+
+export const authenticateAlbumShare = async (token: string, password: string, ip = "internal"): Promise<SharedAlbumAuthDTO> => {
+  const ipAllowed = shareIpLimiter.allow(ip);
+  const shareAllowed = shareIdLimiter.allow(token);
+  if (!ipAllowed || !shareAllowed) throw Object.assign(new Error("分享认证尝试过多，请稍后重试"), { statusCode: 429 });
+  if (!password.length || password.length > MAX_PASSWORD_LENGTH || token.length > 128) throw new AlbumSharePasswordInvalidError();
   deleteExpiredAlbumSharesDb(new Date().toISOString());
 
   const share = findAlbumShareByTokenDb(token);
@@ -378,7 +373,7 @@ export const authenticateAlbumShare = async (token: string, password: string): P
     throw new AlbumShareNotFoundError();
   }
 
-  if (!verifySharePassword(password, share.passwordHash)) {
+  if (!(await sharePasswords.verify(password, share.passwordHash))) {
     throw new AlbumSharePasswordInvalidError();
   }
 
@@ -399,6 +394,14 @@ export const authenticateAlbumShare = async (token: string, password: string): P
     name: album.name,
     expiresAt: share.expiresAt
   };
+};
+
+export const resetManagedAlbumSharePassword = async (shareId: string, password: string): Promise<boolean> => {
+  const share = listActiveAlbumSharesDb(new Date().toISOString()).find((item) => item.id === shareId);
+  if (!share) return false;
+  if (!password.trim().length || password.length > MAX_PASSWORD_LENGTH) throw new AlbumShareInputInvalidError();
+  const hash = await sharePasswords.hash(password.trim());
+  return updateAlbumSharePasswordDb(shareId, hash);
 };
 
 export const getSharedAlbumAssets = async (token: string, accessToken: string, page = 1, pageSize = 120): Promise<AlbumAssetsDTO | null> => {

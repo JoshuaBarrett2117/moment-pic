@@ -12,8 +12,9 @@ export const syncAssetDimensions = async (input: {
   sharpInput?: SharpInput;
 }): Promise<{ width: number; height: number } | null> => {
   const { asset } = input;
-  if (dimensionSyncedAssetIds.has(asset.id) || hasPersistedDimensions(asset)) {
-    dimensionSyncedAssetIds.add(asset.id);
+  const version = `${asset.id}:${asset.sourceMtime}:${asset.sizeBytes}`;
+  if (dimensionSyncedAssetIds.has(version) || hasPersistedDimensions(asset)) {
+    dimensionSyncedAssetIds.add(version);
     return hasPersistedDimensions(asset) ? { width: asset.width as number, height: asset.height as number } : null;
   }
 
@@ -37,7 +38,7 @@ export const syncAssetDimensions = async (input: {
       });
     }
 
-    dimensionSyncedAssetIds.add(asset.id);
+    dimensionSyncedAssetIds.add(version);
     return {
       width: normalized.width,
       height: normalized.height

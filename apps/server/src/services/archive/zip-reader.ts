@@ -6,7 +6,7 @@ import yauzl from "yauzl";
 import { isSupportedImageExtension } from "../../lib/image-formats.js";
 import { normalizeExtension, toPosixPath } from "../../lib/paths.js";
 import { extractJpegFromPsd } from "../archive-utils.js";
-import { createSingleRun } from "./archive-body.js";
+import { acquireArchiveLease, byteLimiter, collectBounded, MAX_ARCHIVE_ENTRIES, MAX_ENTRY_BYTES, MAX_LISTING_BYTES, type ArchiveOptions } from "./archive-limits.js";
 import type { ArchiveImageEntry } from "./archive-types.js";
 
 type ZipEntryName = string | Buffer;
@@ -48,173 +48,87 @@ const toDecodedZipEntryPath = (entry: yauzl.Entry): string => {
   return toPosixPath(decoded);
 };
 
-const closeZipFileQuietly = (zipFile: yauzl.ZipFile) => {
+const managedZip = async (zipPath: string, options: ArchiveOptions) => {
+  const lease = await acquireArchiveLease(options);
   try {
-    zipFile.close();
-  } catch {
-    // no-op
-  }
+    const zip = await new Promise<yauzl.ZipFile>((resolve, reject) => {
+      yauzl.open(zipPath, { lazyEntries: true, decodeStrings: false, autoClose: false }, (error, opened) => {
+        if (error || !opened) reject(error ?? new Error("无法打开 ZIP"));
+        else resolve(opened);
+      });
+    });
+    zip.once("close", lease.release);
+    const close = () => zip.close();
+    if (lease.signal.aborted) { close(); lease.signal.throwIfAborted(); }
+    return { zip, signal: lease.signal, close };
+  } catch (error) { lease.release(); throw error; }
 };
 
-const openZip = async (zipPath: string): Promise<yauzl.ZipFile> =>
-  new Promise((resolve, reject) => {
-    yauzl.open(zipPath, { lazyEntries: true, decodeStrings: false }, (error, zipFile) => {
-      if (error || !zipFile) {
-        reject(error ?? new Error(`cannot open ZIP archive: ${zipPath}`));
-        return;
-      }
-
-      resolve(zipFile);
-    });
-  });
-
-export const collectZipImageEntries = async (zipPath: string): Promise<ArchiveImageEntry[]> => {
-  const zipFile = await openZip(zipPath);
-
+export const collectZipImageEntries = async (zipPath: string, options: ArchiveOptions = {}): Promise<ArchiveImageEntry[]> => {
+  const { zip, signal, close } = await managedZip(zipPath, options);
   return new Promise((resolve, reject) => {
     const entries: ArchiveImageEntry[] = [];
-
-    zipFile.readEntry();
-
-    zipFile.on("entry", (entry) => {
-      const entryPath = toDecodedZipEntryPath(entry);
-
-      if (entryPath.endsWith("/")) {
-        zipFile.readEntry();
-        return;
-      }
-
-      const extension = normalizeExtension(entryPath);
-      if (!isSupportedImageExtension(extension)) {
-        zipFile.readEntry();
-        return;
-      }
-
-      entries.push({
-        entryPath,
-        name: path.basename(entryPath),
-        extension,
-        sizeBytes: entry.uncompressedSize
-      });
-
-      zipFile.readEntry();
+    let count = 0;
+    let pathBytes = 0;
+    const fail = (error: Error) => { signal.removeEventListener("abort", abort); close(); reject(error); };
+    const abort = () => fail(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    zip.on("entry", (entry) => {
+      try {
+        const entryPath = toDecodedZipEntryPath(entry);
+        count += 1;
+        pathBytes += Buffer.byteLength(entryPath);
+        if (count > (options.maxEntries ?? MAX_ARCHIVE_ENTRIES) || pathBytes > MAX_LISTING_BYTES) throw new Error("ZIP 列表超过上限");
+        const extension = normalizeExtension(entryPath);
+        if (!entryPath.endsWith("/") && isSupportedImageExtension(extension)) entries.push({ entryPath, name: path.basename(entryPath), extension, sizeBytes: entry.uncompressedSize });
+        zip.readEntry();
+      } catch (error) { fail(error as Error); }
     });
-
-    zipFile.once("end", () => {
-      zipFile.close();
-      resolve(entries);
-    });
-
-    zipFile.once("error", (error) => {
-      zipFile.close();
-      reject(error);
-    });
+    zip.once("error", fail);
+    zip.once("end", () => { signal.removeEventListener("abort", abort); close(); resolve(entries); });
+    if (signal.aborted) abort(); else zip.readEntry();
   });
 };
 
-export const readZipBuffer = async (zipPath: string, entryPath: string): Promise<Buffer> => {
-  const zipFile = await openZip(zipPath);
-
-  return new Promise((resolve, reject) => {
-    let found = false;
-
-    zipFile.readEntry();
-
-    zipFile.on("entry", (entry) => {
-      const currentPath = toDecodedZipEntryPath(entry);
-      if (currentPath !== entryPath) {
-        zipFile.readEntry();
-        return;
-      }
-
-      found = true;
-      zipFile.openReadStream(entry, (error, stream) => {
-        if (error || !stream) {
-          zipFile.close();
-          reject(error ?? new Error(`cannot read ZIP entry: ${entryPath}`));
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-        stream.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-        stream.on("end", () => {
-          zipFile.close();
-          resolve(extractJpegFromPsd(Buffer.concat(chunks)));
-        });
-        stream.on("error", (streamError) => {
-          zipFile.close();
-          reject(streamError);
-        });
-      });
-    });
-
-    zipFile.once("end", () => {
-      if (!found) {
-        zipFile.close();
-        reject(new Error(`ZIP entry not found: ${entryPath}`));
-      }
-    });
-
-    zipFile.once("error", (error) => {
-      zipFile.close();
-      reject(error);
-    });
-  });
-};
-
-export const readZipStream = async (zipPath: string, entryPath: string): Promise<Readable> => {
-  const zipFile = await openZip(zipPath);
-
+export const readZipStream = async (zipPath: string, entryPath: string, options: ArchiveOptions = {}): Promise<Readable> => {
+  const { zip, signal, close } = await managedZip(zipPath, options);
   return new Promise((resolve, reject) => {
     let found = false;
     let settled = false;
-
-    const rejectWithCleanup = (error: Error) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      closeZipFileQuietly(zipFile);
-      reject(error);
+    let source: Readable | undefined;
+    const output = byteLimiter(options.maxBytes);
+    const fail = (error: Error) => {
+      output.destroy(error);
+      source?.destroy();
+      close();
+      if (!settled) { settled = true; reject(error); }
     };
-
-    zipFile.readEntry();
-
-    zipFile.on("entry", (entry) => {
-      if (settled) {
-        return;
-      }
-
-      const currentPath = toDecodedZipEntryPath(entry);
-      if (currentPath !== entryPath) {
-        zipFile.readEntry();
-        return;
-      }
-
-      found = true;
-      zipFile.openReadStream(entry, (error, stream) => {
-        if (error || !stream) {
-          rejectWithCleanup(error ?? new Error(`cannot read ZIP entry: ${entryPath}`));
-          return;
-        }
-
-        settled = true;
-        const closeZip = createSingleRun(() => closeZipFileQuietly(zipFile));
-        stream.once("error", closeZip);
-        stream.once("end", closeZip);
-        stream.once("close", closeZip);
-        resolve(stream);
-      });
+    const abort = () => fail(signal.reason);
+    output.on("error", () => { source?.destroy(); close(); });
+    output.once("close", () => { signal.removeEventListener("abort", abort); source?.destroy(); close(); });
+    signal.addEventListener("abort", abort, { once: true });
+    zip.on("entry", (entry) => {
+      if (settled) return;
+      try {
+        if (toDecodedZipEntryPath(entry) !== entryPath) { zip.readEntry(); return; }
+        found = true;
+        if (entry.uncompressedSize > (options.maxBytes ?? MAX_ENTRY_BYTES)) { fail(new Error("归档解压字节数超过上限")); return; }
+        zip.openReadStream(entry, (error, stream) => {
+          if (error || !stream) { fail(error ?? new Error("无法读取 ZIP 条目")); return; }
+          source = stream;
+          if (signal.aborted || output.destroyed) { fail(signal.reason ?? new Error("请求已取消")); return; }
+          stream.once("error", fail);
+          settled = true;
+          stream.pipe(output);
+          resolve(output);
+        });
+      } catch (error) { fail(error as Error); }
     });
-
-    zipFile.once("end", () => {
-      if (!found) {
-        rejectWithCleanup(new Error(`ZIP entry not found: ${entryPath}`));
-      }
-    });
-
-    zipFile.once("error", (error) => {
-      rejectWithCleanup(error);
-    });
+    zip.once("error", fail);
+    zip.once("end", () => { if (!found) fail(new Error("ZIP entry not found")); });
+    if (signal.aborted) abort(); else zip.readEntry();
   });
 };
+
+export const readZipBuffer = async (zipPath: string, entryPath: string, options: ArchiveOptions = {}): Promise<Buffer> =>
+  extractJpegFromPsd(await collectBounded(await readZipStream(zipPath, entryPath, options)));

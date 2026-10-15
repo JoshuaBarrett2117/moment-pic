@@ -1,5 +1,6 @@
 import type { Readable } from "node:stream";
 import type fs from "node:fs";
+import type { ArchiveOptions } from "./archive/archive-limits.js";
 
 import { detectArchiveType, SUPPORTED_ARCHIVE_EXTENSIONS } from "./archive-utils.js";
 import { normalizeExtension } from "../lib/paths.js";
@@ -20,29 +21,29 @@ export const isArchiveFile = async (filePath: string, stats?: fs.Stats): Promise
   return SUPPORTED_ARCHIVE_EXTENSIONS.has(normalizeExtension(filePath));
 };
 
-const collectAllImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
+const collectAllImageEntries = async (archivePath: string, options: ArchiveOptions = {}): Promise<ArchiveImageEntry[]> => {
   const archiveType = detectArchiveType(archivePath);
   if (!archiveType) {
     throw new Error(`unsupported archive format: ${archivePath}`);
   }
 
   if (archiveType === "zip") {
-    return collectZipImageEntries(archivePath);
+    return collectZipImageEntries(archivePath, options);
   }
 
   if (archiveType === "cbr") {
-    return collectCbrImageEntries(archivePath);
+    return collectCbrImageEntries(archivePath, options);
   }
 
   if (archiveType === "7z") {
-    return collect7zImageEntries(archivePath);
+    return collect7zImageEntries(archivePath, options);
   }
 
   throw new Error(`archive format handler is not implemented: ${archiveType}`);
 };
 
-export const listRootImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
-  const entries = await collectAllImageEntries(archivePath);
+export const listRootImageEntries = async (archivePath: string, options: ArchiveOptions = {}): Promise<ArchiveImageEntry[]> => {
+  const entries = await collectAllImageEntries(archivePath, options);
   const rootImages = entries.filter((entry) => !entry.entryPath.includes("/"));
   const nestedImages = entries.filter((entry) => entry.entryPath.includes("/"));
 
@@ -57,43 +58,43 @@ export const listRootImageEntries = async (archivePath: string): Promise<Archive
   return nestedSize > rootSize ? nestedImages : rootImages;
 };
 
-export const readArchiveEntryBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
+export const readArchiveEntryBuffer = async (archivePath: string, entryPath: string, options: ArchiveOptions = {}): Promise<Buffer> => {
   const archiveType = detectArchiveType(archivePath);
   if (!archiveType) {
     throw new Error(`unsupported archive format: ${archivePath}`);
   }
 
   if (archiveType === "zip") {
-    return readZipBuffer(archivePath, entryPath);
+    return readZipBuffer(archivePath, entryPath, options);
   }
 
   if (archiveType === "cbr") {
-    return readCbrBuffer(archivePath, entryPath);
+    return readCbrBuffer(archivePath, entryPath, options);
   }
 
   if (archiveType === "7z") {
-    return read7zBuffer(archivePath, entryPath);
+    return read7zBuffer(archivePath, entryPath, options);
   }
 
   throw new Error(`archive format reader is not implemented: ${archiveType}`);
 };
 
-export const openArchiveEntryBody = async (archivePath: string, entryPath: string): Promise<Readable | Buffer> => {
+export const openArchiveEntryBody = async (archivePath: string, entryPath: string, options: ArchiveOptions = {}): Promise<Readable | Buffer> => {
   const archiveType = detectArchiveType(archivePath);
   if (!archiveType) {
     throw new Error(`unsupported archive format: ${archivePath}`);
   }
 
   if (archiveType === "zip") {
-    return toArchiveBody(readZipStream(archivePath, entryPath));
+    return toArchiveBody(readZipStream(archivePath, entryPath, options));
   }
 
   if (archiveType === "cbr") {
-    return toArchiveBody(readCbrStream(archivePath, entryPath));
+    return toArchiveBody(readCbrStream(archivePath, entryPath, options));
   }
 
   if (archiveType === "7z") {
-    return toArchiveBody(read7zStream(archivePath, entryPath));
+    return toArchiveBody(read7zStream(archivePath, entryPath, options));
   }
 
   throw new Error(`archive format stream reader is not implemented: ${archiveType}`);

@@ -8,7 +8,7 @@ COPY apps/web/package.json ./apps/web/package.json
 RUN npm ci --workspace @moment-pic/web --include-workspace-root=false
 COPY apps/web ./apps/web
 WORKDIR /app/apps/web
-RUN npm run build
+RUN npm run typecheck && npm run build
 
 # 阶段 2: 构建后端
 FROM node:22-slim AS builder
@@ -44,7 +44,7 @@ RUN if [ -n "$APT_MIRROR" ]; then \
       && echo "deb ${APT_MIRROR} bookworm-updates main" >> /etc/apt/sources.list \
       && echo "deb ${SECURITY_MIRROR} bookworm-security main" >> /etc/apt/sources.list; \
     fi
-RUN apt-get update && apt-get install -y --no-install-recommends libvips42 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends libvips42 7zip && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/server/package.json ./apps/server/package.json
 COPY --from=builder /app/apps/server/dist ./apps/server/dist

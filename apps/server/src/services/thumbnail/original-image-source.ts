@@ -66,7 +66,7 @@ export const readOriginalBuffer = async (assetId: string) => {
   }
 };
 
-export const readOriginalSharpInput = async (asset: AssetRecord): Promise<{
+export const readOriginalSharpInput = async (asset: AssetRecord, signal?: AbortSignal): Promise<{
   asset: AssetRecord;
   sharpInput: OriginalSharpInput;
 }> => {
@@ -88,7 +88,7 @@ export const readOriginalSharpInput = async (asset: AssetRecord): Promise<{
   try {
     return {
       asset,
-      sharpInput: await readArchiveEntryBuffer(asset.sourcePath, asset.zipEntryPath ?? "")
+      sharpInput: await readArchiveEntryBuffer(asset.sourcePath, asset.zipEntryPath ?? "", { signal })
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -99,7 +99,7 @@ export const readOriginalSharpInput = async (asset: AssetRecord): Promise<{
   }
 };
 
-export const openOriginalAssetSource = async (asset: AssetRecord): Promise<{
+export const openOriginalAssetSource = async (asset: AssetRecord, signal?: AbortSignal): Promise<{
   asset: AssetRecord;
   body: OriginalImageBody;
   sizeBytes: number | null;
@@ -109,7 +109,7 @@ export const openOriginalAssetSource = async (asset: AssetRecord): Promise<{
       const stat = await fs.promises.stat(asset.sourcePath);
       return {
         asset,
-        body: fs.createReadStream(asset.sourcePath),
+        body: fs.createReadStream(asset.sourcePath, { signal }),
         sizeBytes: stat.size
       };
     } catch (error) {
@@ -121,7 +121,7 @@ export const openOriginalAssetSource = async (asset: AssetRecord): Promise<{
   }
 
   try {
-    const body = await openArchiveEntryBody(asset.sourcePath, asset.zipEntryPath ?? "");
+    const body = await openArchiveEntryBody(asset.sourcePath, asset.zipEntryPath ?? "", { signal });
     return {
       asset,
       body,

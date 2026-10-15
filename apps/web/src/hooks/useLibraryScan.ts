@@ -12,6 +12,7 @@ interface ScanTask {
 }
 
 interface UseLibraryScanReturn {
+  scanError: string | null;
   scanningLibraryRootIds: Set<string>;
   isAnyScanning: boolean;
   isScanning: (libraryRootId: string) => boolean;
@@ -281,6 +282,7 @@ export function useLibraryScan(options: UseLibraryScanOptions = {}): UseLibraryS
   }, []);
 
   return { 
+    scanError: scanTaskList.find((task) => task.status === 'failed')?.error ?? null,
     scanningLibraryRootIds, 
     isAnyScanning,
     isScanning, 

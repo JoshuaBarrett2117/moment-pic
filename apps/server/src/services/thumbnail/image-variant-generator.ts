@@ -68,6 +68,7 @@ export const ensureThumbnailVariant = async (input: {
   format: ThumbnailFormat;
   cacheKey: string;
   quality: number;
+  signal?: AbortSignal;
 }): Promise<ImageVariantResult> => {
   const isDefaultSize = input.width === DEFAULT_THUMBNAIL_WIDTH && input.height === DEFAULT_THUMBNAIL_HEIGHT;
   const canUseDbRecord = isDefaultSize && input.format === "jpeg";
@@ -133,7 +134,7 @@ export const ensureThumbnailVariant = async (input: {
         };
       }
 
-      const { sharpInput } = await readOriginalSharpInput(input.asset);
+      const { sharpInput } = await readOriginalSharpInput(input.asset, input.signal);
       const syncedDimensions = await syncAssetDimensions({ asset: input.asset, sharpInput });
       let finalFormat: ThumbnailFormat = input.format;
       let finalFilePath = filePath;
@@ -211,7 +212,7 @@ export const ensureThumbnailVariant = async (input: {
     } finally {
       releaseSharpResources();
     }
-  });
+  }, input.signal);
 };
 
 export const ensurePreviewVariant = async (input: {
@@ -220,6 +221,7 @@ export const ensurePreviewVariant = async (input: {
   format: ThumbnailFormat;
   cacheKey: string;
   quality: number;
+  signal?: AbortSignal;
 }): Promise<ImageVariantResult> => {
   const presetOptions = PREVIEW_PRESET_OPTIONS[input.preset];
   const filePath = getFilePath(input.cacheKey, input.format);
@@ -237,7 +239,7 @@ export const ensurePreviewVariant = async (input: {
         };
       }
 
-      const { sharpInput } = await readOriginalSharpInput(input.asset);
+      const { sharpInput } = await readOriginalSharpInput(input.asset, input.signal);
       await syncAssetDimensions({ asset: input.asset, sharpInput });
       let finalFormat: ThumbnailFormat = input.format;
       let finalFilePath = filePath;
@@ -292,5 +294,5 @@ export const ensurePreviewVariant = async (input: {
     } finally {
       releaseSharpResources();
     }
-  });
+  }, input.signal);
 };

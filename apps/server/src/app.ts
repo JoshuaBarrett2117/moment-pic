@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 
 import { env } from "./config/env.js";
+import { validateAdminPassword } from "./config/security.js";
 import { isAuthenticated } from "./lib/auth.js";
+import { isAllowedOrigin } from "./lib/origin.js";
 import { albumRoutes } from "./routes/albums.js";
 import { authRoutes } from "./routes/auth.js";
 import { assetRoutes } from "./routes/assets.js";
@@ -41,8 +43,10 @@ const appendUtf8Charset = (contentType: string): string => {
 };
 
 export const buildApp = () => {
+  validateAdminPassword(env.adminPassword);
   const app = Fastify({
-    logger: true
+    logger: true,
+    trustProxy: env.trustedProxies.length ? env.trustedProxies : false
   });
 
   app.decorate("config", env);
@@ -51,7 +55,7 @@ export const buildApp = () => {
 
   app.addHook("onRequest", async (request, reply) => {
     const origin = request.headers.origin;
-    if (origin) {
+    if (origin && isAllowedOrigin(request.raw, app.config.wsAllowedOrigins)) {
       reply.header("Access-Control-Allow-Origin", origin);
       reply.header("Access-Control-Allow-Credentials", "true");
       reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -120,10 +124,10 @@ export const buildApp = () => {
 
       const nextType = appendUtf8Charset(currentType);
       if (nextType !== currentType) {
-        res.setHeader("Content-Type", nextType);
+        res.header("Content-Type", nextType);
       }
       if (path.basename(filePath) === "index.html") {
-        res.setHeader("Cache-Control", "no-store");
+        res.header("Cache-Control", "no-store");
       }
     }
   });

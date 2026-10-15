@@ -20,6 +20,8 @@ type ScanTaskRecord = {
   result: {
     albumsDiscovered: number;
     assetsDiscovered: number;
+    failureCount: number;
+    outcome: string;
   } | null;
   progress: {
     albumsDiscovered: number;
@@ -75,10 +77,13 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
           };
         }
       });
-      task.status = "completed";
+      task.status = result.failureCount ? "failed" : "completed";
+      task.error = result.message;
       task.result = {
         albumsDiscovered: result.albumsDiscovered,
-        assetsDiscovered: result.assetsDiscovered
+        assetsDiscovered: result.assetsDiscovered,
+        failureCount: result.failureCount,
+        outcome: result.outcome
       };
       task.progress = {
         ...task.progress,
@@ -126,7 +131,7 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       task.status = "failed";
       task.finishedAt = nowIso();
-      task.error = error instanceof Error ? error.message : "scan failed";
+      task.error = "扫描失败，已保留不可判定范围的索引，请检查媒体目录后重试";
       task.warmup.status = "skipped";
       task.warmup.startedAt = null;
       task.warmup.finishedAt = nowIso();

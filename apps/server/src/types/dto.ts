@@ -22,6 +22,8 @@ export type LibraryRootDTO = {
 };
 
 export type AlbumListItemDTO = {
+  scanStatus?: "ready" | "error";
+  errorMessage?: string | null;
   id: string;
   name: string;
   sourceType: SourceTypeDTO;

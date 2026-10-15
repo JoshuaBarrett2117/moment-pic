@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { lookup as lookupMimeType } from "mime-types";
-import type { FastifyPluginAsync, FastifyReply } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
+import { mediaRequestSignal } from "../lib/media-request.js";
 
 import { ok } from "../lib/api.js";
 import { parseBoundedInteger, parseEnumValue, parseOptionalString } from "../lib/request-query.js";
@@ -22,6 +23,7 @@ import {
   recordAlbumView,
   deleteManagedAlbumShare,
   setAlbumFavorite
+  , resetManagedAlbumSharePassword
 } from "../services/album-service.js";
 import { DirectoryAlbumPathInvalidError, DirectoryAlbumRootNotFoundError, listDirectoryAlbums } from "../services/directory-album-service.js";
 import { rescanAlbum, ScanAlbumNotFoundError, ScanAlbumSourceInvalidError, ScanLibraryRootNotFoundError } from "../services/library-scanner.js";
@@ -48,6 +50,7 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     });
 
   const sendSharedAsset = async (
+    request: FastifyRequest,
     token: string,
     assetId: string,
     accessToken: string,
@@ -58,21 +61,22 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     if (!canReadSharedAsset(token, assetId, accessToken)) {
       return sendSharedAssetNotFound(reply);
     }
+    const signal = mediaRequestSignal(request, reply);
 
     try {
       if (variant === "thumbnail") {
-        const thumbnail = await ensureThumbnail(assetId, {});
+        const thumbnail = await ensureThumbnail(assetId, { signal });
         reply.type(thumbnail.mimeType);
         return reply.send(fs.createReadStream(thumbnail.filePath));
       }
 
       if (variant === "preview") {
-        const preview = await ensurePreview(assetId, { preset });
+        const preview = await ensurePreview(assetId, { preset, signal });
         reply.type(preview.mimeType);
         return reply.send(fs.createReadStream(preview.filePath));
       }
 
-      const { asset, body, sizeBytes } = await openOriginalImage(assetId);
+      const { asset, body, sizeBytes } = await openOriginalImage(assetId, signal);
       const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
       if (sizeBytes !== null && Number.isFinite(sizeBytes)) {
         reply.header("Content-Length", String(sizeBytes));
@@ -92,7 +96,7 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     const body = (request.body ?? {}) as { password?: string };
 
     try {
-      return ok(await authenticateAlbumShare(token, String(body.password ?? "")));
+      return ok(await authenticateAlbumShare(token, String(body.password ?? ""), request.ip));
     } catch (error) {
       if (error instanceof AlbumShareNotFoundError) {
         return sendShareNotFound(reply);
@@ -126,19 +130,19 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/v1/shares/:token/assets/:assetId/thumbnail", async (request, reply) => {
     const { token, assetId } = request.params as { token: string; assetId: string };
     const query = request.query as { accessToken?: string };
-    return sendSharedAsset(token, assetId, String(query.accessToken ?? ""), reply, "thumbnail");
+    return sendSharedAsset(request, token, assetId, String(query.accessToken ?? ""), reply, "thumbnail");
   });
 
   app.get("/api/v1/shares/:token/assets/:assetId/original", async (request, reply) => {
     const { token, assetId } = request.params as { token: string; assetId: string };
     const query = request.query as { accessToken?: string };
-    return sendSharedAsset(token, assetId, String(query.accessToken ?? ""), reply, "original");
+    return sendSharedAsset(request, token, assetId, String(query.accessToken ?? ""), reply, "original");
   });
 
   app.get("/api/v1/shares/:token/assets/:assetId/preview", async (request, reply) => {
     const { token, assetId } = request.params as { token: string; assetId: string };
     const query = request.query as { preset?: "low" | "balanced" | "high"; accessToken?: string };
-    return sendSharedAsset(token, assetId, String(query.accessToken ?? ""), reply, "preview", parseEnumValue(query.preset, ["low", "balanced", "high"] as const));
+    return sendSharedAsset(request, token, assetId, String(query.accessToken ?? ""), reply, "preview", parseEnumValue(query.preset, ["low", "balanced", "high"] as const));
   });
 
   app.get("/api/v1/albums/recent", async (request, reply) => {
@@ -198,6 +202,18 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return ok({ success: true });
+  });
+
+  app.post("/api/v1/album-shares/:shareId/password", async (request, reply) => {
+    const { shareId } = request.params as { shareId: string };
+    const { password } = (request.body ?? {}) as { password?: string };
+    try {
+      if (!(await resetManagedAlbumSharePassword(shareId, String(password ?? "")))) return sendShareNotFound(reply);
+      return ok({ success: true });
+    } catch (error) {
+      if (error instanceof AlbumShareInputInvalidError) return reply.status(400).send({ code: 4009, message: "分享密码长度必须为 1–128 个字符" });
+      throw error;
+    }
   });
 
   app.patch("/api/v1/albums/:albumId/favorite", async (request, reply) => {

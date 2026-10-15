@@ -42,7 +42,9 @@ const resolvePublicDir = (): string => {
 export const env = {
   host: process.env.HOST ?? "0.0.0.0",
   port: toNumber(process.env.PORT, 3001),
-  adminPassword: process.env.ADMIN_PASSWORD ?? "admin",
+  adminPassword: process.env.ADMIN_PASSWORD ?? "",
+  trustedProxies: (process.env.TRUSTED_PROXIES ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+  wsAllowedOrigins: (process.env.WS_ALLOWED_ORIGINS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
   libraryRootPath: libraryRootPaths[0],
   libraryRootPaths,
   cacheDir: process.env.CACHE_DIR ?? "./data/cache",

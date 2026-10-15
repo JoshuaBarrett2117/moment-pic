@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { lookup as lookupMimeType } from "mime-types";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 
+import { mediaRequestSignal } from "../lib/media-request.js";
 import { ok } from "../lib/api.js";
 import { parseBoundedInteger, parseEnumValue } from "../lib/request-query.js";
 import { deleteAsset, getAssetDetail } from "../services/album-service.js";
@@ -69,8 +70,8 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
       message: "original asset source not found"
     });
 
-  const sendOriginalAssetFallback = async (assetId: string, reply: FastifyReply) => {
-    const { asset, body, sizeBytes } = await openOriginalImage(assetId);
+  const sendOriginalAssetFallback = async (assetId: string, reply: FastifyReply, signal: AbortSignal) => {
+    const { asset, body, sizeBytes } = await openOriginalImage(assetId, signal);
     const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
     if (sizeBytes !== null && Number.isFinite(sizeBytes)) {
       reply.header("Content-Length", String(sizeBytes));
@@ -81,6 +82,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/assets/:assetId", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
+    const signal = mediaRequestSignal(request, reply);
     const asset = await getAssetDetail(assetId);
 
     if (!asset) {
@@ -92,6 +94,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/assets/:assetId/thumbnail", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
+    const signal = mediaRequestSignal(request, reply);
     const query = request.query as { w?: string; h?: string; format?: "webp" | "jpeg" };
     const requestedWidth = query.w ? parseBoundedInteger(query.w, { defaultValue: 0, min: 1, max: 4096 }) : undefined;
     const requestedHeight = query.h ? parseBoundedInteger(query.h, { defaultValue: 0, min: 1, max: 4096 }) : undefined;
@@ -117,7 +120,8 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         const thumbnail = await ensureThumbnail(assetId, {
           width: requestedWidth,
           height: requestedHeight,
-          format: preferredFormat
+          format: preferredFormat,
+          signal
         });
         const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);
         return applyVariantCacheHeaders(reply, {
@@ -134,7 +138,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
           return sendOriginalSourceMissing(reply);
         }
         try {
-          return await sendOriginalAssetFallback(assetId, reply);
+          return await sendOriginalAssetFallback(assetId, reply, signal);
         } catch (fallbackError) {
           if (fallbackError instanceof AssetNotFoundError) {
             return sendAssetNotFound(reply);
@@ -152,9 +156,10 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/assets/:assetId/original", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
+    const signal = mediaRequestSignal(request, reply);
 
     try {
-      const { asset, body, sizeBytes } = await openOriginalImage(assetId);
+      const { asset, body, sizeBytes } = await openOriginalImage(assetId, signal);
       const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
       reply.header("Content-Disposition", `inline; filename="${encodeURIComponent(asset.name)}"`);
       if (sizeBytes !== null && Number.isFinite(sizeBytes)) {
@@ -175,6 +180,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/assets/:assetId/preview", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
+    const signal = mediaRequestSignal(request, reply);
     const query = request.query as { preset?: "low" | "balanced" | "high"; format?: "webp" | "jpeg" };
     const acceptHeader = normalizeHeader(request.headers.accept) ?? "";
     const preferredFormat = resolvePreferredFormat(parseEnumValue(query.format, ["webp", "jpeg"] as const), acceptHeader);
@@ -197,7 +203,8 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
       try {
         const preview = await ensurePreview(assetId, {
           preset: parseEnumValue(query.preset, ["low", "balanced", "high"] as const),
-          format: preferredFormat
+          format: preferredFormat,
+          signal
         });
         const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);
         return applyVariantCacheHeaders(reply, {
@@ -214,7 +221,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
           return sendOriginalSourceMissing(reply);
         }
         try {
-          return await sendOriginalAssetFallback(assetId, reply);
+          return await sendOriginalAssetFallback(assetId, reply, signal);
         } catch (fallbackError) {
           if (fallbackError instanceof AssetNotFoundError) {
             return sendAssetNotFound(reply);
@@ -232,6 +239,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete("/api/v1/assets/:assetId", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
+    const signal = mediaRequestSignal(request, reply);
     const success = await deleteAsset(assetId);
 
     if (!success) {

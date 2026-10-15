@@ -77,6 +77,9 @@ export const toArchiveBody = async (streamPromise: Promise<Readable>): Promise<R
       }
 
       const output = new PassThrough();
+      output.once("close", () => { if (!stream.destroyed) stream.destroy(); });
+      stream.once("error", (error) => output.destroy(error));
+      output.on("error", () => stream.destroy());
       output.write(headBuffer);
       stream.pipe(output);
       resolveWith(output);

@@ -3,20 +3,22 @@ import test from "node:test";
 
 import { buildAssetsFingerprint, buildStableAssetId, mapWithConcurrency, sortNames } from "./library-scanner-utils.js";
 
-test("mapWithConcurrency preserves item order and drops failed/null results", async () => {
+test("mapWithConcurrency preserves item order and drops only explicit null results", async () => {
   const results = await mapWithConcurrency([1, 2, 3, 4], 64, async (value) => {
     if (value === 2) {
       return null;
     }
 
-    if (value === 4) {
-      throw new Error("skip");
-    }
+    if (value === 4) return null;
 
     return value * 10;
   });
 
   assert.deepEqual(results, [10, 30]);
+});
+
+test("mapWithConcurrency propagates individual failures after workers settle", async () => {
+  await assert.rejects(mapWithConcurrency([1, 2], 2, async () => { throw new Error("stat failed"); }), /stat failed/);
 });
 
 test("sortNames uses numeric-aware zh-Hans ordering", () => {

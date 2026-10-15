@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
-import { PassThrough, type Readable } from "node:stream";
+import type { Readable } from "node:stream";
+import { runChildStream } from "./child-stream.js";
+import { collectBounded, MAX_LISTING_BYTES, MAX_ARCHIVE_ENTRIES, type ArchiveOptions } from "./archive-limits.js";
 
 import { path7za } from "7zip-bin";
 
@@ -51,165 +52,30 @@ const resolve7zExecutables = async (): Promise<string[]> => {
     }
   }
 
-  executables.push("7za", "7z");
+  executables.unshift("7zz", "7z");
+  executables.push("7za");
   cached7zExecutables = executables;
   return executables;
 };
 
-const run7za = async (
-  args: string[]
-): Promise<{ stdout: Buffer; stderr: string }> =>
-  new Promise(async (resolve, reject) => {
-    const commands = await resolve7zExecutables();
-    const unavailableErrors: Error[] = [];
+export const run7zaStream = async (args: string[], options: ArchiveOptions = {}): Promise<Readable> => {
+  const commands = await resolve7zExecutables();
+  for (let index = 0; index < commands.length; index += 1) {
+    try { return await runChildStream(commands[index], args, options); }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if ((code !== "ENOENT" && code !== "EACCES") || index === commands.length - 1) throw error;
+    }
+  }
+  throw new Error("未找到可用归档程序，请安装 7z");
+};
 
-    const runWithCommand = (command: string, index: number) => {
-      const child = spawn(command, args, {
-        windowsHide: true
-      });
+const run7za = async (args: string[], options: ArchiveOptions = {}): Promise<{ stdout: Buffer }> => ({
+  stdout: await collectBounded(await run7zaStream(args, options))
+});
 
-      const stdoutChunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
-
-      child.stdout.on("data", (chunk) => {
-        stdoutChunks.push(Buffer.from(chunk));
-      });
-
-      child.stderr.on("data", (chunk) => {
-        stderrChunks.push(Buffer.from(chunk));
-      });
-
-      child.once("error", (error) => {
-        const errorCode = (error as NodeJS.ErrnoException).code;
-        if ((errorCode === "EACCES" || errorCode === "ENOENT") && index < commands.length - 1) {
-          unavailableErrors.push(new Error(`${command}: ${error.message}`));
-          runWithCommand(commands[index + 1], index + 1);
-          return;
-        }
-
-        if ((errorCode === "EACCES" || errorCode === "ENOENT") && unavailableErrors.length > 0) {
-          reject(
-            new Error(
-              `no usable 7z executable. tried: ${[
-                ...unavailableErrors.map((item) => item.message),
-                `${command}: ${error.message}`
-              ].join(" | ")}`
-            )
-          );
-          return;
-        }
-
-        reject(error);
-      });
-
-      child.once("close", (code) => {
-        const stdout = Buffer.concat(stdoutChunks);
-        const stderr = decode7zText(Buffer.concat(stderrChunks));
-        if (code === 0) {
-          resolve({ stdout, stderr });
-          return;
-        }
-
-        reject(
-          new Error(
-            `7z command failed via "${command}" (code ${code}): ${stderr || args.join(" ")}`
-          )
-        );
-      });
-    };
-
-    runWithCommand(commands[0], 0);
-  });
-
-export const run7zaStream = async (args: string[]): Promise<Readable> =>
-  new Promise(async (resolve, reject) => {
-    const commands = await resolve7zExecutables();
-    const unavailableErrors: Error[] = [];
-
-    const runWithCommand = (command: string, index: number) => {
-      const child = spawn(command, args, {
-        windowsHide: true
-      });
-
-      const stdout = child.stdout;
-      const stderrChunks: Buffer[] = [];
-      const output = new PassThrough();
-      let settled = false;
-      let stdoutEnded = false;
-
-      child.stderr.on("data", (chunk) => {
-        stderrChunks.push(Buffer.from(chunk));
-      });
-
-      child.once("error", (error) => {
-        const errorCode = (error as NodeJS.ErrnoException).code;
-        if ((errorCode === "EACCES" || errorCode === "ENOENT") && index < commands.length - 1) {
-          unavailableErrors.push(new Error(`${command}: ${error.message}`));
-          runWithCommand(commands[index + 1], index + 1);
-          return;
-        }
-
-        if ((errorCode === "EACCES" || errorCode === "ENOENT") && unavailableErrors.length > 0) {
-          reject(
-            new Error(
-              `no usable 7z executable. tried: ${[
-                ...unavailableErrors.map((item) => item.message),
-                `${command}: ${error.message}`
-              ].join(" | ")}`
-            )
-          );
-          return;
-        }
-
-        reject(error);
-      });
-
-      child.once("spawn", () => {
-        if (!stdout) {
-          reject(new Error(`7z command failed via "${command}": stdout unavailable`));
-          return;
-        }
-
-        settled = true;
-        stdout.on("data", (chunk) => {
-          output.write(chunk);
-        });
-        stdout.once("end", () => {
-          stdoutEnded = true;
-        });
-        stdout.once("error", (error) => {
-          output.destroy(error);
-        });
-        child.once("close", (code) => {
-          if (code === 0) {
-            if (stdoutEnded) {
-              output.end();
-            }
-            return;
-          }
-
-          const stderr = decode7zText(Buffer.concat(stderrChunks));
-          output.destroy(
-            new Error(`7z command failed via "${command}" (code ${code}): ${stderr || args.join(" ")}`)
-          );
-        });
-
-        resolve(output);
-      });
-
-      child.once("close", (code) => {
-        if (!settled && code !== 0) {
-          const stderr = decode7zText(Buffer.concat(stderrChunks));
-          reject(new Error(`7z command failed via "${command}" (code ${code}): ${stderr || args.join(" ")}`));
-        }
-      });
-    };
-
-    runWithCommand(commands[0], 0);
-  });
-
-export const collect7zImageEntries = async (archivePath: string): Promise<ArchiveImageEntry[]> => {
-  const { stdout } = await run7za(["l", "-slt", "-ba", archivePath]);
+export const collect7zImageEntries = async (archivePath: string, options: ArchiveOptions = {}): Promise<ArchiveImageEntry[]> => {
+  const { stdout } = await run7za(["l", "-slt", "-ba", archivePath], { ...options, maxBytes: Math.min(options.maxBytes ?? MAX_LISTING_BYTES, MAX_LISTING_BYTES) });
   const output = decode7zText(stdout);
   const blocks = output
     .split(/\r?\n\r?\n+/)
@@ -217,6 +83,7 @@ export const collect7zImageEntries = async (archivePath: string): Promise<Archiv
     .filter((block) => block.length > 0);
 
   const entries: ArchiveImageEntry[] = [];
+  if (blocks.length > (options.maxEntries ?? MAX_ARCHIVE_ENTRIES)) throw new Error("归档条目数超过上限");
 
   for (const block of blocks) {
     let entryPath = "";
@@ -279,7 +146,7 @@ export const collect7zImageEntries = async (archivePath: string): Promise<Archiv
   return entries;
 };
 
-export const read7zBuffer = async (archivePath: string, entryPath: string): Promise<Buffer> => {
+export const read7zBuffer = async (archivePath: string, entryPath: string, options: ArchiveOptions = {}): Promise<Buffer> => {
   const { stdout } = await run7za([
     "e",
     "-so",
@@ -287,11 +154,11 @@ export const read7zBuffer = async (archivePath: string, entryPath: string): Prom
     "-y",
     archivePath,
     normalizeArchiveEntryPath(entryPath)
-  ]);
+  ], options);
   return extractJpegFromPsd(stdout);
 };
 
-export const read7zStream = async (archivePath: string, entryPath: string): Promise<Readable> =>
+export const read7zStream = async (archivePath: string, entryPath: string, options: ArchiveOptions = {}): Promise<Readable> =>
   run7zaStream([
     "e",
     "-so",
@@ -299,4 +166,4 @@ export const read7zStream = async (archivePath: string, entryPath: string): Prom
     "-y",
     archivePath,
     normalizeArchiveEntryPath(entryPath)
-  ]);
+  ], options);

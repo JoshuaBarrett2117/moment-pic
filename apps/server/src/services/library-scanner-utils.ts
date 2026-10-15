@@ -20,6 +20,7 @@ export const mapWithConcurrency = async <T, R>(
   const safeConcurrency = Math.max(1, Math.min(concurrency, 32));
   const results: Array<R | null> = new Array(items.length).fill(null);
   let cursor = 0;
+  let failure: unknown;
 
   const worker = async () => {
     while (cursor < items.length) {
@@ -27,13 +28,14 @@ export const mapWithConcurrency = async <T, R>(
       cursor += 1;
       try {
         results[index] = await mapper(items[index]);
-      } catch {
-        results[index] = null;
+      } catch (error) {
+        failure = error;
       }
     }
   };
 
   await Promise.all(Array.from({ length: safeConcurrency }, () => worker()));
+  if (failure) throw failure;
   return results.filter((item): item is R => item !== null);
 };
 

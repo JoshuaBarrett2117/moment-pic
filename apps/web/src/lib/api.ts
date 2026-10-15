@@ -14,6 +14,7 @@ export interface ApiErrorResponse {
 
 type ApiRequestOptions = {
   timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 const API_BASE_URL = '/api/v1';
@@ -41,15 +42,16 @@ class ApiClient {
     );
   }
 
-  async get<T>(url: string, params?: Record<string, unknown>): Promise<T> {
-    const response = await this.client.get<ApiResponse<T>>(url, { params });
+  async get<T>(url: string, params?: Record<string, unknown>, options?: ApiRequestOptions): Promise<T> {
+    const response = await this.client.get<ApiResponse<T>>(url, { params, signal: options?.signal });
     return response.data.data;
   }
 
   async getWithOptions<T>(url: string, params?: Record<string, unknown>, options?: ApiRequestOptions): Promise<T> {
     const response = await this.client.get<ApiResponse<T>>(url, {
       params,
-      timeout: options?.timeoutMs
+      timeout: options?.timeoutMs,
+      signal: options?.signal
     });
     return response.data.data;
   }

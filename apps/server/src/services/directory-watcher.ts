@@ -1,4 +1,5 @@
 import chokidar, { FSWatcher } from "chokidar";
+import path from "node:path";
 
 import { startCoverThumbnailWarmup } from "./cover-thumbnail-warmup.js";
 import { listExistingLibraryRoots } from "./library-scanner.js";
@@ -97,7 +98,7 @@ class DirectoryWatcherService {
 
     const event: FileChangeEvent = {
       type,
-      path: filePath,
+      path: path.relative(listExistingLibraryRoots().find((root) => root.id === libraryRootId)?.path ?? path.dirname(filePath), filePath).split(path.sep).join("/"),
       libraryRootId,
       timestamp: nowIso()
     };
@@ -139,6 +140,8 @@ class DirectoryWatcherService {
         libraryRootId,
         albumsDiscovered: result.albumsDiscovered,
         assetsDiscovered: result.assetsDiscovered,
+        failureCount: result.failureCount,
+        message: result.message,
         timestamp: nowIso()
       });
       startCoverThumbnailWarmup({

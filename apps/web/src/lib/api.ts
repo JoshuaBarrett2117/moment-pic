@@ -63,7 +63,8 @@ class ApiClient {
 
   async postWithOptions<T>(url: string, data?: unknown, options?: ApiRequestOptions): Promise<T> {
     const response = await this.client.post<ApiResponse<T>>(url, data, {
-      timeout: options?.timeoutMs
+      timeout: options?.timeoutMs,
+      signal: options?.signal
     });
     return response.data.data;
   }

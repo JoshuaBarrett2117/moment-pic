@@ -89,7 +89,7 @@ const toAlbumListItem = (row: AlbumRecord): AlbumListItemDTO => ({
   coverUrl: row.coverAssetId ? `/api/v1/assets/${row.coverAssetId}/thumbnail` : null,
   isFavorite: Boolean(row.isFavorite),
   scanStatus: row.scanStatus,
-  errorMessage: row.errorMessage,
+  errorMessage: row.scanStatus === "error" ? "部分扫描失败，已跳过清理，请检查媒体目录后重试" : null,
   updatedAt: row.updatedAt
 });
 

@@ -125,6 +125,8 @@ export type LoginResponseDTO = {
 export type ScanTaskStatus = "pending" | "running" | "completed" | "failed";
 
 export type ScanResultDTO = {
+  failureCount?: number;
+  outcome?: 'complete' | 'partial' | 'failed';
   taskId: string;
   status: ScanTaskStatus;
   libraryRootId: string | null;

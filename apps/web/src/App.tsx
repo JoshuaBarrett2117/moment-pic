@@ -380,7 +380,7 @@ function AuthenticatedMomentPicApp() {
   return (
     <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
       <PaperGrain />
-      {isAuthenticated && scanError && <div role="alert" className="fixed left-4 right-4 top-4 z-50 rounded-lg bg-error px-4 py-3 text-white">{scanError}</div>}
+      {isAuthenticated && scanError && currentScreen !== Screen.SETTINGS && <div role="alert" className="fixed left-4 right-4 top-4 z-50 rounded-lg bg-error px-4 py-3 text-white">{scanError}</div>}
 
       {isAuthBootstrapping ? (
         <div className="absolute inset-0 flex items-center justify-center bg-surface text-outline">
@@ -476,6 +476,7 @@ function AuthenticatedMomentPicApp() {
               }
             >
               <SettingsScreen
+                scanError={scanError}
                 onBack={handleBackToGallery}
                 onScanComplete={refreshCurrentGallery}
                 onSystemConfigChange={fetchSystemConfig}

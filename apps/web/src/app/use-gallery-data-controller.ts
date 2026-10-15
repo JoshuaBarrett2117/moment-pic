@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan, useRecentAlbums, useSmartAlbums, useDirectoryAlbums } from '../hooks';
 import { Screen } from '../types';
+import { SCAN_PARTIAL_FAILURE_MESSAGE } from '../lib/scan-status';
 import type { GalleryFilters, GalleryViewMode } from './gallery-navigation';
 
 type UseGalleryDataControllerInput = {
@@ -126,7 +127,7 @@ export const useGalleryDataController = ({
   }, [fetchLibraryRoots, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums, queryKey]);
 
   const { isScanning, scan, scanningLibraryRootIds, isAnyScanning, scanError: taskScanError } = useLibraryScan({
-    onScanComplete: refreshCurrentGallery
+    onScanComplete: refreshCurrentGallery, enabled: isAuthenticated
   });
 
   const { isConnected: wsConnected, lastScanComplete } = useWebSocket(
@@ -230,7 +231,7 @@ export const useGalleryDataController = ({
     refreshCurrentGallery,
     scan,
     scanningLibraryRootIds,
-    scanError: taskScanError ?? (lastScanComplete?.failureCount ? lastScanComplete.message : null),
+    scanError: taskScanError ?? (lastScanComplete?.failureCount ? SCAN_PARTIAL_FAILURE_MESSAGE : null),
     smartAlbumDetail,
     smartAlbumMembers,
     smartAlbums,

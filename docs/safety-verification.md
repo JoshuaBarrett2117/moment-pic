@@ -12,6 +12,16 @@
 
 本轮数据库验证只使用测试预加载器创建的临时隔离 SQLite，不执行真实数据库连接、历史数据清理或 DBA 窗口操作。
 
+## 扫描状态与 Settings 验收
+
+扫描 API 返回 failureCount/outcome，完成、部分失败、完全失败都发送 scan_complete；异常、封面预热及历史相册错误只返回脱敏摘要。单相册重扫错误响应也不回传文件路径。前端失败/部分失败终态同样触发健康相册刷新，不能只处理 completed。Settings 显示独立错误提示，并接收应用 WS 错误；图库页保留全局提示，Settings 不重复展示两个横幅。
+
+扫描 Hook 按图库根持有可取消请求与串行轮询；重复点击只发一次，清除、卸载、退出登录取消请求，旧轮询/恢复结果不能重启任务或覆盖新状态。三次轮询故障有明确脱敏错误。新增 API、Hook 与真实 Settings renderer 回归均通过。
+
+`scan-api-final.log` 实际 API/WS 与单相册失败脱敏通过；`scan-ui-delivery-web.log` 49/49；`scan-ui-delivery-types.log` 两端类型检查、`scan-ui-delivery-build.log` 前端构建均通过。`browser-delivery.log` 与 `browser-results.json` 记录两种真实浏览器模式：正常 WS 和拦截 WS 的轮询回退，均实际点击 Settings 扫描、看到失败提示、在仍处于 Settings 时收到健康相册刷新，返回图库看到新增相册，页面脚本错误为零。
+
+截图为 `settings-scan-failure-{websocket,polling}.png`、`partial-healthy-gallery-{websocket,polling}.png`，均位于证据目录。无系统中文字体时，只在临时验收页面注入官方 Noto CJK 字体改善截图可读性，未修改应用字体依赖或安装系统包。
+
 ## 分享密码与异步认证
 
 所有新分享仅保存随机盐的 scrypt 哈希；管理列表不返回密码，创建响应只展示一次，重置会使旧访问令牌失效。历史明文列、历史备份不由启动代码自动清理，仍需 DBA 窗口处理。

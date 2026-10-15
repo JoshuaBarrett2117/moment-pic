@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { wsService } from "../services/websocket-service.js";
 
 import { ok } from "../lib/api.js";
 import { nowIso } from "../lib/time.js";
@@ -85,6 +86,7 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
         failureCount: result.failureCount,
         outcome: result.outcome
       };
+      wsService.sendScanComplete({ libraryRootId: task.libraryRootId ?? "", albumsDiscovered: result.albumsDiscovered, assetsDiscovered: result.assetsDiscovered, failureCount: result.failureCount, message: result.message, timestamp: nowIso() });
       task.progress = {
         ...task.progress,
         albumsDiscovered: result.albumsDiscovered,
@@ -118,7 +120,7 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
         .catch((error) => {
           task.warmup.status = "failed";
           task.warmup.finishedAt = nowIso();
-          task.warmup.error = error instanceof Error ? error.message : String(error);
+          task.warmup.error = "封面预热失败，请稍后重试";
           app.log.warn(
             {
               taskId,
@@ -132,6 +134,8 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       task.status = "failed";
       task.finishedAt = nowIso();
       task.error = "扫描失败，已保留不可判定范围的索引，请检查媒体目录后重试";
+      clearAlbumListCache();
+      wsService.sendScanComplete({ libraryRootId: task.libraryRootId ?? "", albumsDiscovered: task.progress.albumsDiscovered, assetsDiscovered: task.progress.assetsDiscovered, failureCount: 1, message: task.error, timestamp: nowIso() });
       task.warmup.status = "skipped";
       task.warmup.startedAt = null;
       task.warmup.finishedAt = nowIso();
@@ -185,6 +189,7 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
 
     return ok({
       taskId,
+      libraryRootId: task.libraryRootId,
       status: task.status,
       createdAt: task.createdAt,
       warmupStatus: task.warmup.status
@@ -209,6 +214,8 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       startedAt: task.startedAt,
       finishedAt: task.finishedAt,
       error: task.error,
+      failureCount: task.result?.failureCount ?? (task.status === "failed" ? 1 : 0),
+      outcome: task.result?.outcome ?? (task.status === "failed" ? "failed" : null),
       albumsDiscovered: task.result?.albumsDiscovered ?? 0,
       assetsDiscovered: task.result?.assetsDiscovered ?? 0,
       progress: task.progress,
@@ -233,6 +240,8 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       startedAt: task.startedAt,
       finishedAt: task.finishedAt,
       error: task.error,
+      failureCount: task.result?.failureCount ?? (task.status === "failed" ? 1 : 0),
+      outcome: task.result?.outcome ?? (task.status === "failed" ? "failed" : null),
       albumsDiscovered: task.result?.albumsDiscovered ?? 0,
       assetsDiscovered: task.result?.assetsDiscovered ?? 0,
       progress: task.progress,

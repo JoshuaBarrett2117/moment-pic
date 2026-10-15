@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useLibraryRoots, useLibraryScan, useSettingsConfigForm } from '../hooks';
 import { SmartAlbumSettingsPanel } from './SmartAlbumSettingsPanel';
@@ -8,15 +8,20 @@ import { SettingsBasicPanel } from './SettingsBasicPanel';
 import { SettingsSidebar, type SettingsTab } from './SettingsSidebar';
 
 interface SettingsScreenProps {
+  scanError?: string | null;
   onBack: () => void;
   onScanComplete?: () => void | Promise<void>;
   onSystemConfigChange?: () => void | Promise<void>;
 }
 
-export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete, onSystemConfigChange }) => {
+export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete, onSystemConfigChange, scanError }) => {
   const { libraryRoots, isLoading, error, fetchLibraryRoots, addLibraryRoot, updateLibraryRoot, deleteLibraryRoot } = useLibraryRoots();
-  const { isScanning, scan, scanningLibraryRootIds } = useLibraryScan({
-    onScanComplete
+  const refreshAfterScan = useCallback(async () => {
+    await fetchLibraryRoots();
+    await onScanComplete?.();
+  }, [fetchLibraryRoots, onScanComplete]);
+  const { isScanning, scan, isAnyScanning, scanError: localScanError } = useLibraryScan({
+    onScanComplete: refreshAfterScan
   });
   const {
     albumDetailItemMinWidthDesktop,
@@ -50,8 +55,6 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
   useEffect(() => {
     void fetchLibraryRoots();
   }, [fetchLibraryRoots]);
-
-  const isAnyScanning = scanningLibraryRootIds.size > 0;
 
   const handleAddRoot = async () => {
     if (!newPath.trim()) {
@@ -109,6 +112,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
       <SettingsSidebar activeTab={activeTab} onBack={onBack} onTabChange={setActiveTab} />
 
       <main className="flex-1 p-4 md:p-12 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] overflow-y-auto custom-scrollbar">
+        {(localScanError || scanError) && <div role="alert" className="mb-4 rounded-lg border border-error/30 bg-error/10 p-4 text-error">{localScanError ?? scanError}</div>}
         {activeTab === 'basic' && (
           <SettingsBasicPanel
             addLibraryRoot={handleAddRoot}

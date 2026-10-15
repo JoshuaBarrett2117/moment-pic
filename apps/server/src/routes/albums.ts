@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { lookup as lookupMimeType } from "mime-types";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { mediaRequestSignal } from "../lib/media-request.js";
+import { isArchiveControlError } from "../services/archive/archive-limits.js";
 
 import { ok } from "../lib/api.js";
 import { parseBoundedInteger, parseEnumValue, parseOptionalString } from "../lib/request-query.js";
@@ -353,11 +354,13 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
       if (error instanceof ScanLibraryRootNotFoundError || error instanceof ScanAlbumSourceInvalidError) {
         return reply.status(400).send({
           code: 4006,
-          message: error.message
+          message: "相册扫描失败，已保留原索引，请检查媒体目录后重试"
         });
       }
 
-      throw error;
+      if (isArchiveControlError(error)) throw error;
+      app.log.error({ err: error, albumId }, "相册重新扫描失败");
+      return reply.status(500).send({ code: 5004, message: "相册扫描失败，已保留原索引，请检查媒体目录后重试" });
     }
   });
 

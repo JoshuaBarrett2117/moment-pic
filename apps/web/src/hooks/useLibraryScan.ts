@@ -1,16 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { api } from '../lib/api';
+import { getScanFailureMessage, SCAN_FAILURE_MESSAGE } from '../lib/scan-status';
 import type { ScanResultDTO } from '../types/api';
+import { isRequestCancellation } from './useLatestRequest';
 
-interface ScanTask {
-  taskId: string;
-  libraryRootId: string | null;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  startedAt: string | null;
-  finishedAt: string | null;
-  error: string | null;
-}
-
+type ScanTask = Pick<ScanResultDTO, 'taskId' | 'libraryRootId' | 'status' | 'startedAt' | 'finishedAt' | 'error'>;
+type ScanRequest = { controller: AbortController; polling: boolean };
+type UseLibraryScanOptions = { onScanComplete?: () => void | Promise<void>; enabled?: boolean };
 interface UseLibraryScanReturn {
   scanError: string | null;
   scanningLibraryRootIds: Set<string>;
@@ -20,273 +16,149 @@ interface UseLibraryScanReturn {
   clearScanTask: (libraryRootId: string) => void;
 }
 
-type UseLibraryScanOptions = {
-  onScanComplete?: () => void | Promise<void>;
-};
-
 const SCAN_REQUEST_TIMEOUT_MS = 0;
 const SCAN_TASK_STORAGE_KEY = 'moment_pic_active_scan_tasks';
-
-type PersistedScanTask = {
-  libraryRootId: string | null;
-  taskId: string;
-};
-
 const getTaskKey = (libraryRootId: string | null | undefined): string => libraryRootId ?? 'all';
+const isActive = (task: ScanTask): boolean => task.status === 'pending' || task.status === 'running';
+const toScanTask = (task: ScanResultDTO): ScanTask => ({
+  taskId: task.taskId,
+  libraryRootId: task.libraryRootId ?? null,
+  status: task.status,
+  startedAt: task.startedAt ?? null,
+  finishedAt: task.finishedAt ?? null,
+  error: task.status === 'failed' ? getScanFailureMessage(task) : null,
+});
 
-const loadPersistedScanTasks = (): PersistedScanTask[] => {
-  try {
-    const raw = window.localStorage.getItem(SCAN_TASK_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
+export function useLibraryScan({ onScanComplete, enabled = true }: UseLibraryScanOptions = {}): UseLibraryScanReturn {
+  const [scanTasks, setScanTasks] = useState<Map<string, ScanTask>>(new Map());
+  const pollIntervalsRef = useRef(new Map<string, number>());
+  const requestsRef = useRef(new Map<string, ScanRequest>());
+  const locallyChangedTasksRef = useRef(new Set<string>());
+  const mountedRef = useRef(true);
+  const onScanCompleteRef = useRef(onScanComplete);
+  onScanCompleteRef.current = onScanComplete;
+  const scanTaskList = Array.from<ScanTask>(scanTasks.values());
+  const isAnyScanning = scanTaskList.some(isActive);
+  const scanningLibraryRootIds = new Set(scanTaskList.filter(isActive).map((task) => task.libraryRootId).filter((id): id is string => id !== null));
 
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
+  const stopTask = useCallback((key: string) => {
+    const interval = pollIntervalsRef.current.get(key);
+    if (interval !== undefined) window.clearInterval(interval);
+    pollIntervalsRef.current.delete(key);
+    requestsRef.current.get(key)?.controller.abort();
+    requestsRef.current.delete(key);
+  }, []);
 
-    return parsed.filter((item): item is PersistedScanTask => {
-      if (typeof item !== 'object' || item === null) {
-        return false;
-      }
+  const isCurrent = useCallback((key: string, request: ScanRequest): boolean =>
+    mountedRef.current && requestsRef.current.get(key) === request && !request.controller.signal.aborted, []);
 
-      const candidate = item as { taskId?: unknown; libraryRootId?: unknown };
-      return typeof candidate.taskId === 'string' && (candidate.libraryRootId === null || typeof candidate.libraryRootId === 'string');
-    });
-  } catch {
-    return [];
-  }
-};
+  const updateTask = useCallback((key: string, task: ScanTask) => {
+    setScanTasks((previous) => new Map(previous).set(key, task));
+  }, []);
 
-export function useLibraryScan(options: UseLibraryScanOptions = {}): UseLibraryScanReturn {
-  const [scanTasks, setScanTasks] = useState<Map<string, ScanTask>>(new Map<string, ScanTask>());
-  const pollIntervalsRef = useRef<Map<string, number>>(new Map<string, number>());
-  const pollFailureCountRef = useRef<Map<string, number>>(new Map<string, number>());
-  const onScanCompleteRef = useRef(options.onScanComplete);
-  onScanCompleteRef.current = options.onScanComplete;
-  const scanTaskList = Array.from(scanTasks.values()) as ScanTask[];
-  const isAnyScanning = scanTaskList.some(
-    (task) => task.status === 'running' || task.status === 'pending'
-  );
-
-  const scanningLibraryRootIds = new Set(
-    scanTaskList
-      .filter(task => task.status === 'running' || task.status === 'pending')
-      .map(task => task.libraryRootId ?? '')
-      .filter(id => id !== '')
-  );
+  const startPolling = useCallback((key: string, taskId: string, request: ScanRequest) => {
+    let failures = 0;
+    const interval = window.setInterval(async () => {
+      if (!isCurrent(key, request) || request.polling) return;
+      request.polling = true;
+      try {
+        const task = await api.getWithOptions<ScanResultDTO>(`/scan/${taskId}`, undefined, {
+          timeoutMs: SCAN_REQUEST_TIMEOUT_MS, signal: request.controller.signal,
+        });
+        if (!isCurrent(key, request)) return;
+        failures = 0;
+        updateTask(key, toScanTask(task));
+        if (!isActive(task)) {
+          stopTask(key);
+          await onScanCompleteRef.current?.();
+        }
+      } catch (error) {
+        if (!isCurrent(key, request) || isRequestCancellation(error)) return;
+        failures += 1;
+        if (failures >= 3) {
+          setScanTasks((previous) => {
+            const task = previous.get(key);
+            return task ? new Map(previous).set(key, { ...task, status: 'failed', finishedAt: new Date().toISOString(), error: SCAN_FAILURE_MESSAGE }) : previous;
+          });
+          stopTask(key);
+          await onScanCompleteRef.current?.();
+        }
+      } finally { request.polling = false; }
+    }, 2000);
+    pollIntervalsRef.current.set(key, interval);
+  }, [isCurrent, stopTask, updateTask]);
 
   const isScanning = useCallback((libraryRootId: string): boolean => {
     const task = scanTasks.get(libraryRootId);
-    return task !== undefined && (task.status === 'running' || task.status === 'pending');
+    return task !== undefined && isActive(task);
   }, [scanTasks]);
-
-  const clearPollInterval = useCallback((libraryRootId: string) => {
-    const intervalId = pollIntervalsRef.current.get(libraryRootId);
-    if (intervalId) {
-      clearInterval(intervalId);
-      pollIntervalsRef.current.delete(libraryRootId);
-    }
-    pollFailureCountRef.current.delete(libraryRootId);
-  }, []);
-
-  useEffect(() => {
-    const persistedTasks = (Array.from(scanTasks.values()) as ScanTask[])
-      .filter((task) => task.status === 'running' || task.status === 'pending')
-      .map((task) => ({
-        libraryRootId: task.libraryRootId,
-        taskId: task.taskId
-      }));
-
-    if (persistedTasks.length > 0) {
-      window.localStorage.setItem(SCAN_TASK_STORAGE_KEY, JSON.stringify(persistedTasks));
-      return;
-    }
-
-    window.localStorage.removeItem(SCAN_TASK_STORAGE_KEY);
-  }, [scanTasks]);
-
-  const startPolling = useCallback((libraryRootId: string, taskId: string) => {
-    clearPollInterval(libraryRootId);
-
-    const intervalId = window.setInterval(async () => {
-      try {
-        const status = await api.getWithOptions<ScanResultDTO>(`/scan/${taskId}`, undefined, {
-          timeoutMs: SCAN_REQUEST_TIMEOUT_MS
-        });
-        pollFailureCountRef.current.set(libraryRootId, 0);
-        
-        setScanTasks((prev: Map<string, ScanTask>) => {
-          const next = new Map<string, ScanTask>(prev);
-          next.set(libraryRootId, {
-            taskId: status.taskId,
-            libraryRootId: status.libraryRootId,
-            status: status.status,
-            startedAt: status.startedAt ?? null,
-            finishedAt: status.finishedAt ?? null,
-            error: status.error ?? null
-          });
-          return next;
-        });
-
-        if (status.status === 'completed' || status.status === 'failed') {
-          clearPollInterval(libraryRootId);
-        }
-        if (status.status === 'completed') {
-          void onScanCompleteRef.current?.();
-        }
-      } catch (error) {
-        const failureCount = (pollFailureCountRef.current.get(libraryRootId) ?? 0) + 1;
-        pollFailureCountRef.current.set(libraryRootId, failureCount);
-
-        if (failureCount < 3) {
-          return;
-        }
-
-        setScanTasks((prev: Map<string, ScanTask>) => {
-          const next = new Map<string, ScanTask>(prev);
-          const task = next.get(libraryRootId);
-          if (task) {
-            next.set(libraryRootId, {
-              ...task,
-              status: 'failed',
-              finishedAt: new Date().toISOString(),
-              error: error instanceof Error ? error.message : 'scan polling failed'
-            });
-          }
-          return next;
-        });
-        clearPollInterval(libraryRootId);
-      }
-    }, 2000);
-
-    pollIntervalsRef.current.set(libraryRootId, intervalId);
-  }, [clearPollInterval]);
 
   const scan = useCallback(async (libraryRootId?: string): Promise<ScanResultDTO | null> => {
-    const key = libraryRootId ?? 'all';
-    
-    if (isScanning(key)) {
-      return null;
-    }
-
-    const taskId = `scan_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    
-    const newTask: ScanTask = {
-      taskId,
-      libraryRootId: libraryRootId ?? null,
-      status: 'pending',
-      startedAt: null,
-      finishedAt: null,
-      error: null
-    };
-
-    setScanTasks((prev: Map<string, ScanTask>) => {
-      const next = new Map<string, ScanTask>(prev);
-      next.set(key, newTask);
-      return next;
-    });
-
+    const key = getTaskKey(libraryRootId);
+    if (!enabled || requestsRef.current.has(key)) return null;
+    locallyChangedTasksRef.current.add(key);
+    const request: ScanRequest = { controller: new AbortController(), polling: false };
+    requestsRef.current.set(key, request);
+    updateTask(key, { taskId: `pending_${Date.now()}`, libraryRootId: libraryRootId ?? null, status: 'pending', startedAt: null, finishedAt: null, error: null });
     try {
       const result = await api.postWithOptions<ScanResultDTO>('/scan', { libraryRootId }, {
-        timeoutMs: SCAN_REQUEST_TIMEOUT_MS
+        timeoutMs: SCAN_REQUEST_TIMEOUT_MS, signal: request.controller.signal,
       });
-      
-      setScanTasks((prev: Map<string, ScanTask>) => {
-        const next = new Map<string, ScanTask>(prev);
-        next.set(key, {
-          taskId: result.taskId,
-          libraryRootId: result.libraryRootId,
-          status: result.status,
-          startedAt: result.startedAt ?? new Date().toISOString(),
-          finishedAt: result.finishedAt ?? null,
-          error: result.error ?? null
-        });
-        return next;
-      });
-
-      startPolling(key, result.taskId);
+      if (!isCurrent(key, request)) return null;
+      updateTask(key, toScanTask({ ...result, libraryRootId: result.libraryRootId ?? libraryRootId ?? null }));
+      if (isActive(result)) startPolling(key, result.taskId, request);
+      else { stopTask(key); await onScanCompleteRef.current?.(); }
       return result;
-    } catch (err) {
-      setScanTasks((prev: Map<string, ScanTask>) => {
-        const next = new Map<string, ScanTask>(prev);
-        const task = next.get(key);
-        if (task) {
-          next.set(key, {
-            ...task,
-            status: 'failed',
-            finishedAt: new Date().toISOString(),
-            error: err instanceof Error ? err.message : 'scan failed'
-          });
-        }
-        return next;
-      });
+    } catch (error) {
+      if (!isCurrent(key, request) || isRequestCancellation(error)) return null;
+      updateTask(key, { taskId: '', libraryRootId: libraryRootId ?? null, status: 'failed', startedAt: null, finishedAt: new Date().toISOString(), error: SCAN_FAILURE_MESSAGE });
+      stopTask(key);
       return null;
     }
-  }, [isScanning, startPolling]);
+  }, [enabled, isCurrent, startPolling, stopTask, updateTask]);
 
   const clearScanTask = useCallback((libraryRootId: string) => {
-    const key = libraryRootId ?? 'all';
-    clearPollInterval(key);
-    setScanTasks((prev: Map<string, ScanTask>) => {
-      const next = new Map<string, ScanTask>(prev);
-      next.delete(key);
-      return next;
-    });
-  }, [clearPollInterval]);
+    const key = getTaskKey(libraryRootId);
+    locallyChangedTasksRef.current.add(key);
+    stopTask(key);
+    setScanTasks((previous) => { const next = new Map(previous); next.delete(key); return next; });
+  }, [stopTask]);
 
   useEffect(() => {
-    const restoreScanTasks = async () => {
-      try {
-        const serverTasks = await api.getWithOptions<ScanResultDTO[]>('/scan', undefined, {
-          timeoutMs: SCAN_REQUEST_TIMEOUT_MS
-        });
-        const activeTasks = serverTasks
-          .filter((task) => task.status === 'pending' || task.status === 'running');
+    const activeTasks = scanTaskList.filter(isActive).map(({ libraryRootId, taskId }) => ({ libraryRootId, taskId }));
+    if (activeTasks.length) window.localStorage.setItem(SCAN_TASK_STORAGE_KEY, JSON.stringify(activeTasks));
+    else window.localStorage.removeItem(SCAN_TASK_STORAGE_KEY);
+  }, [scanTasks]);
 
-        if (activeTasks.length === 0) {
-          return;
-        }
-
-        setScanTasks((prev: Map<string, ScanTask>) => {
-          const next = new Map<string, ScanTask>(prev);
-          for (const serverTask of activeTasks) {
-            next.set(getTaskKey(serverTask.libraryRootId), {
-              taskId: serverTask.taskId,
-              libraryRootId: serverTask.libraryRootId,
-              status: serverTask.status,
-              startedAt: serverTask.startedAt ?? null,
-              finishedAt: serverTask.finishedAt ?? null,
-              error: serverTask.error ?? null
-            });
+  useEffect(() => {
+    mountedRef.current = true;
+    const restore = new AbortController();
+    if (!enabled) setScanTasks(new Map());
+    else {
+      void api.getWithOptions<ScanResultDTO[]>('/scan', undefined, { timeoutMs: SCAN_REQUEST_TIMEOUT_MS, signal: restore.signal }).then((tasks) => {
+        if (restore.signal.aborted || !mountedRef.current) return;
+        const restored = new Set<string>();
+        for (const task of tasks) {
+          const key = getTaskKey(task.libraryRootId);
+          if (restored.has(key)) continue;
+          restored.add(key);
+          if (requestsRef.current.has(key) || locallyChangedTasksRef.current.has(key)) continue;
+          updateTask(key, toScanTask(task));
+          if (isActive(task)) {
+            const request: ScanRequest = { controller: new AbortController(), polling: false };
+            requestsRef.current.set(key, request);
+            startPolling(key, task.taskId, request);
           }
-          return next;
-        });
-
-        for (const serverTask of activeTasks) {
-          startPolling(getTaskKey(serverTask.libraryRootId), serverTask.taskId);
         }
-      } catch {
-        return;
-      }
-    };
-
-    void restoreScanTasks();
-  }, [startPolling]);
-
-  useEffect(() => {
+      }).catch(() => undefined);
+    }
     return () => {
-      pollIntervalsRef.current.forEach(intervalId => clearInterval(intervalId));
+      mountedRef.current = false;
+      restore.abort();
+      for (const key of requestsRef.current.keys()) stopTask(key);
+      locallyChangedTasksRef.current.clear();
     };
-  }, []);
+  }, [enabled, startPolling, stopTask, updateTask]);
 
-  return { 
-    scanError: scanTaskList.find((task) => task.status === 'failed')?.error ?? null,
-    scanningLibraryRootIds, 
-    isAnyScanning,
-    isScanning, 
-    scan, 
-    clearScanTask 
-  };
+  return { scanError: scanTaskList.find((task) => task.status === 'failed')?.error ?? null, scanningLibraryRootIds, isAnyScanning, isScanning, scan, clearScanTask };
 }

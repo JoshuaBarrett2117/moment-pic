@@ -1,5 +1,20 @@
 import { Transform, type Readable } from "node:stream";
-import { WorkBudget } from "../../lib/work-budget.js";
+import { ResourceBusyError, WorkBudget } from "../../lib/work-budget.js";
+
+type ArchiveSafetyCode = "ARCHIVE_TIMEOUT" | "ARCHIVE_BYTE_LIMIT" | "ARCHIVE_ENTRY_LIMIT" | "ARCHIVE_STDERR_LIMIT";
+
+export class ArchiveSafetyError extends Error {
+  readonly statusCode: number;
+  constructor(readonly code: ArchiveSafetyCode, message: string) {
+    super(message);
+    this.name = "ArchiveSafetyError";
+    this.statusCode = code === "ARCHIVE_TIMEOUT" ? 504 : 413;
+  }
+}
+
+export const isArchiveControlError = (error: unknown, signal?: AbortSignal): boolean =>
+  Boolean(signal?.aborted) || error instanceof ArchiveSafetyError || error instanceof ResourceBusyError ||
+  (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"));
 
 export type ArchiveOptions = { signal?: AbortSignal; timeoutMs?: number; maxBytes?: number; maxEntries?: number; budget?: WorkBudget };
 export const archiveBudget = new WorkBudget(4, 32);
@@ -9,7 +24,7 @@ export const MAX_ARCHIVE_ENTRIES = 50_000;
 
 export const acquireArchiveLease = async (options: ArchiveOptions = {}) => {
   const timeout = new AbortController();
-  const timer = setTimeout(() => timeout.abort(new Error("归档处理超时")), options.timeoutMs ?? 30_000);
+  const timer = setTimeout(() => timeout.abort(new ArchiveSafetyError("ARCHIVE_TIMEOUT", "归档处理超时")), options.timeoutMs ?? 30_000);
 
   const signal = options.signal ? AbortSignal.any([options.signal, timeout.signal]) : timeout.signal;
   try {
@@ -21,14 +36,14 @@ export const acquireArchiveLease = async (options: ArchiveOptions = {}) => {
       clearTimeout(timer);
       releaseBudget();
     } };
-  } catch (error) { clearTimeout(timer); throw error; }
+  } catch (error) { clearTimeout(timer); if (signal.aborted) throw signal.reason; throw error; }
 };
 
 export const byteLimiter = (maxBytes = MAX_ENTRY_BYTES): Transform => {
   let total = 0;
   return new Transform({ highWaterMark: 64 * 1024, transform(chunk: Buffer, _encoding, callback) {
     total += chunk.length;
-    callback(total > maxBytes ? new Error("归档解压字节数超过上限") : null, chunk);
+    callback(total > maxBytes ? new ArchiveSafetyError("ARCHIVE_BYTE_LIMIT", "归档解压字节数超过上限") : null, chunk);
   } });
 };
 

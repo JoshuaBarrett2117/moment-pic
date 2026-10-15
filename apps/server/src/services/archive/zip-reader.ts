@@ -6,7 +6,7 @@ import yauzl from "yauzl";
 import { isSupportedImageExtension } from "../../lib/image-formats.js";
 import { normalizeExtension, toPosixPath } from "../../lib/paths.js";
 import { extractJpegFromPsd } from "../archive-utils.js";
-import { acquireArchiveLease, byteLimiter, collectBounded, MAX_ARCHIVE_ENTRIES, MAX_ENTRY_BYTES, MAX_LISTING_BYTES, type ArchiveOptions } from "./archive-limits.js";
+import { acquireArchiveLease, ArchiveSafetyError, byteLimiter, collectBounded, MAX_ARCHIVE_ENTRIES, MAX_ENTRY_BYTES, MAX_LISTING_BYTES, type ArchiveOptions } from "./archive-limits.js";
 import type { ArchiveImageEntry } from "./archive-types.js";
 
 type ZipEntryName = string | Buffer;
@@ -50,18 +50,23 @@ const toDecodedZipEntryPath = (entry: yauzl.Entry): string => {
 
 const managedZip = async (zipPath: string, options: ArchiveOptions) => {
   const lease = await acquireArchiveLease(options);
-  try {
-    const zip = await new Promise<yauzl.ZipFile>((resolve, reject) => {
+  try { lease.signal.throwIfAborted(); } catch (error) { lease.release(); throw error; }
+  return new Promise<{ zip: yauzl.ZipFile; signal: AbortSignal; close: () => void }>((resolve, reject) => {
+    let zip: yauzl.ZipFile | undefined;
+    const abort = () => { reject(lease.signal.reason); zip?.close(); };
+    lease.signal.addEventListener("abort", abort, { once: true });
+    const release = () => { lease.signal.removeEventListener("abort", abort); lease.release(); };
+    try {
       yauzl.open(zipPath, { lazyEntries: true, decodeStrings: false, autoClose: false }, (error, opened) => {
-        if (error || !opened) reject(error ?? new Error("无法打开 ZIP"));
-        else resolve(opened);
+        if (error || !opened) { release(); reject(error ?? new Error("无法打开 ZIP")); return; }
+        zip = opened;
+        opened.once("close", release);
+        if (lease.signal.aborted) { opened.close(); reject(lease.signal.reason); return; }
+        resolve({ zip: opened, signal: lease.signal, close: () => opened.close() });
       });
-    });
-    zip.once("close", lease.release);
-    const close = () => zip.close();
-    if (lease.signal.aborted) { close(); lease.signal.throwIfAborted(); }
-    return { zip, signal: lease.signal, close };
-  } catch (error) { lease.release(); throw error; }
+    } catch (error) { release(); reject(error); }
+    if (lease.signal.aborted) abort();
+  });
 };
 
 export const collectZipImageEntries = async (zipPath: string, options: ArchiveOptions = {}): Promise<ArchiveImageEntry[]> => {
@@ -78,7 +83,7 @@ export const collectZipImageEntries = async (zipPath: string, options: ArchiveOp
         const entryPath = toDecodedZipEntryPath(entry);
         count += 1;
         pathBytes += Buffer.byteLength(entryPath);
-        if (count > (options.maxEntries ?? MAX_ARCHIVE_ENTRIES) || pathBytes > MAX_LISTING_BYTES) throw new Error("ZIP 列表超过上限");
+        if (count > (options.maxEntries ?? MAX_ARCHIVE_ENTRIES) || pathBytes > MAX_LISTING_BYTES) throw new ArchiveSafetyError("ARCHIVE_ENTRY_LIMIT", "ZIP 列表超过上限");
         const extension = normalizeExtension(entryPath);
         if (!entryPath.endsWith("/") && isSupportedImageExtension(extension)) entries.push({ entryPath, name: path.basename(entryPath), extension, sizeBytes: entry.uncompressedSize });
         zip.readEntry();
@@ -95,6 +100,8 @@ export const readZipStream = async (zipPath: string, entryPath: string, options:
   return new Promise((resolve, reject) => {
     let found = false;
     let settled = false;
+    let count = 0;
+    let pathBytes = 0;
     let source: Readable | undefined;
     const output = byteLimiter(options.maxBytes);
     const fail = (error: Error) => {
@@ -110,9 +117,13 @@ export const readZipStream = async (zipPath: string, entryPath: string, options:
     zip.on("entry", (entry) => {
       if (settled) return;
       try {
-        if (toDecodedZipEntryPath(entry) !== entryPath) { zip.readEntry(); return; }
+        const decodedPath = toDecodedZipEntryPath(entry);
+        count += 1;
+        pathBytes += Buffer.byteLength(decodedPath);
+        if (count > (options.maxEntries ?? MAX_ARCHIVE_ENTRIES) || pathBytes > MAX_LISTING_BYTES) throw new ArchiveSafetyError("ARCHIVE_ENTRY_LIMIT", "ZIP 列表超过上限");
+        if (decodedPath !== entryPath) { zip.readEntry(); return; }
         found = true;
-        if (entry.uncompressedSize > (options.maxBytes ?? MAX_ENTRY_BYTES)) { fail(new Error("归档解压字节数超过上限")); return; }
+        if (entry.uncompressedSize > (options.maxBytes ?? MAX_ENTRY_BYTES)) { fail(new ArchiveSafetyError("ARCHIVE_BYTE_LIMIT", "归档解压字节数超过上限")); return; }
         zip.openReadStream(entry, (error, stream) => {
           if (error || !stream) { fail(error ?? new Error("无法读取 ZIP 条目")); return; }
           source = stream;

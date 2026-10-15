@@ -3,6 +3,7 @@ import { lookup as lookupMimeType } from "mime-types";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 
 import { mediaRequestSignal } from "../lib/media-request.js";
+import { isArchiveControlError } from "../services/archive/archive-limits.js";
 import { ok } from "../lib/api.js";
 import { parseBoundedInteger, parseEnumValue } from "../lib/request-query.js";
 import { deleteAsset, getAssetDetail } from "../services/album-service.js";
@@ -137,6 +138,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         if (error instanceof OriginalAssetSourceMissingError) {
           return sendOriginalSourceMissing(reply);
         }
+        if (isArchiveControlError(error, signal)) throw error;
         try {
           return await sendOriginalAssetFallback(assetId, reply, signal);
         } catch (fallbackError) {
@@ -220,6 +222,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
         if (error instanceof OriginalAssetSourceMissingError) {
           return sendOriginalSourceMissing(reply);
         }
+        if (isArchiveControlError(error, signal)) throw error;
         try {
           return await sendOriginalAssetFallback(assetId, reply, signal);
         } catch (fallbackError) {

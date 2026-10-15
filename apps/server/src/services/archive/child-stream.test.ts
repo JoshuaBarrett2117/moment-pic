@@ -14,6 +14,17 @@ const waitReleased = async (budget: WorkBudget) => {
 };
 const producer = `const data=Buffer.alloc(65536,65);function pump(){while(process.stdout.write(data)){}process.stdout.once('drain',pump)}pump();`;
 
+test("stdout end 不等于进程 close，真实子进程退出前持续占用并发槽位", async () => {
+  const budget = new WorkBudget(1, 0);
+  const stream = await runChildStream(process.execPath, ["-e", "process.stdout.end('head');setTimeout(()=>{},250)"], { budget });
+  const reading = collectBounded(stream);
+  await delay(100);
+  assert.deepEqual(budget.usage, { active: 1, queued: 0 });
+  await assert.rejects(runChildStream(process.execPath, ["-e", ""], { budget }), ResourceBusyError);
+  assert.equal((await reading).toString(), "head");
+  await waitReleased(budget);
+});
+
 test("真实子进程正常完成、spawn 失败与非零退出均释放预算", async () => {
   const budget = new WorkBudget(1, 1);
   assert.equal((await collectBounded(await runChildStream(process.execPath, ["-e", "process.stdout.write('success')"], { budget }))).toString(), "success");

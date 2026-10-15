@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Readable } from "node:stream";
 import { runChildStream } from "./child-stream.js";
-import { collectBounded, MAX_LISTING_BYTES, MAX_ARCHIVE_ENTRIES, type ArchiveOptions } from "./archive-limits.js";
+import { ArchiveSafetyError, collectBounded, isArchiveControlError, MAX_LISTING_BYTES, MAX_ARCHIVE_ENTRIES, type ArchiveOptions } from "./archive-limits.js";
 
 import { path7za } from "7zip-bin";
 
@@ -63,6 +63,7 @@ export const run7zaStream = async (args: string[], options: ArchiveOptions = {})
   for (let index = 0; index < commands.length; index += 1) {
     try { return await runChildStream(commands[index], args, options); }
     catch (error) {
+      if (isArchiveControlError(error, options.signal)) throw error;
       const code = (error as NodeJS.ErrnoException).code;
       if ((code !== "ENOENT" && code !== "EACCES") || index === commands.length - 1) throw error;
     }
@@ -83,7 +84,7 @@ export const collect7zImageEntries = async (archivePath: string, options: Archiv
     .filter((block) => block.length > 0);
 
   const entries: ArchiveImageEntry[] = [];
-  if (blocks.length > (options.maxEntries ?? MAX_ARCHIVE_ENTRIES)) throw new Error("归档条目数超过上限");
+  if (blocks.length > (options.maxEntries ?? MAX_ARCHIVE_ENTRIES)) throw new ArchiveSafetyError("ARCHIVE_ENTRY_LIMIT", "归档条目数超过上限");
 
   for (const block of blocks) {
     let entryPath = "";

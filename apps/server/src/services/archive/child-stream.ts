@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { Readable } from "node:stream";
-import { acquireArchiveLease, byteLimiter, type ArchiveOptions } from "./archive-limits.js";
+import { acquireArchiveLease, ArchiveSafetyError, byteLimiter, type ArchiveOptions } from "./archive-limits.js";
 
 export const runChildStream = async (command: string, args: string[], options: ArchiveOptions = {}): Promise<Readable> => {
   const lease = await acquireArchiveLease(options);
@@ -35,7 +35,7 @@ export const runChildStream = async (command: string, args: string[], options: A
     child.stderr!.on("error", fail);
     child.stderr!.on("data", (chunk: Buffer) => {
       stderrBytes += chunk.length;
-      if (stderrBytes > 64 * 1024) fail(new Error("归档错误输出超过上限"));
+      if (stderrBytes > 64 * 1024) fail(new ArchiveSafetyError("ARCHIVE_STDERR_LIMIT", "归档错误输出超过上限"));
     });
     child.once("error", (error) => { failure ??= error; });
     child.once("close", (code) => {

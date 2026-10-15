@@ -29,3 +29,35 @@ export const createStoredRarArchive = (entries: Array<{ entryPath: string; conte
   blocks.push(header(0x7b, 0, Buffer.alloc(0)));
   return Buffer.concat(blocks);
 };
+
+const vint = (value: number): Buffer => {
+  const bytes: number[] = [];
+  do {
+    const next = value % 128;
+    value = Math.floor(value / 128);
+    bytes.push(next | (value ? 128 : 0));
+  } while (value);
+  return Buffer.from(bytes);
+};
+
+const rar5Header = (body: Buffer): Buffer => {
+  const data = Buffer.concat([vint(body.length), body]);
+  const checksum = Buffer.alloc(4);
+  checksum.writeUInt32LE(crc32(data));
+  return Buffer.concat([checksum, data]);
+};
+
+export const createStoredRar5Archive = (entries: Array<{ entryPath: string; content: Buffer }>): Buffer => {
+  const blocks = [Buffer.from("526172211a070100", "hex"), rar5Header(Buffer.from([1, 0, 0]))];
+  for (const { entryPath, content } of entries) {
+    const name = Buffer.from(entryPath);
+    const checksum = Buffer.alloc(4);
+    checksum.writeUInt32LE(crc32(content));
+    blocks.push(rar5Header(Buffer.concat([
+      Buffer.from([2, 2]), vint(content.length), Buffer.from([4]), vint(content.length),
+      vint(0o100644), checksum, Buffer.from([0, 1]), vint(name.length), name
+    ])), content);
+  }
+  blocks.push(rar5Header(Buffer.from([5, 0, 0])));
+  return Buffer.concat(blocks);
+};

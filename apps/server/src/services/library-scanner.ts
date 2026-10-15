@@ -105,19 +105,24 @@ const scanFolderAlbum = async (
   const folderEntries = await fs.promises.readdir(folderPath, { withFileTypes: true });
   const fileEntries = folderEntries.filter((entry) => !entry.isDirectory());
   const imageFiles = await mapWithConcurrency(fileEntries, 12, async (entry) => {
+    const extension = normalizeExtension(entry.name);
+    if (!isSupportedImageExtension(extension)) {
+      return null;
+    }
     const fullPath = path.join(folderPath, entry.name);
     const stats = await fs.promises.stat(fullPath);
     if (!stats.isFile()) {
       return null;
     }
 
-    const extension = normalizeExtension(entry.name);
-    if (!isSupportedImageExtension(extension)) {
-      return null;
+    let dimensions: { width: number | null; height: number | null };
+    try {
+      dimensions = normalizeMetadataDimensions(await createSharp(fullPath).metadata());
+      if (!dimensions.width || !dimensions.height) throw new Error("图片元数据不可用");
+    } catch (error) {
+      if (extension !== "bmp" || !(error instanceof Error) || !error.message.includes("unsupported image format")) throw error;
+      dimensions = { width: null, height: null };
     }
-
-    const dimensions = normalizeMetadataDimensions(await createSharp(fullPath).metadata());
-    if (!dimensions.width || !dimensions.height) throw new Error("图片元数据不可用");
 
     return {
       name: entry.name,
@@ -245,6 +250,7 @@ const iterateArchiveAlbumsRecursively = async function* (
       continue;
     }
 
+    if (!(await isArchiveFile(fullPath))) continue;
     try {
       const stats = await fs.promises.stat(fullPath);
       if (!stats.isFile()) {
@@ -550,6 +556,7 @@ export const rescanAlbum = async (albumId: string) => {
     assetCount: assets.length,
     scanStatus: "ready",
     errorMessage: null,
+    isFavorite: existingAlbum.isFavorite ?? false,
     createdAt: existingAlbum.createdAt,
     updatedAt: timestamp
   };

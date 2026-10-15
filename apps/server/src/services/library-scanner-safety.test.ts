@@ -6,10 +6,10 @@ import path from "node:path";
 import test from "node:test";
 import sharp from "sharp";
 import { path7za } from "7zip-bin";
-import { scanLibrary } from "./library-scanner.js";
+import { rescanAlbum, scanLibrary } from "./library-scanner.js";
 import { buildCacheKey } from "./thumbnail-options.js";
 import { upsertLibraryRootDb, deleteLibraryRootDb } from "../repositories/library-root-repository.js";
-import { listAlbumsByLibraryRootIdDb, listAssetsByAlbumIdDb, findAlbumByIdDb } from "../repositories/album-repository.js";
+import { listAlbumsByLibraryRootIdDb, listAssetsByAlbumIdDb, findAlbumByIdDb, updateAlbumFavoriteDb, insertAlbumShareDb, findAlbumShareByTokenDb } from "../repositories/album-repository.js";
 
 const fixture = async () => {
   const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "scan-safety-"));
@@ -27,6 +27,71 @@ const fixture = async () => {
     await fs.promises.rm(directory, { recursive: true, force: true });
   } };
 };
+
+test("Sharp 不支持的有效 BMP 可索引，支持格式损坏仍报失败", async () => {
+  const data = await fixture();
+  try {
+    const bitmap = Buffer.alloc(58);
+    bitmap.write("BM");
+    bitmap.writeUInt32LE(58, 2);
+    bitmap.writeUInt32LE(54, 10);
+    bitmap.writeUInt32LE(40, 14);
+    bitmap.writeInt32LE(1, 18);
+    bitmap.writeInt32LE(1, 22);
+    bitmap.writeUInt16LE(1, 26);
+    bitmap.writeUInt16LE(24, 28);
+    bitmap.writeUInt32LE(4, 34);
+    await fs.promises.writeFile(path.join(data.folder, "supported.bmp"), bitmap);
+    assert.equal((await scanLibrary({ libraryRootId: data.id })).failureCount, 0);
+    const images = listAssetsByAlbumIdDb(data.album.id);
+    assert.equal(images.length, 2);
+    assert.equal(images.find((asset) => asset.extension === "png")?.width, 16);
+    await fs.promises.writeFile(data.image, "damaged supported PNG");
+    assert.ok((await scanLibrary({ libraryRootId: data.id })).failureCount > 0);
+    assert.equal(listAssetsByAlbumIdDb(data.album.id).length, 2);
+  } finally { await data.cleanup(); }
+});
+
+test("无关文件的断链不影响文件夹或归档扫描，相关图片/归档断链仍保留失败状态", async () => {
+  const data = await fixture();
+  try {
+    await fs.promises.symlink(path.join(data.directory, "missing"), path.join(data.folder, "notes.txt"));
+    assert.equal((await scanLibrary({ libraryRootId: data.id })).failureCount, 0);
+    for (const name of ["missing.png", "missing.zip"]) {
+      const link = path.join(data.folder, name);
+      await fs.promises.symlink(path.join(data.directory, "missing"), link);
+      assert.ok((await scanLibrary({ libraryRootId: data.id })).failureCount > 0);
+      assert.ok(findAlbumByIdDb(data.album.id));
+      await fs.promises.unlink(link);
+    }
+  } finally { await data.cleanup(); }
+});
+
+test("全量替换、失败恢复与单相册重扫保持收藏和分享，确认删除才清理分享", async () => {
+  const data = await fixture();
+  const token = `${data.id}-share`;
+  try {
+    updateAlbumFavoriteDb(data.album.id, true, new Date().toISOString());
+    insertAlbumShareDb({ id: token, albumId: data.album.id, token, passwordHash: "0".repeat(32) + ":" + "0".repeat(128), expiresAt: new Date(Date.now() + 3600_000).toISOString(), createdAt: new Date().toISOString() });
+    await fs.promises.copyFile(data.image, path.join(data.folder, "second.png"));
+    await scanLibrary({ libraryRootId: data.id });
+    assert.equal(findAlbumByIdDb(data.album.id)?.isFavorite, true);
+    assert.ok(findAlbumShareByTokenDb(token));
+    const valid = await fs.promises.readFile(data.image);
+    await fs.promises.writeFile(data.image, "broken");
+    await scanLibrary({ libraryRootId: data.id });
+    assert.equal(findAlbumByIdDb(data.album.id)?.isFavorite, true);
+    assert.ok(findAlbumShareByTokenDb(token));
+    await fs.promises.writeFile(data.image, valid);
+    await rescanAlbum(data.album.id);
+    assert.equal(findAlbumByIdDb(data.album.id)?.isFavorite, true);
+    assert.ok(findAlbumShareByTokenDb(token));
+    await fs.promises.rm(data.folder, { recursive: true });
+    await scanLibrary({ libraryRootId: data.id });
+    assert.equal(findAlbumByIdDb(data.album.id), null);
+    assert.equal(findAlbumShareByTokenDb(token), null);
+  } finally { await data.cleanup(); }
+});
 
 for (const code of ["EIO", "EACCES", "ENOENT"]) {
   test(`根目录 ${code} 不代表确认删除，保留身份与图片并暴露脱敏状态`, async (context) => {

@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import { buildAssetsFingerprint, buildStableAssetId, mapWithConcurrency, sortNames } from "./library-scanner-utils.js";
+
+test("并发 mapper 的 falsy rejection 仍传播失败", async () => {
+  for (const reason of [undefined, null, 0, "", false]) {
+    let rejected = false;
+    try { await mapWithConcurrency([1], 1, () => Promise.reject(reason)); }
+    catch (error) { rejected = true; assert.equal(error, reason); }
+    assert.equal(rejected, true);
+  }
+});
 
 test("mapWithConcurrency preserves item order and drops only explicit null results", async () => {
   const results = await mapWithConcurrency([1, 2, 3, 4], 64, async (value) => {

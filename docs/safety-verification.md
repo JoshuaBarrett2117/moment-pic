@@ -84,3 +84,22 @@ ZIP 在 open 回调前就监听取消：调用方立即收到取消/超时，未
 运行时为 Node 22.23.3 / npm 10，本机默认 Node 26 未用于验收。RAR 使用 TMPDIR 内完整官方 7zz 26.04；测试只创建临时隔离数据库/缓存/图库。历史失败日志保留用于复现，不能替代上表最终成功结果。
 
 未执行 push、Docker 构建/运行/推送、NAS 访问、真实数据库连接/清理或远程 GitHub Actions。Rust 未修改，未运行 cargo test。原始 77 项 WIP 保留在本地提交，未重置或丢弃。交付最后一次提交带 `[skip ci]`，避免父任务仅推源码时触发本次镜像流水线；后续显式构建仍由独立质量任务约束。历史明文及旧备份留待 DBA 处置，部署 RAR 解码器仍须单独验收，不能用本地通过替代部署验收。
+
+## 最后一棒最小修复复核（2026-10-15 UTC；Codex）
+
+以 `5b5e365` 为基线，先仅增加实际 React Hook/控制器回归并运行 RED，再修改实现；本节证据均位于 `/opt/data/output/momentpic-final-verification/`，不替代前述服务端、构建、浏览器和依赖审计记录。
+
+- 图库控制器改用单调查询代次，刷新入口及根目录 await 后均检查存活/代次，阻止 A→B→A 与卸载后继续请求；查询/认证切换同时取消根目录读取，当前查询重新读取根目录。
+- `useLatestRequest.begin` 卸载后返回已取消的非当前请求，所有读取调用方在启动 API 前检查；显式取消同步结束 loading，迟到 success/error/finally 不恢复状态。智能相册列表与详情使用独立请求槽及 loading，取消同时清理两槽。
+- `useLibraryScan` 的轮询互斥、旧任务/恢复响应隔离、同步重复 POST 去重、迟到 POST/恢复卸载保护、终态只通知一次均已验证无需重写：RED 中扫描 14 项已有 12 项通过。仅保留的 scan 回调在卸载/禁用后仍能 POST 两项失败，补充当前 mounted/enabled 检查后扫描 14/14 通过。
+- UI 项 1 已验证无需改动：保留现有脱敏摘要，完整前端测试包含 Settings 与图库控制器的失败/部分成功刷新及错误脱敏验证，不展示原始错误或路径。七条已撤回公告的既有记录未改动。
+
+| 验证命令 | 日志 | 结果 |
+| --- | --- | --- |
+| Node test runner + test-isolation/tsx，三个实际 Hook/控制器测试文件 | last-leg-red.log | 48 项：22 通过、26 失败；零取消/跳过，退出 1（修复前） |
+| 同一组测试与命令 | last-leg-green.log | 48/48；零失败/取消/跳过，退出 0 |
+| npm run typecheck --workspace @moment-pic/server | last-leg-server-typecheck.log | 退出 0 |
+| npm run typecheck --workspace @moment-pic/web | last-leg-web-typecheck.log | 退出 0 |
+| npm run test:web（递归发现） | last-leg-web-full.log | 17 文件、82/82；零失败/取消/跳过，退出 0 |
+
+运行时为 `/tmp/momentpic-tools/runtime/package/bin/node`（22.23.3），临时目录使用 `TMPDIR=/tmp/momentpic-tools/tmp`，测试仅用 mock/隔离临时数据。本轮仅前端请求生命周期修复，未重跑服务端测试、构建、浏览器、审计或 Rust；未变更依赖/凭据/环境配置，未提交、推送或操作 Docker/NAS/生产数据库。部署与历史数据风险仍沿用前述记录，由父任务完成交付。

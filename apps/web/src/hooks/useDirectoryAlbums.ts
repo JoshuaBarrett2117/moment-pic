@@ -9,13 +9,14 @@ type FetchDirectoryAlbumsOptions = {
 };
 
 export function useDirectoryAlbums() {
-  const requests = useLatestRequest();
   const [directoryAlbums, setDirectoryAlbums] = useState<DirectoryAlbumsDTO | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const requests = useLatestRequest(() => setIsLoading(false));
   const [error, setError] = useState<string | null>(null);
 
   const fetchDirectoryAlbums = useCallback(async (options: FetchDirectoryAlbumsOptions = {}) => {
     const request = requests.begin();
+    if (!request.isCurrent()) return null;
     setIsLoading(true);
     setError(null);
     try {

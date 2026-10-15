@@ -26,13 +26,14 @@ interface UseSystemConfigReturn {
 }
 
 export function useSystemConfig(): UseSystemConfigReturn {
-  const requests = useLatestRequest();
   const [systemConfig, setSystemConfig] = useState<SystemConfigDTO | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const requests = useLatestRequest(() => setIsLoading(false));
   const [error, setError] = useState<string | null>(null);
 
   const fetchSystemConfig = useCallback(async (): Promise<void> => {
     const request = requests.begin();
+    if (!request.isCurrent()) return;
     setIsLoading(true);
     setError(null);
     try {

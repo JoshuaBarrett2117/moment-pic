@@ -15,13 +15,14 @@ interface UseLibraryRootsReturn {
 }
 
 export function useLibraryRoots(): UseLibraryRootsReturn {
-  const requests = useLatestRequest();
   const [libraryRoots, setLibraryRoots] = useState<LibraryRootDTO[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const requests = useLatestRequest(() => setIsLoading(false));
   const [error, setError] = useState<string | null>(null);
 
   const fetchLibraryRoots = useCallback(async (): Promise<void> => {
     const request = requests.begin();
+    if (!request.isCurrent()) return;
     setIsLoading(true);
     setError(null);
     try {

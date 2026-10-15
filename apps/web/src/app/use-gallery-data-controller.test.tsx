@@ -14,6 +14,78 @@ const windowStub = {
 Object.defineProperty(globalThis, 'window', { configurable: true, value: windowStub });
 Object.defineProperty(globalThis, 'WebSocket', { configurable: true, value: class { static OPEN = 1; static CONNECTING = 0; readyState = 0; close() {} } });
 
+const galleryInput = (): Parameters<typeof useGalleryDataController>[0] => ({
+  currentScreen: Screen.GALLERY, debouncedKeyword: 'A', galleryViewMode: 'albums',
+  isAuthenticated: true, isRecentActive: false, selectedSmartAlbum: null,
+  filters: { page: 1, pageSize: 20, keyword: '', sortBy: 'updatedAt', sortOrder: 'desc', sourceType: '', libraryRootId: '', directoryLibraryRootId: '', directoryRelativePath: '' },
+});
+
+for (const scenario of ['ABA', 'unmount', 'retained', 'query', 'auth'] as const) {
+  test(`实际图库控制器：刷新生命周期 ${scenario} 不得启动过期读取或提交根目录`, async (context) => {
+    const calls: Array<ReturnType<typeof deferred> & { url: string; signal?: AbortSignal }> = [];
+    let delayRoots = false;
+    let rootReads = 0;
+    context.mock.method(api, 'get', (url: string, _params?: unknown, options?: { signal?: AbortSignal }) => {
+      if (url === '/auth/session') return Promise.resolve({ authenticated: true });
+      if (url !== '/library-roots') { calls.push({ ...deferred(), url, signal: options?.signal }); return Promise.resolve({ items: [] }); }
+      rootReads += 1;
+      if (!delayRoots) return Promise.resolve([]);
+      const pending = { ...deferred(), url, signal: options?.signal };
+      calls.push(pending);
+      return pending.promise;
+    });
+    context.mock.method(api, 'getWithOptions', () => Promise.resolve([]));
+    let input = galleryInput();
+    const hook = await renderHook(() => useGalleryDataController(input));
+    try {
+      delayRoots = true;
+      const refresh = hook.current.refreshCurrentGallery;
+      if (scenario === 'retained') {
+        await hook.unmount();
+        delayRoots = false;
+        const count = calls.length;
+        const beforeRoots = rootReads;
+        await act(async () => { await refresh(); });
+        assert.equal(calls.length, count, '卸载后保留的刷新不可读取相册');
+        assert.equal(rootReads, beforeRoots, '卸载后保留的刷新不可读取根目录');
+        return;
+      }
+      let refreshing!: Promise<void>;
+      await act(async () => { refreshing = refresh(); });
+      const roots = calls.find((call) => call.url === '/library-roots')!;
+      if (scenario === 'unmount') await hook.unmount();
+      else {
+        input = { ...input, debouncedKeyword: 'B', isAuthenticated: scenario !== 'auth' };
+        await hook.rerender();
+        if (scenario === 'ABA') { input = { ...input, debouncedKeyword: 'A' }; await hook.rerender(); }
+      }
+      const count = calls.length;
+      await act(async () => { roots.resolve([{ id: 'obsolete-root' }]); await refreshing; });
+      if (scenario === 'query' || scenario === 'auth') {
+        assert.equal(roots.signal?.aborted, true, '查询或认证变化必须取消根目录读取');
+        assert.deepEqual(hook.current.libraryRoots, []);
+      }
+      assert.equal(calls.length, count, '失效刷新不可在 await 后继续读取相册');
+    } finally { await hook.unmount(); }
+  });
+}
+
+test('实际图库控制器：切到无替代读取的页面后 loading 必须结束', async (context) => {
+  const pending = deferred();
+  context.mock.method(api, 'get', (url: string) => url.startsWith('/albums?') ? pending.promise : Promise.resolve([]));
+  context.mock.method(api, 'getWithOptions', () => Promise.resolve([]));
+  let input = galleryInput();
+  const hook = await renderHook(() => useGalleryDataController(input));
+  try {
+    assert.equal(hook.current.isLoading, true);
+    input = { ...input, currentScreen: Screen.SETTINGS };
+    await hook.rerender();
+    const loading = hook.current.isLoading;
+    await act(async () => { pending.resolve({ items: [] }); });
+    assert.equal(loading, false);
+  } finally { await hook.unmount(); }
+});
+
 test('实际图库控制器：失败 WebSocket 仍刷新健康相册且错误展示脱敏', async (context) => {
   class SocketDouble {
     static OPEN = 1;

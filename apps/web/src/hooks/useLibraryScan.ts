@@ -35,6 +35,8 @@ export function useLibraryScan({ onScanComplete, enabled = true }: UseLibrarySca
   const requestsRef = useRef(new Map<string, ScanRequest>());
   const locallyChangedTasksRef = useRef(new Set<string>());
   const mountedRef = useRef(true);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
   const onScanCompleteRef = useRef(onScanComplete);
   onScanCompleteRef.current = onScanComplete;
   const scanTaskList = Array.from<ScanTask>(scanTasks.values());
@@ -95,7 +97,7 @@ export function useLibraryScan({ onScanComplete, enabled = true }: UseLibrarySca
 
   const scan = useCallback(async (libraryRootId?: string): Promise<ScanResultDTO | null> => {
     const key = getTaskKey(libraryRootId);
-    if (!enabled || requestsRef.current.has(key)) return null;
+    if (!mountedRef.current || !enabledRef.current || !enabled || requestsRef.current.has(key)) return null;
     locallyChangedTasksRef.current.add(key);
     const request: ScanRequest = { controller: new AbortController(), polling: false };
     requestsRef.current.set(key, request);

@@ -6,18 +6,29 @@ export const isRequestCancellation = (error: unknown): boolean => {
   return candidate.name === 'AbortError' || candidate.name === 'CanceledError' || candidate.code === 'ERR_CANCELED';
 };
 
-export function useLatestRequest() {
+export function useLatestRequest(onCancel?: () => void) {
   const current = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
   const cancel = useCallback(() => {
     current.current?.abort();
     current.current = null;
+    if (mounted.current) onCancelRef.current?.();
   }, []);
   const begin = useCallback(() => {
     current.current?.abort();
     const controller = new AbortController();
+    if (!mounted.current) {
+      controller.abort();
+      return { signal: controller.signal, isCurrent: () => false };
+    }
     current.current = controller;
     return { signal: controller.signal, isCurrent: () => current.current === controller };
   }, []);
-  useEffect(() => cancel, [cancel]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; cancel(); };
+  }, [cancel]);
   return useMemo(() => ({ begin, cancel }), [begin, cancel]);
 }

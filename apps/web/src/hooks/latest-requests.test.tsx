@@ -8,6 +8,7 @@ import { useDirectoryAlbums } from './useDirectoryAlbums';
 import { useLibraryRoots } from './useLibraryRoots';
 import { useSystemConfig } from './useSystemConfig';
 import { useSmartAlbums } from './useSmartAlbums';
+import { useLatestRequest } from './useLatestRequest';
 
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } } });
 
@@ -20,6 +21,76 @@ const cases = [
   { name: 'useSystemConfig', hook: useSystemConfig, fetch: 'fetchSystemConfig', state: 'systemConfig', payload: (id: string) => ({ id }) },
   { name: 'useSmartAlbums', hook: useSmartAlbums, fetch: 'fetchSmartAlbums', state: 'smartAlbums', payload: (id: string) => ({ items: [{ id }] }) },
 ];
+
+test('useLatestRequest：卸载后 begin 返回已取消且非当前的请求', async () => {
+  const hook = await renderHook(() => useLatestRequest());
+  const begin = hook.current.begin;
+  const active = begin();
+  await hook.unmount();
+  const late = begin();
+  assert.equal(active.signal.aborted, true);
+  assert.equal(late.signal.aborted, true);
+  assert.equal(late.isCurrent(), false);
+});
+
+for (const entry of cases) {
+  test(`${entry.name}：显式取消无替代请求也必须结束 loading`, async (context) => {
+    const pending = deferred();
+    context.mock.method(api, 'get', () => pending.promise);
+    const hook = await renderHook(() => entry.hook() as unknown as Record<string, unknown>);
+    try {
+      let fetching!: Promise<unknown>;
+      await act(async () => { fetching = (hook.current[entry.fetch] as (input?: unknown) => Promise<unknown>)(entry.fetch === 'fetchAssets' ? 'album' : {}); });
+      assert.equal(hook.current.isLoading, true);
+      await act(async () => { (hook.current.cancelRequests as () => void)(); });
+      const loadingAfterCancel = hook.current.isLoading;
+      await act(async () => { pending.resolve(entry.payload('late')); await fetching; });
+      assert.equal(loadingAfterCancel, false);
+      assert.equal(hook.current.isLoading, false);
+      assert.equal(hook.current.error, null);
+      assert.notDeepEqual(hook.current[entry.state], entry.payload('late'));
+    } finally { await hook.unmount(); }
+  });
+
+  test(`${entry.name}：卸载后保留的 fetch 不得发起 API`, async (context) => {
+    let called = 0;
+    context.mock.method(api, 'get', () => { called += 1; return Promise.resolve(entry.payload('late')); });
+    const hook = await renderHook(() => entry.hook() as unknown as Record<string, unknown>);
+    const fetch = hook.current[entry.fetch] as (input?: unknown) => Promise<unknown>;
+    await hook.unmount();
+    await act(async () => { await fetch(entry.fetch === 'fetchAssets' ? 'album' : {}); });
+    assert.equal(called, 0);
+  });
+}
+
+for (const stage of ['detail', 'members', 'list'] as const) {
+  test(`useSmartAlbums：列表与详情独立（${stage} 待定），loading 等待所有读取`, async (context) => {
+    const calls: Array<ReturnType<typeof deferred> & { url: string; signal?: AbortSignal }> = [];
+    context.mock.method(api, 'get', (url: string, _params?: unknown, options?: { signal?: AbortSignal }) => {
+      const pending = { ...deferred(), url, signal: options?.signal };
+      calls.push(pending);
+      return pending.promise;
+    });
+    const hook = await renderHook(() => useSmartAlbums());
+    try {
+      let list!: Promise<unknown>;
+      let detail!: Promise<unknown>;
+      if (stage === 'list') await act(async () => { list = hook.current.fetchSmartAlbums(); });
+      await act(async () => { detail = hook.current.fetchSmartAlbumDetail('selected'); });
+      if (stage === 'members') await act(async () => { calls.find((call) => call.url === '/smart-albums/selected')!.resolve({ id: 'selected' }); });
+      if (stage !== 'list') await act(async () => { list = hook.current.fetchSmartAlbums(); });
+      assert.equal(calls.every((call) => !call.signal?.aborted), true);
+      await act(async () => { calls.find((call) => call.url === '/smart-albums')!.resolve({ items: [{ id: 'list' }] }); await list; });
+      assert.equal(hook.current.isLoading, true);
+      if (stage !== 'members') await act(async () => { calls.find((call) => call.url === '/smart-albums/selected')!.resolve({ id: 'selected' }); });
+      await act(async () => { calls.find((call) => call.url.endsWith('/selected/albums'))!.resolve({ items: [{ id: 'member' }] }); await detail; });
+      assert.equal(hook.current.smartAlbumDetail?.id, 'selected');
+      assert.equal(hook.current.smartAlbumMembers?.[0].id, 'member');
+      assert.equal(hook.current.smartAlbums?.items[0].id, 'list');
+      assert.equal(hook.current.isLoading, false);
+    } finally { await hook.unmount(); }
+  });
+}
 
 test('useSmartAlbums 详情的两阶段请求都遵守最新代次，旧 members/error 不覆盖且卸载取消', async (context) => {
   const calls: Array<ReturnType<typeof deferred> & { url: string; signal?: AbortSignal }> = [];

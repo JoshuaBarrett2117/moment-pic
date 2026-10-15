@@ -46,7 +46,6 @@ type UseSmartAlbumsOptions = {
 const SMART_ALBUM_REBUILD_TASK_STORAGE_KEY = 'moment_pic_active_smart_album_rebuild_task';
 
 export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
-  const requests = useLatestRequest();
   const [smartAlbums, setSmartAlbums] = useState<SmartAlbumsListDTO | null>(null);
   const [smartAlbumDetail, setSmartAlbumDetail] = useState<SmartAlbumDetailDTO | null>(null);
   const [smartAlbumMembers, setSmartAlbumMembers] = useState<SmartAlbumMemberDTO[] | null>(null);
@@ -54,7 +53,14 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
   const [aiConfig, setAiConfig] = useState<SmartAlbumAiConfigDTO | null>(null);
   const [currentRebuildTask, setCurrentRebuildTask] = useState<SmartAlbumRebuildTaskDTO | null>(null);
   const [isRebuilding, setIsRebuilding] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isListLoading, setIsListLoading] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const requests = useLatestRequest(() => setIsListLoading(false));
+  const detailRequests = useLatestRequest(() => setIsDetailLoading(false));
+  const cancelRequests = useCallback(() => {
+    requests.cancel();
+    detailRequests.cancel();
+  }, [requests, detailRequests]);
   const [error, setError] = useState<string | null>(null);
   const rebuildPollIntervalRef = useRef<number | null>(null);
   const rebuildPollFailureCountRef = useRef(0);
@@ -126,7 +132,8 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
     sortOrder?: 'asc' | 'desc';
   }) => {
     const request = requests.begin();
-    setIsLoading(true);
+    if (!request.isCurrent()) return null;
+    setIsListLoading(true);
     setError(null);
     try {
       const result = await api.get<SmartAlbumsListDTO>('/smart-albums', params, { signal: request.signal });
@@ -137,13 +144,14 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
       if (request.isCurrent() && !isRequestCancellation(err)) setError(err instanceof Error ? err.message : '获取自动整理失败');
       return null;
     } finally {
-      if (request.isCurrent()) setIsLoading(false);
+      if (request.isCurrent()) setIsListLoading(false);
     }
   }, []);
 
   const fetchSmartAlbumDetail = useCallback(async (smartAlbumId: string) => {
-    const request = requests.begin();
-    setIsLoading(true);
+    const request = detailRequests.begin();
+    if (!request.isCurrent()) return null;
+    setIsDetailLoading(true);
     setError(null);
     try {
       const detail = await api.get<SmartAlbumDetailDTO>(`/smart-albums/${smartAlbumId}`, undefined, { signal: request.signal });
@@ -157,7 +165,7 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
       if (request.isCurrent() && !isRequestCancellation(err)) setError(err instanceof Error ? err.message : '获取自动整理详情失败');
       return null;
     } finally {
-      if (request.isCurrent()) setIsLoading(false);
+      if (request.isCurrent()) setIsDetailLoading(false);
     }
   }, []);
 
@@ -307,7 +315,7 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
   }, [clearRebuildPolling]);
 
   return {
-    cancelRequests: requests.cancel,
+    cancelRequests,
     smartAlbums,
     smartAlbumDetail,
     smartAlbumMembers,
@@ -315,7 +323,7 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
     aiConfig,
     currentRebuildTask,
     isRebuilding,
-    isLoading,
+    isLoading: isListLoading || isDetailLoading,
     error,
     fetchSmartAlbums,
     fetchSmartAlbumDetail,

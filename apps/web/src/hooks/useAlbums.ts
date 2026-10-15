@@ -23,13 +23,14 @@ interface UseAlbumsReturn {
 }
 
 export function useAlbums(): UseAlbumsReturn {
-  const requests = useLatestRequest();
   const [albums, setAlbums] = useState<AlbumsListDTO | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const requests = useLatestRequest(() => setIsLoading(false));
   const [error, setError] = useState<string | null>(null);
 
   const fetchAlbums = useCallback(async (options: UseAlbumsOptions = {}): Promise<void> => {
     const request = requests.begin();
+    if (!request.isCurrent()) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -71,13 +72,14 @@ interface UseAlbumAssetsReturn {
 }
 
 export function useAlbumAssets(): UseAlbumAssetsReturn {
-  const requests = useLatestRequest();
   const [assets, setAssets] = useState<AlbumAssetsDTO | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const requests = useLatestRequest(() => setIsLoading(false));
   const [error, setError] = useState<string | null>(null);
 
   const fetchAssets = useCallback(async (albumId: string, options: UseAlbumAssetsOptions = {}): Promise<AlbumAssetsDTO | null> => {
     const request = requests.begin();
+    if (!request.isCurrent()) return null;
     setIsLoading(true);
     setError(null);
     try {
@@ -219,13 +221,14 @@ interface UseRecentAlbumsReturn {
 }
 
 export function useRecentAlbums(): UseRecentAlbumsReturn {
-  const requests = useLatestRequest();
   const [recentAlbums, setRecentAlbums] = useState<AlbumListItemDTO[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const requests = useLatestRequest(() => setIsLoading(false));
   const [error, setError] = useState<string | null>(null);
 
   const fetchRecentAlbums = useCallback(async (options: UseRecentAlbumsOptions = {}): Promise<void> => {
     const request = requests.begin();
+    if (!request.isCurrent()) return;
     setIsLoading(true);
     setError(null);
     try {

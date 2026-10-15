@@ -40,16 +40,25 @@ export const useGalleryDataController = ({
     fetchDirectoryAlbums
     , cancelRequests: cancelDirectory
   } = useDirectoryAlbums();
-  const { libraryRoots, fetchLibraryRoots } = useLibraryRoots();
+  const { libraryRoots, fetchLibraryRoots, cancelRequests: cancelLibraryRoots } = useLibraryRoots();
   const queryKey = JSON.stringify([currentScreen, debouncedKeyword, filters, galleryViewMode, isAuthenticated, isRecentActive, selectedSmartAlbum]);
-  const queryRef = useRef(queryKey);
-  queryRef.current = queryKey;
-  useEffect(() => () => {
-    cancelAlbums();
-    cancelSmartAlbums();
-    cancelRecent();
-    cancelDirectory();
-  }, [queryKey, cancelAlbums, cancelSmartAlbums, cancelRecent, cancelDirectory]);
+  const queryRef = useRef({ key: queryKey, generation: 0 });
+  if (queryRef.current.key !== queryKey) {
+    queryRef.current = { key: queryKey, generation: queryRef.current.generation + 1 };
+  }
+  const queryGeneration = queryRef.current.generation;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cancelAlbums();
+      cancelSmartAlbums();
+      cancelRecent();
+      cancelDirectory();
+      cancelLibraryRoots();
+    };
+  }, [queryKey, cancelAlbums, cancelSmartAlbums, cancelRecent, cancelDirectory, cancelLibraryRoots]);
 
   const loadAlbums = useCallback(() => {
     return fetchAlbums({
@@ -100,12 +109,12 @@ export const useGalleryDataController = ({
   }, [fetchDirectoryAlbums, filters.directoryLibraryRootId, filters.directoryRelativePath]);
 
   const refreshCurrentGallery = useCallback(async () => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !mountedRef.current || queryRef.current.generation !== queryGeneration) {
       return;
     }
 
     await fetchLibraryRoots();
-    if (queryRef.current !== queryKey) return;
+    if (!mountedRef.current || queryRef.current.generation !== queryGeneration) return;
     if (galleryViewMode === 'directoryAlbums') {
       await loadDirectoryAlbums();
       return;
@@ -124,7 +133,7 @@ export const useGalleryDataController = ({
     }
 
     await loadAlbums();
-  }, [fetchLibraryRoots, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums, queryKey]);
+  }, [fetchLibraryRoots, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums, queryGeneration]);
 
   const { isScanning, scan, scanningLibraryRootIds, isAnyScanning, scanError: taskScanError } = useLibraryScan({
     onScanComplete: refreshCurrentGallery, enabled: isAuthenticated
@@ -155,7 +164,7 @@ export const useGalleryDataController = ({
     if ((currentScreen === Screen.GALLERY || currentScreen === Screen.SHARE_MANAGEMENT) && isAuthenticated) {
       void fetchLibraryRoots();
     }
-  }, [currentScreen, fetchLibraryRoots, isAuthenticated]);
+  }, [currentScreen, fetchLibraryRoots, isAuthenticated, queryKey]);
 
   useEffect(() => {
     if (isAuthenticated && currentScreen === Screen.GALLERY) {

@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import type { Readable } from "node:stream";
 import { extractJpegFromPsd } from "../archive-utils.js";
-import { ArchiveSafetyError, collectBounded, type ArchiveOptions } from "./archive-limits.js";
+import { acquireArchiveLease, ArchiveDecodeError, ArchiveSafetyError, collectBounded, type ArchiveLease, type ArchiveOptions } from "./archive-limits.js";
 import type { ArchiveImageEntry } from "./archive-types.js";
 import { collectRarImageEntries, readRarStream } from "./rar-reader.js";
 import { collect7zImageEntries, read7zStream } from "./sevenzip-reader.js";
@@ -13,9 +13,31 @@ export const detectRarVersion = async (archivePath: string): Promise<4 | 5 | nul
     const { bytesRead } = await file.read(header, 0, header.length, 0);
     if (bytesRead >= 7 && header.subarray(0, 7).equals(Buffer.from("526172211a0700", "hex"))) return 4;
     if (bytesRead === 8 && header.equals(Buffer.from("526172211a070100", "hex"))) return 5;
-    if (header.subarray(0, 6).equals(Buffer.from("526172211a07", "hex"))) throw new Error("RAR 签名损坏或版本不受支持");
+    if (header.subarray(0, 6).equals(Buffer.from("526172211a07", "hex"))) throw new ArchiveDecodeError("RAR 签名损坏或版本不受支持");
     return null;
   } finally { await file.close(); }
+};
+
+const inspectCbr = async (archivePath: string, options: ArchiveOptions): Promise<{ version: 4 | 5 | null; lease: ArchiveLease }> => {
+  const lease = await acquireArchiveLease(options);
+  return new Promise((resolve, reject) => {
+    let transferred = false;
+    const abort = () => reject(lease.signal.reason);
+    lease.signal.addEventListener("abort", abort, { once: true });
+    void (async () => {
+      try {
+        lease.signal.throwIfAborted();
+        const version = await detectRarVersion(archivePath);
+        lease.signal.throwIfAborted();
+        transferred = true;
+        resolve({ version, lease });
+      } catch (error) { reject(error); }
+      finally {
+        lease.signal.removeEventListener("abort", abort);
+        if (!transferred) lease.release();
+      }
+    })();
+  });
 };
 
 const withCbrDeadline = async <Result>(options: ArchiveOptions, operation: (controlled: ArchiveOptions) => Promise<Result>, streaming = false): Promise<Result> => {
@@ -37,16 +59,18 @@ const withCbrDeadline = async <Result>(options: ArchiveOptions, operation: (cont
 
 export const collectCbrImageEntries = async (archivePath: string, options: ArchiveOptions = {}): Promise<ArchiveImageEntry[]> =>
   withCbrDeadline(options, async (controlled) => {
-    const version = await detectRarVersion(archivePath);
-    controlled.signal?.throwIfAborted();
-    return version ? collectRarImageEntries(archivePath, controlled) : collect7zImageEntries(archivePath, controlled);
+    const { version, lease } = await inspectCbr(archivePath, controlled);
+    if (version) return collectRarImageEntries(archivePath, controlled, lease);
+    lease.release();
+    return collect7zImageEntries(archivePath, controlled);
   });
 
 export const readCbrStream = async (archivePath: string, entryPath: string, options: ArchiveOptions = {}): Promise<Readable> =>
   withCbrDeadline(options, async (controlled) => {
-    const version = await detectRarVersion(archivePath);
-    controlled.signal?.throwIfAborted();
-    return version ? readRarStream(archivePath, entryPath, controlled) : read7zStream(archivePath, entryPath, controlled);
+    const { version, lease } = await inspectCbr(archivePath, controlled);
+    if (version) return readRarStream(archivePath, entryPath, controlled, lease);
+    lease.release();
+    return read7zStream(archivePath, entryPath, controlled);
   }, true);
 
 export const readCbrBuffer = async (archivePath: string, entryPath: string, options: ArchiveOptions = {}): Promise<Buffer> =>

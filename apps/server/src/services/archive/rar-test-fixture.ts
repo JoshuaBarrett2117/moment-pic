@@ -10,8 +10,8 @@ const header = (type: number, flags: number, body: Buffer): Buffer => {
   return result;
 };
 
-export const createStoredRarArchive = (entries: Array<{ entryPath: string; content: Buffer }>): Buffer => {
-  const blocks = [Buffer.from("526172211a0700", "hex"), header(0x73, 0, Buffer.alloc(6))];
+export const createStoredRarArchive = (entries: Array<{ entryPath: string; content: Buffer }>, options: { solid?: boolean } = {}): Buffer => {
+  const blocks = [Buffer.from("526172211a0700", "hex"), header(0x73, options.solid ? 8 : 0, Buffer.alloc(6))];
   for (const { entryPath, content } of entries) {
     const name = Buffer.from(entryPath);
     const metadata = Buffer.alloc(25 + name.length);
@@ -24,7 +24,7 @@ export const createStoredRarArchive = (entries: Array<{ entryPath: string; conte
     metadata.writeUInt16LE(name.length, 19);
     metadata.writeUInt32LE(0o100644, 21);
     name.copy(metadata, 25);
-    blocks.push(header(0x74, 0x8000, metadata), content);
+    blocks.push(header(0x74, 0x8000 | (options.solid && blocks.length > 2 ? 0x10 : 0), metadata), content);
   }
   blocks.push(header(0x7b, 0, Buffer.alloc(0)));
   return Buffer.concat(blocks);

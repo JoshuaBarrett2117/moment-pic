@@ -153,7 +153,7 @@ test("listRootImageEntries reads a genuine generated 110-page RAR/CBR without ex
   } finally { await fs.promises.rm(tempDir, { recursive: true, force: true }); }
 });
 
-test("readArchiveEntryBuffer decodes a genuine generated RAR image through bounded 7z", async () => {
+test("readArchiveEntryBuffer decodes a genuine generated RAR image through bounded WASM", async () => {
   const { archivePath, tempDir } = await createRarFixture(1, "rar");
   try {
     const entries = await listRootImageEntries(archivePath);

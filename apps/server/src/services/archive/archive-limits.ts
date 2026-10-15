@@ -12,8 +12,14 @@ export class ArchiveSafetyError extends Error {
   }
 }
 
+export class ArchiveDecodeError extends Error {
+  readonly code = "ARCHIVE_DECODE_ERROR";
+  readonly statusCode = 422;
+  constructor(message: string) { super(message); this.name = "ArchiveDecodeError"; }
+}
+
 export const isArchiveControlError = (error: unknown, signal?: AbortSignal): boolean =>
-  Boolean(signal?.aborted) || error instanceof ArchiveSafetyError || error instanceof ResourceBusyError ||
+  Boolean(signal?.aborted) || error instanceof ArchiveSafetyError || error instanceof ArchiveDecodeError || error instanceof ResourceBusyError ||
   (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"));
 
 export type ArchiveOptions = { signal?: AbortSignal; timeoutMs?: number; maxBytes?: number; maxEntries?: number; budget?: WorkBudget };
@@ -22,7 +28,9 @@ export const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
 export const MAX_LISTING_BYTES = 8 * 1024 * 1024;
 export const MAX_ARCHIVE_ENTRIES = 50_000;
 
-export const acquireArchiveLease = async (options: ArchiveOptions = {}) => {
+export type ArchiveLease = { signal: AbortSignal; release: () => void };
+
+export const acquireArchiveLease = async (options: ArchiveOptions = {}): Promise<ArchiveLease> => {
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(new ArchiveSafetyError("ARCHIVE_TIMEOUT", "归档处理超时")), options.timeoutMs ?? 30_000);
 

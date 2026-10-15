@@ -81,6 +81,32 @@ RAR（RAR4 158 字节、RAR5 143 字节）。修复前由真实 WASM 独立解�
 超时、排队取消/超时/耗尽、延迟魔数读取、共享注入和默认预算、worker 意外退出、
 路径不落盘以及编译后 worker 在空 PATH 下的真实解码。
 
+## 独立复核修正（2026-10-16；Codex）
+
+- 非 solid RAR4/RAR5 的 2048 字节无关附件不再触发 1024 字节预算失败；
+  目标 PNG 为 90 字节，真实写钩子计数也必须恰好为 90，而非仅断言返回内容。
+- 加密附件使用原创 RAR4 AES-128-CBC 密文、真实 salt 与 CRC；独立 WASM
+  使用测试密码提取并比较原文，证明不是只设置 encrypted 标记。无密码定向提取
+  未加密 PNG 可成功；公共 API 同样成功，但拒绝加密目标和 solid 加密前置依赖。
+- solid 归档依据归档级标记显式解码前置输出；测试包含未标 solid 的链首和中间
+  条目、恰好预算与少 1 字节失败。曾尝试按条目边界跳过前置内容，但真实解码器
+  仍在 solid 模式处理这些内容；该失败日志保留，未把隐藏工作排除在计量之外。
+- 共享预算原有按 acquisitions 比较 releases 的修正已在 `26b5534` 中存在，
+  本轮新增空 PATH 分支证明系统 7zz/7z 缺失时仍能使用 bundled fallback。
+  两分支本机实际都是 acquisitions=4、releases=4，最终 active=0、queued=0。
+- 管理/分享路由已包含 ArchiveDecodeError 禁止 fallback，本轮不重复修改生产
+  路由；扩充 TimeoutError 和诊断超限，8 类错误 × 3 种资源 × 2 类路由共
+  48 个组合均只尝试一次。真实 HTTP 断开、取消与损坏 RAR 测试也通过。
+- 夹具说明的 helper 路径改为 `fixtures/../rar-test-fixture.ts`；实际验证文件存在，
+  重新生成的 RAR4/RAR5 与提交夹具逐字节一致，独立 WASM 解码 PNG 一致。
+
+本轮日志单独保存在 `/opt/data/output/momentpic-rar-verification/review-2026-10-16/`，
+不覆盖首次修复证据。`repro-before-real.log` 使用最终测试与真实 AES 夹具，仅将
+临时编译目录的 worker 换成 `ca8504f` 原始源码：3 失败、1 通过、退出 1；
+换回修复后的 worker，完全相同测试在 `repro-after-real.log` 为 4/4、退出 0。
+生产源码未为复现而回滚。早期 `repro-before.log`、中途失败的 `repro-after.log`
+以及 `targeted-passing.log` 均保留，不作为最终全量门禁替代品。
+
 ## 最终门禁结果
 
 验证工具链是官方 Node 22.23.3 / npm 10.9.9，下载包 SHA256 校验通过，保存在
@@ -90,33 +116,40 @@ RAR（RAR4 158 字节、RAR5 143 字节）。修复前由真实 WASM 独立解�
 
 所有最终命令退出 0，测试无跳过、取消或 TODO。基线 29 个服务端测试文件增加至
 实际递归发现的 32 个；前端仍为 17 个。实际断言计数以本次输出为准，不沿用旧报告。
+下表已更新为独立复核修正后的完整复跑，日志均位于上述 `review-2026-10-16/`
+子目录；工具链下载校验和初始环境日志仍保留在父证据目录。
 
 | 命令 | 结果 | 日志 |
 | --- | --- | --- |
-| `node --import ./scripts/test-isolation.mjs --import tsx --test --test-concurrency=1 <递归发现的归档与清理文件>` | 11 文件，48/48 | `archive-cleanup-final.log` |
+| 夹具 helper 路径、逐字节重新生成与独立 WASM 解码 | 通过 | `fixture-helper.log` |
+| `node --import ./scripts/test-isolation.mjs --import tsx --test --test-concurrency=1 <递归发现的归档与清理文件>` | 11 文件，53/53 | `archive-cleanup-final.log` |
 | `node --import ./scripts/test-isolation.mjs --import tsx --test --test-concurrency=1 <递归发现的 scan/share/auth 文件>` | 7 文件，35/35 | `scan-share-auth-final.log` |
 | `node node_modules/typescript/bin/tsc -p apps/server/tsconfig.json --noEmit` | 通过 | `server-tsc-final.log` |
 | `node node_modules/typescript/bin/tsc -p apps/web/tsconfig.json --noEmit` | 通过 | `web-tsc-final.log` |
 | `npm run test:discovery` | 2/2 | `discovery-final.log` |
-| `npm run test:server` | 32 文件，130/130 | `server-tests-final.log` |
+| `npm run test:server` | 32 文件，135/135 | `server-tests-final.log` |
 | `npm run test:web` | 17 文件，82/82 | `web-tests-final.log` |
+| `npm run lint:web` | 通过 | `web-lint-final.log` |
 | `npm run build:server` | 通过 | `server-build-final.log` |
 | `npm run build:web` | 通过 | `web-build-final.log` |
-| `git diff --check` | 通过 | `diff-check-final.log` |
+| `git diff --check` | 通过 | `diff-check-final.log` / `diff-check-postdocs.log` |
 | `npm audit --omit=dev --json` | 0 漏洞 | `audit-production.json` / `audit-production.log` |
 
 两组定向测试的日志首行保存完整展开的真实命令，没有使用 shell 的非递归 glob。
 递归发现与运行脚本为现有 `scripts/discover-tests.mjs` / `scripts/test-workspace.mjs`。
 生产 JS 测试也包含在完整服务端与归档测试中，明确记录空 PATH 下真实 RAR4/RAR5
 PNG 逐字节一致，以及 ARCHIVE_STDERR_LIMIT / ARCHIVE_DECODE_ERROR 的回收结果。
-`final-summary.log` 汇总命令退出码，失败检查点和中途失败日志不覆盖、不伪装为通过。
+`final-summary.log` 汇总命令退出码，`verification-summary.json` 保留实际测试计数、
+预算计数、审计结果和本地提交。失败检查点和中途失败日志不覆盖、不伪装为通过。
 
 ## 本地提交与影响文件
 
 - `d00b8aab299aea6a8cfdfaa84d21afa6d22f36ba`：原创 fixture 与预期失败回归检查点。
 - `ca8504f86cb1b683836b5bc2a1768977919ef17f`：生产依赖、真实 WASM 写钩子与 credit worker。
 - `26b5534ebf405efc443cb0c355b211f309b1ad13`：待定 I/O 许可转交、禁止损坏重试及完整资源回归。
-- 最后一笔文档提交记录本文件、README 和安全说明；SHA 见证据目录的 `commits-final.log`。
+- `94f41a3`：首次修复文档、README 和安全说明。
+- `4490bb7`：独立复核修正、真实加密夹具及空 PATH/路由/生产 JS 回归。
+- 最后一笔文档提交更新本轮复跑计数；SHA 见本轮证据目录的 `commits-final.log`。
 
 运行代码仅影响 `apps/server/package.json`、根锁文件以及 archive 模块内的
 `archive-limits.ts`、`cbr-reader.ts`、`rar-reader.ts`、`rar-worker.ts`、`rar-protocol.ts`。

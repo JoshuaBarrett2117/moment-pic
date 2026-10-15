@@ -42,7 +42,9 @@
 
 ## 逐公告受影响范围与首个修复版本
 
-公告源为 GitHub Advisory Database 的 reviewed 公告；ID 链接可查看原文、触发前置条件和后续修订。一个包可能存在多个版本分支，表中保留所有已记录分支。
+公告源为已保存的 GitHub Advisory Database reviewed 公告；ID 链接可查看原文、触发前置条件和后续修订。一个包可能存在多个版本分支，表中保留所有已记录分支。
+
+2026-10-16 复核：下表覆盖基线全部 87 个公告 ID，另保留 7 条已撤回（withdrawn）记录供追溯，不计为额外未修复漏洞。6 条 axios 记录因重复撤回，应以各行对应的有效公告及其修复范围为准，不能把空 first_patched_version 解读为“无已知修复”；1 条 esbuild 记录因错误识别受影响包而撤回，实际涉及 Deno 模块，不是本项目 npm esbuild 的有效漏洞。撤回状态与日期取自已保存 JSON 的 withdrawn_at，未将撤回误写为版本升级修复。
 
 | 依赖 | 公告 | 受影响范围 → 首个修复版本 |
 | --- | --- | --- |
@@ -59,12 +61,12 @@
 | axios | [GHSA-mghh-pgcx-3jjj](https://github.com/advisories/GHSA-mghh-pgcx-3jjj) | >= 1.15.0, < 1.20.0 → 1.20.0 |
 | axios | [GHSA-3pq3-5fj3-cg6v](https://github.com/advisories/GHSA-3pq3-5fj3-cg6v) | >= 1.13.0, < 1.20.0 → 1.20.0 |
 | axios | [GHSA-542g-h47m-68v8](https://github.com/advisories/GHSA-542g-h47m-68v8) | >= 1.13.0, < 1.20.0 → 1.20.0 |
-| axios | [GHSA-9wx3-p993-35vp](https://github.com/advisories/GHSA-9wx3-p993-35vp) | >= 1.0.0, < 1.18.0 → 无已知修复 |
-| axios | [GHSA-6hqm-hm2v-3p2p](https://github.com/advisories/GHSA-6hqm-hm2v-3p2p) | >= 1.0.0, < 1.18.0 → 无已知修复 |
-| axios | [GHSA-fqj3-h9pc-443h](https://github.com/advisories/GHSA-fqj3-h9pc-443h) | >= 1.13.0, < 1.18.0 → 无已知修复 |
-| axios | [GHSA-39j5-w47m-2gmv](https://github.com/advisories/GHSA-39j5-w47m-2gmv) | >= 1.7.0, < 1.18.0 → 无已知修复 |
-| axios | [GHSA-4ww2-rjh2-xpv9](https://github.com/advisories/GHSA-4ww2-rjh2-xpv9) | >= 1.0.0, < 1.18.0 → 无已知修复 |
-| axios | [GHSA-fq2j-3j99-rx65](https://github.com/advisories/GHSA-fq2j-3j99-rx65) | >= 1.0.0, < 1.18.0 → 无已知修复 |
+| axios | [GHSA-9wx3-p993-35vp](https://github.com/advisories/GHSA-9wx3-p993-35vp) | 已撤回（2026-09-01）：重复 GHSA-7q8q-rj6j-mhjq；修复见该有效公告 |
+| axios | [GHSA-6hqm-hm2v-3p2p](https://github.com/advisories/GHSA-6hqm-hm2v-3p2p) | 已撤回（2026-09-01）：重复 GHSA-f4gw-2p7v-4548；修复见该有效公告 |
+| axios | [GHSA-fqj3-h9pc-443h](https://github.com/advisories/GHSA-fqj3-h9pc-443h) | 已撤回（2026-09-01）：重复 GHSA-mwf2-3pr3-8698；修复见该有效公告 |
+| axios | [GHSA-39j5-w47m-2gmv](https://github.com/advisories/GHSA-39j5-w47m-2gmv) | 已撤回（2026-09-01）：重复 GHSA-jqh4-m9w3-8hp9；修复见该有效公告 |
+| axios | [GHSA-4ww2-rjh2-xpv9](https://github.com/advisories/GHSA-4ww2-rjh2-xpv9) | 已撤回（2026-08-31）：重复 GHSA-pmv8-rq9r-6j72；修复见该有效公告 |
+| axios | [GHSA-fq2j-3j99-rx65](https://github.com/advisories/GHSA-fq2j-3j99-rx65) | 已撤回（2026-09-01）：重复 GHSA-42h9-826w-cgv3；修复见该有效公告 |
 | axios | [GHSA-7q8q-rj6j-mhjq](https://github.com/advisories/GHSA-7q8q-rj6j-mhjq) | >= 0.8.0, < 0.33.0 → 0.33.0；>= 1.0.0, < 1.18.0 → 1.18.0 |
 | axios | [GHSA-mwf2-3pr3-8698](https://github.com/advisories/GHSA-mwf2-3pr3-8698) | >= 1.13.0, < 1.18.0 → 1.18.0 |
 | axios | [GHSA-jqh4-m9w3-8hp9](https://github.com/advisories/GHSA-jqh4-m9w3-8hp9) | >= 1.7.0, < 1.18.0 → 1.18.0 |
@@ -103,7 +105,7 @@
 | brace-expansion | [GHSA-jxxr-4gwj-5jf2](https://github.com/advisories/GHSA-jxxr-4gwj-5jf2) | >= 5.0.0, < 5.0.6 → 5.0.6 |
 | browserslist | [GHSA-c83g-rgw3-j3cx](https://github.com/advisories/GHSA-c83g-rgw3-j3cx) | <= 4.28.6 → 4.28.7 |
 | browserslist | [GHSA-73wf-gq98-2v4g](https://github.com/advisories/GHSA-73wf-gq98-2v4g) | <= 4.28.6 → 4.28.7 |
-| esbuild | [GHSA-gv7w-rqvm-qjhr](https://github.com/advisories/GHSA-gv7w-rqvm-qjhr) | >= 0.17.0, < 0.28.1 → 0.28.1 |
+| esbuild | [GHSA-gv7w-rqvm-qjhr](https://github.com/advisories/GHSA-gv7w-rqvm-qjhr) | 已撤回（2026-06-17）：受影响包识别错误，实际为 Deno 模块；不适用于本项目 npm esbuild |
 | esbuild | [GHSA-g7r4-m6w7-qqqr](https://github.com/advisories/GHSA-g7r4-m6w7-qqqr) | >= 0.27.3, < 0.28.1 → 0.28.1 |
 | fast-uri | [GHSA-hrr3-gc8f-f4qj](https://github.com/advisories/GHSA-hrr3-gc8f-f4qj) | < 2.4.7 → 2.4.7；>= 3.0.0, < 3.1.8 → 3.1.8；>= 4.0.0, < 4.1.5 → 4.1.5 |
 | fast-uri | [GHSA-qw65-cvwx-89v3](https://github.com/advisories/GHSA-qw65-cvwx-89v3) | < 2.4.6 → 2.4.6；>= 3.0.0, < 3.1.7 → 3.1.7；>= 4.0.0, < 4.1.4 → 4.1.4 |
@@ -143,6 +145,6 @@
 
 ## 验证与限制
 
-使用已验证的 Node 22.23.3 + npm 10 工具链执行 npm ci（含原生模块，不跳过脚本），并实际调用 Sharp 和临时内存 SQLite。新证据统一保存在 `/opt/data/output/momentpic-final-verification/`；`dependency-npm-ci.log`、`dependency-native-smoke.log`、`dependency-audit.log` 分别记录命令与退出码。最终还必须复跑两工作区类型检查、递归全部测试、构建及归档/图片/路由回归；audit 为零不替代回归。
+使用已验证的 Node 22.23.3 + npm 10 工具链执行 npm ci（含原生模块，不跳过脚本），并实际调用 Sharp 和临时内存 SQLite。新证据统一保存在 `/opt/data/output/momentpic-final-verification/`；`final-npm-ci.log`、`dependency-native-smoke.log` 记录安装及原生模块冒烟，均退出 0。最终 `final-audit-verified.json` / `final-audit-verified.log` 为 0 漏洞、退出 0；两端 tsc --noEmit、递归全部测试（服务端 109/109、前端 50/50，零跳过/取消）、构建及归档/图片/路由回归均通过，完整证据见 safety-verification.md。audit 为零不替代回归，亦非未来安全保证。
 
 本轮不构建或运行 Docker、不访问 NAS、不读取真实数据库。部署产物及系统原生库须由父任务另行验证。依赖升级不清理历史数据库的分享明文或备份，历史数据仍待 DBA 显式处置。

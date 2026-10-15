@@ -63,3 +63,24 @@ ZIP 在 open 回调前就监听取消：调用方立即收到取消/超时，未
 相册、图片、最近访问、目录、图库根、系统配置、智能相册列表/详情使用可取消的最新请求代次。旧 success/error/finally 不改变当前数据、错误或 loading；卸载取消请求。图库控制器在查询/页面切换时取消旧请求，异步刷新在 await 后再次检查查询代次；智能相册详情和成员的两个 await 都有检查。
 
 `latest-and-scan-web.log` 前端 49/49、零跳过取消，包含 7 个实际 Hook 的乱序/取消测试、智能相册两阶段请求和实际图库控制器。测试使用 React renderer，不仅测试辅助函数。测试工具的 renderer 已被 React 标记 deprecated，当前测试可用；后续可单独评估替换工具，不在本次安全修复引入并行测试框架。
+
+## 最终交付复核（2026-10-16；Codex）
+
+以下为源码提交 0a4cbc2 后的完整复跑；最终提交仅补充本节与公告撤回标注，不改变可执行代码。日志自身记录命令、Node 版本和退出码；全部证据位于 `/opt/data/output/momentpic-final-verification/`。
+
+| 验证 | 最终日志 | 结果 |
+| --- | --- | --- |
+| 原生模块安装 | final-npm-ci.log | npm ci，未禁用安装脚本，退出 0 |
+| Sharp / SQLite 冒烟 | dependency-native-smoke.log | 实际图片编码/元数据及内存 SQLite 查询，退出 0 |
+| 递归 ts/tsx 发现 | final-discovery-verified.log | 2/2，零失败/取消/跳过，退出 0 |
+| 服务端类型检查 | final-server-tsc-verified.log | tsc --noEmit，退出 0 |
+| 前端类型检查 | final-web-tsc-verified.log | tsc --noEmit，退出 0 |
+| 全部门禁 | final-quality-gate-verified.log | 29 个服务端测试文件 109/109、17 个前端测试文件 50/50，均零失败/取消/跳过；前端 lint、服务端构建、前端构建通过，退出 0 |
+| 归档四类清理和路由 | archive-four-path.log | 24/24，零失败/取消/跳过，退出 0 |
+| 实际浏览器 | browser-final-verified.log / browser-results.json | WS 和轮询两模式均看到 Settings 脱敏失败与健康相册刷新，页面脚本错误为零，退出 0 |
+| 最终依赖审计 | final-audit-verified.log / final-audit-verified.json | 所有严重级别合计 0，退出 0 |
+| 差异格式检查 | final-diff-check-verified.log | git diff --check，退出 0 |
+
+运行时为 Node 22.23.3 / npm 10，本机默认 Node 26 未用于验收。RAR 使用 TMPDIR 内完整官方 7zz 26.04；测试只创建临时隔离数据库/缓存/图库。历史失败日志保留用于复现，不能替代上表最终成功结果。
+
+未执行 push、Docker 构建/运行/推送、NAS 访问、真实数据库连接/清理或远程 GitHub Actions。Rust 未修改，未运行 cargo test。原始 77 项 WIP 保留在本地提交，未重置或丢弃。交付最后一次提交带 `[skip ci]`，避免父任务仅推源码时触发本次镜像流水线；后续显式构建仍由独立质量任务约束。历史明文及旧备份留待 DBA 处置，部署 RAR 解码器仍须单独验收，不能用本地通过替代部署验收。

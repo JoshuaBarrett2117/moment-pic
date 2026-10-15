@@ -19,3 +19,11 @@
 密码派生使用共享并发 2、排队 16、排队等待最多 5 秒的预算。客户端取消会立即停止等待，排队取消不启动派生；已经启动的原生 scrypt 必须等真实 callback 完成才释放槽位。认证等待之后重新读取分享的存在性、身份、密码哈希和有效期，撤销、重置或过期均不得签发会话。
 
 `share-race-red.log` 为修复前竞态证据；`share-followup-green.log` 10/10 通过，覆盖原生 callback 取消记账、队列超时、撤销/重置/过期竞态、旧明文不回传、独立 IP/分享限流及真实 scrypt 响应性；`share-typecheck.log` 通过。
+
+## WebSocket、Origin 与启动配置
+
+HTTP Upgrade 必须具有有效会话与严格 Origin（协议、主机和端口均匹配）。缺失/null/恶意来源、畸形 Cookie、过期会话及异常路径均被拒绝；拒绝响应发送后主动销毁套接字，另有 250ms 清理兜底，不依赖对端主动结束半开连接。HTTP CORS 与 WS 采用同一允许来源策略，并设置 Vary: Origin，不信任任意 X-Forwarded-Host。
+
+真实目录监听器广播图库相对路径；会话过期主动关闭，连接与发送预算受限。前端未登录不连接、退出不重连，网络故障可重连，过期会话通知登录。启动要求显式强管理员密码；HTTPS Cookie 只信任配置的反向代理。升级配置见 README 与 .env.example，不再保留默认弱密码。
+
+`ws-close-red.log` 复现旧实现遗留半开连接；`ws-followup-green-retry.log` 10/10 通过（真实 TCP Upgrade、实际 watcher 文件事件、实际 CORS/认证路由）；`ws-typecheck.log` 通过。watcher 测试在临时 SQLite 中将默认 60 秒轮询改为 50ms，未改变生产配置或访问外部图库。

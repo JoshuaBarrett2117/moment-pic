@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import http from "node:http";
+import net from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import Fastify from "fastify";
@@ -28,8 +29,25 @@ const fixture = async (limits = { global: 3, perClient: 2, bufferedBytes: 4096 }
     request.on("error", reject);
     request.end();
   });
-  return { app, service, cookie, connect, upgradeStatus };
+  return { app, service, cookie, connect, upgradeStatus, address };
 };
+
+test("拒绝真实升级后，不配合关闭的半开客户端也在有界时间内回收", async () => {
+  const data = await fixture();
+  const address = new URL(data.address);
+  const socket = net.createConnection({ host: address.hostname, port: Number(address.port), allowHalfOpen: true });
+  socket.on("error", () => {});
+  try {
+    await once(socket, "connect");
+    const response = once(socket, "data");
+    socket.write(`GET /ws HTTP/1.1\r\nHost: ${address.host}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${Buffer.alloc(16).toString("base64")}\r\nOrigin: https://photos.example\r\n\r\n`);
+    assert.match(String((await response)[0]), /401/);
+    await delay(400);
+    const count = await new Promise<number>((resolve, reject) => data.app.server.getConnections((error, connections) => error ? reject(error) : resolve(connections)));
+    assert.equal(count, 0);
+    assert.equal(data.service.getClientCount(), 0);
+  } finally { socket.destroy(); await data.app.close(); }
+});
 
 test("真实 HTTP Upgrade 拒绝匿名、恶意 Origin、异常 cookie、过期 token 和异常路径", async () => {
   const data = await fixture();
@@ -38,6 +56,9 @@ test("真实 HTTP Upgrade 拒绝匿名、恶意 Origin、异常 cookie、过期 
     assert.equal(await data.upgradeStatus({ origin: "https://evil.example", cookie: data.cookie() }), 403);
     assert.equal(await data.upgradeStatus({ origin: "null", cookie: data.cookie() }), 403);
     assert.equal(await data.upgradeStatus({ cookie: data.cookie() }), 403);
+    for (const origin of ["http://photos.example", "https://photos.example:444", "https://photos.example/", "https://user@photos.example", "https://photos.example.evil", "https://forwarded.example"]) {
+      assert.equal(await data.upgradeStatus({ origin, cookie: data.cookie(), "x-forwarded-host": "forwarded.example", "x-forwarded-proto": "https" }), 403);
+    }
     assert.equal(await data.upgradeStatus({ origin: "https://photos.example", cookie: `bad=%ZZ; ${data.cookie()}` }), 401);
     assert.equal(await data.upgradeStatus({ origin: "https://photos.example", cookie: data.cookie(-1) }), 401);
     assert.equal(await data.upgradeStatus({ origin: "https://photos.example", cookie: data.cookie() }, "/ws?bad=1"), 400);

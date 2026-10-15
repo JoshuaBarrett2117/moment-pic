@@ -55,6 +55,7 @@ export const buildApp = () => {
 
   app.addHook("onRequest", async (request, reply) => {
     const origin = request.headers.origin;
+    if (origin) reply.header("Vary", "Origin");
     if (origin && isAllowedOrigin(request.raw, app.config.wsAllowedOrigins)) {
       reply.header("Access-Control-Allow-Origin", origin);
       reply.header("Access-Control-Allow-Credentials", "true");

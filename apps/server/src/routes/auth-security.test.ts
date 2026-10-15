@@ -37,6 +37,22 @@ test("Cookie 异常编码与重复 cookie 不抛异常，过期及额外 token �
   assert.equal(check(`moment_pic_auth=${createAuthToken(password, Date.now() - 1)}`), false);
 });
 
+test("实际 HTTP CORS 只允许同源或显式来源，不信任伪造转发 Host", async () => {
+  const previous = env.wsAllowedOrigins;
+  env.wsAllowedOrigins = ["https://photos.example"];
+  const app = buildApp();
+  try {
+    for (const origin of ["https://photos.example", "http://localhost:80", "https://evil.example", "null", "https://photos.example:444", "https://photos.example/"]) {
+      const response = await app.inject({ url: "/api/v1/health", headers: { host: "gallery.local", origin, "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" } });
+      assert.equal(response.headers["access-control-allow-origin"], origin === "https://photos.example" ? origin : undefined);
+      assert.equal(response.headers["access-control-allow-credentials"], origin === "https://photos.example" ? "true" : undefined);
+      assert.equal(response.headers.vary, "Origin");
+    }
+    const sameOrigin = await app.inject({ url: "/api/v1/health", headers: { host: "gallery.local:3001", origin: "http://gallery.local:3001" } });
+    assert.equal(sameOrigin.headers["access-control-allow-origin"], "http://gallery.local:3001");
+  } finally { await app.close(); env.wsAllowedOrigins = previous; }
+});
+
 test("登录按真实 IP 限流，伪造转发 IP 不可绕过；合法密码成功且有长度上限", async () => {
   const app = await authApp();
   try {

@@ -27,7 +27,13 @@ export class WebSocketService {
   initialize(fastify: FastifyInstance): void {
     this.server = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false });
     const upgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
-      const deny = (status: number) => socket.end(`HTTP/1.1 ${status} Rejected\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+      socket.once("error", () => socket.destroy());
+      const deny = (status: number) => {
+        const deadline = setTimeout(() => socket.destroy(), 250);
+        deadline.unref();
+        socket.once("close", () => clearTimeout(deadline));
+        socket.end(`HTTP/1.1 ${status} Rejected\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`, () => socket.destroy());
+      };
       if (request.url !== "/ws" || request.method !== "GET") { deny(400); return; }
       if (!isAuthenticated(request, fastify.config.adminPassword)) { deny(401); return; }
       if (!isAllowedOrigin(request, fastify.config.wsAllowedOrigins)) { deny(403); return; }

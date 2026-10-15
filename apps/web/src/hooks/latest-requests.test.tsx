@@ -21,6 +21,38 @@ const cases = [
   { name: 'useSmartAlbums', hook: useSmartAlbums, fetch: 'fetchSmartAlbums', state: 'smartAlbums', payload: (id: string) => ({ items: [{ id }] }) },
 ];
 
+test('useSmartAlbums 详情的两阶段请求都遵守最新代次，旧 members/error 不覆盖且卸载取消', async (context) => {
+  const calls: Array<ReturnType<typeof deferred> & { url: string; signal?: AbortSignal }> = [];
+  context.mock.method(api, 'get', (url: string, _params?: unknown, options?: { signal?: AbortSignal }) => {
+    const pending = { ...deferred(), url, signal: options?.signal };
+    calls.push(pending);
+    return pending.promise;
+  });
+  const hook = await renderHook(() => useSmartAlbums());
+  try {
+    let older!: Promise<unknown>;
+    let newer!: Promise<unknown>;
+    await act(async () => { older = hook.current.fetchSmartAlbumDetail('old'); });
+    await act(async () => calls[0].resolve({ id: 'old' }));
+    assert.equal(calls[1].url, '/smart-albums/old/albums');
+    await act(async () => { newer = hook.current.fetchSmartAlbumDetail('new'); });
+    assert.equal(calls[1].signal?.aborted, true);
+    await act(async () => calls[2].resolve({ id: 'new' }));
+    await act(async () => { calls[3].resolve({ items: [{ id: 'new-member' }] }); await newer; });
+    await act(async () => { calls[1].reject(new Error('old members failure')); await older; });
+    assert.equal(hook.current.smartAlbumDetail?.id, 'new');
+    assert.equal(hook.current.smartAlbumMembers[0].id, 'new-member');
+    assert.equal(hook.current.error, null);
+    assert.equal(hook.current.isLoading, false);
+    let pending!: Promise<unknown>;
+    await act(async () => { pending = hook.current.fetchSmartAlbumDetail('unmount'); });
+    await hook.unmount();
+    assert.equal(calls[4].signal?.aborted, true);
+    await act(async () => { calls[4].resolve({ id: 'unmount' }); await pending; });
+    assert.equal(calls.length, 5, '卸载后不可发起 members 请求');
+  } finally { await hook.unmount(); }
+});
+
 for (const entry of cases) {
   test(`${entry.name} 实际 Hook：旧响应/错误/finally 不覆盖新状态，取消无错误且卸载终止`, async (context) => {
     const calls: Array<ReturnType<typeof deferred> & { signal?: AbortSignal }> = [];

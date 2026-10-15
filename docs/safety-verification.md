@@ -41,3 +41,9 @@ ZIP 在 open 回调前就监听取消：调用方立即收到取消/超时，未
 原有 3 个跳过项依赖外部图库中的特定 RAR/CBR。现已替换为临时目录构造的真实 RAR4 stored 格式（含头部与数据 CRC），覆盖 110 页、81 页及实际 JPEG 解压；不再读取环境提供的外部媒体路径。`archive-real-rar.log` 14/14、零跳过，额外覆盖真实 RAR 的条目/字节上限与 PSD 缓冲取消。stored fixture 验证 RAR 容器与完整 7z 读取路径，不声称覆盖所有 RAR 压缩算法或密码/多卷变体。
 
 开发与 CI 需安装完整 7z/7zz（Ubuntu/Debian 的 `7zip` 包），精简 `7zip-bin` 不是完整 RAR 解码器。CI 质量门禁已声明此依赖。本机仅在 TMPDIR 下载并使用官方独立 7zz 26.04，下载来源和执行结果见 `sevenzip-download-index.log`、`sevenzip-download.log`，未修改系统安装或运行任何容器。
+
+## 最新请求与前端生命周期
+
+相册、图片、最近访问、目录、图库根、系统配置、智能相册列表/详情使用可取消的最新请求代次。旧 success/error/finally 不改变当前数据、错误或 loading；卸载取消请求。图库控制器在查询/页面切换时取消旧请求，异步刷新在 await 后再次检查查询代次；智能相册详情和成员的两个 await 都有检查。
+
+`latest-and-scan-web.log` 前端 49/49、零跳过取消，包含 7 个实际 Hook 的乱序/取消测试、智能相册两阶段请求和实际图库控制器。测试使用 React renderer，不仅测试辅助函数。测试工具的 renderer 已被 React 标记 deprecated，当前测试可用；后续可单独评估替换工具，不在本次安全修复引入并行测试框架。

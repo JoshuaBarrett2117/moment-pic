@@ -7,6 +7,30 @@ import { authRoutes } from "./auth.js";
 import { createAuthToken, isAuthenticated, buildAuthCookie } from "../lib/auth.js";
 
 const password = "Explicit-Test-Password-2026!";
+
+test("真实启动入口在缺失/弱配置时退出，不创建数据库也不读取本地凭据文件", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const fs = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "startup-security-"));
+  const emptyConfig = path.join(directory, "empty-test-config");
+  await fs.writeFile(emptyConfig, "");
+  try {
+    for (const adminPassword of [undefined, "short-test-password"]) {
+      const childEnv: NodeJS.ProcessEnv = { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, DOTENV_CONFIG_PATH: emptyConfig, SQLITE_PATH: path.join(directory, "must-not-create.sqlite"), CACHE_DIR: path.join(directory, "cache"), LIBRARY_ROOTS: path.join(directory, "library"), PUBLIC_DIR: path.join(directory, "public"), HOST: "127.0.0.1", PORT: "0" };
+      if (adminPassword !== undefined) childEnv.ADMIN_PASSWORD = adminPassword;
+      const child = spawnSync(process.execPath, ["--import", "tsx", "apps/server/src/index.ts"], { cwd: fileURLToPath(new URL("../../../../", import.meta.url)), env: childEnv, encoding: "utf8", timeout: 5000 });
+      assert.equal(child.status, 1);
+      assert.equal(child.signal, null);
+      assert.match(child.stderr, /ADMIN_PASSWORD/);
+      if (adminPassword) assert.ok(!child.stderr.includes(adminPassword));
+      await assert.rejects(fs.stat(childEnv.SQLITE_PATH!), { code: "ENOENT" });
+    }
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});
+
 const authApp = async (trustProxy: false | string[] = false, adminPassword = password) => {
   const app = Fastify({ trustProxy });
   app.decorate("config", { ...env, adminPassword });

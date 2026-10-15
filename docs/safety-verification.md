@@ -28,6 +28,8 @@ HTTP Upgrade 必须具有有效会话与严格 Origin（协议、主机和端口
 
 `ws-close-red.log` 复现旧实现遗留半开连接；`ws-followup-green-retry.log` 10/10 通过（真实 TCP Upgrade、实际 watcher 文件事件、实际 CORS/认证路由）；`ws-typecheck.log` 通过。watcher 测试在临时 SQLite 中将默认 60 秒轮询改为 50ms，未改变生产配置或访问外部图库。
 
+`startup-entry.log` 6/6 通过，额外通过真实 Node 子进程执行 index.ts 验证缺失/弱配置退出、无数据库创建、密码不回显。子进程只接收必要测试环境变量，dotenv 显式指向临时空文件，不读取仓库 .env；代理 HTTPS Cookie、伪造转发头、登录限流及 CORS 回归同时通过。
+
 ## 归档取消与资源所有权
 
 ZIP/7z/RAR/CBR 读取共用并发 4、排队 32 的预算，默认墙钟 30 秒、单条目解压 256MiB、列表输出 8MiB、条目数 50,000。子进程输出背压传递给 stdout；错误输出限制 64KiB。正常结束、断开、进程异常和限额都走清理路径；子进程必须真实 close 后才释放槽位，不把 stdout end 当作进程退出。

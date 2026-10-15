@@ -10,7 +10,7 @@
 - 全量扫描总是校验文件集合和文件元数据；目录 mtime 不能代表图片未修改。任何枚举、stat、元数据或归档失败都会保留对应旧索引，且该根目录本轮不执行删除差异。扫描任务和界面显示脱敏失败摘要；目录重新可读后再完整扫描才确认删除。
 - 归档解压使用管道背压与请求取消，默认墙钟上限 30 秒、解压条目上限 256 MiB、列表输出 8 MiB、条目数 50,000、错误输出 64 KiB。所有归档读取/流/列表共用 4 个活动、32 个排队预算。超过限制明确失败，不返回截断的成功文件。RAR/CBR 也通过可终止子进程提取，真实 RAR 需要支持 RAR 的系统 `7zz`/`7z`；内置 `7za` 不保证支持专有 RAR 编码。
 - `npm test` 递归发现两工作区所有 `.test.ts`/`.test.tsx`，测试自动创建临时 SQLite/缓存，不读取 `.env` 或真实图库。CI 的独立质量 job 通过后才能发布任意架构镜像。
-- 依赖公告逐项前置条件与修复版本见 `docs/security-advisories-2026-10-15.md`；本次只做本地验证，不推送、不部署。
+- 依赖公告逐项前置条件与修复版本见 `docs/dependency-security-2026-10-15.md`；行为、验收证据及限制见 `docs/safety-verification.md`。本次只做本地验证，不推送、不部署。
 
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green?style=flat&logo=node.js)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?style=flat&logo=react)](https://react.dev/)
@@ -38,6 +38,7 @@
 ### 环境依赖
 
 - Node.js 22
+- 完整 `7z`/`7zz`（Ubuntu/Debian 安装 `7zip`），用于 RAR/CBR 与真实归档回归；不能只依赖精简 `7za`。
 - pnpm（推荐）或 npm
 
 ### 启动指令

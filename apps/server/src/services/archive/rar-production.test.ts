@@ -21,6 +21,7 @@ test("编译后的生产 JS worker 仅用 Node 与生产依赖解码真实 RAR4/
       import fs from 'node:fs/promises';
       import { WorkBudget } from ${JSON.stringify(pathToFileURL(path.join(directory, "lib/work-budget.js")).href)};
       import { listRootImageEntries, readArchiveEntryBuffer, openArchiveEntryBody } from ${JSON.stringify(api)};
+      import { createStoredRarArchive, createStoredRar5Archive } from ${JSON.stringify(pathToFileURL(path.join(directory, "services/archive/rar-test-fixture.js")).href)};
       const directory = ${JSON.stringify(fixtureDirectory)};
       const png = await fs.readFile(directory + '/pixel.png');
       for (const version of [4, 5]) {
@@ -33,7 +34,25 @@ test("编译后的生产 JS worker 仅用 Node 与生产依赖解码真实 RAR4/
         else for await (const chunk of body) chunks.push(chunk);
         assert.deepEqual(Buffer.concat(chunks), png);
         console.log('production JS RAR' + version + ': PNG exact match; PATH empty; no TS loader');
+        const mixed = ${JSON.stringify(path.join(directory, "attachments.cbr"))};
+        const createArchive = version === 4 ? createStoredRarArchive : createStoredRar5Archive;
+        await fs.writeFile(mixed, createArchive([
+          { entryPath: 'attachment.bin', content: Buffer.alloc(2048, 65) },
+          { entryPath: 'pixel.png', content: png }
+        ]));
+        const budget = new WorkBudget(1, 0);
+        assert.deepEqual(await readArchiveEntryBuffer(mixed, 'pixel.png', { budget, maxBytes: 1024 }), png);
+        assert.deepEqual(budget.usage, { active: 0, queued: 0 });
+        console.log('production JS RAR' + version + ': unrelated 2048-byte attachment skipped; 1024-byte budget; permit recovered');
       }
+      const encrypted = ${JSON.stringify(path.join(directory, "encrypted.cbr"))};
+      await fs.writeFile(encrypted, createStoredRarArchive([
+        { entryPath: 'secret.bin', content: Buffer.alloc(2048, 65), encrypted: true },
+        { entryPath: 'pixel.png', content: png }
+      ]));
+      assert.deepEqual(await readArchiveEntryBuffer(encrypted, 'pixel.png', { maxBytes: 1024 }), png);
+      await assert.rejects(readArchiveEntryBuffer(encrypted, 'secret.bin'), { code: 'ARCHIVE_DECODE_ERROR' });
+      console.log('production JS RAR4: unrelated AES-encrypted attachment skipped; encrypted target rejected');
       const workerPath = ${JSON.stringify(workerPath)};
       const original = await fs.readFile(workerPath, 'utf8');
       for (const [code, injection] of [

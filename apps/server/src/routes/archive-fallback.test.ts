@@ -10,7 +10,7 @@ import { deleteLibraryRootDb, upsertLibraryRootDb } from "../repositories/librar
 import { authenticateAlbumShare, createAlbumShare } from "../services/album-service.js";
 import { archiveBudget, ArchiveDecodeError, ArchiveSafetyError } from "../services/archive/archive-limits.js";
 
-test("真实管理/分享媒体路由遇到预算、取消、超时或上限时不 fallback 重启提取", async (context) => {
+test("真实管理/分享媒体路由遇到预算、取消、超时、上限或解码错误时不 fallback 重启提取", async (context) => {
   const id = randomUUID();
   const timestamp = new Date().toISOString();
   const archive = `${env.libraryRootPath}/isolated-${id}.7z`;
@@ -20,7 +20,7 @@ test("真实管理/分享媒体路由遇到预算、取消、超时或上限时�
   try {
     const share = (await createAlbumShare(id, { password: "route-password", expiresAt: new Date(Date.now() + 60_000).toISOString(), origin: "https://photos.example" }))!;
     const auth = await authenticateAlbumShare(share.token, share.password, id);
-    for (const error of [new ResourceBusyError(), new DOMException("请求取消", "AbortError"), new ArchiveSafetyError("ARCHIVE_TIMEOUT", "归档处理超时"), new ArchiveSafetyError("ARCHIVE_BYTE_LIMIT", "归档解压字节数超过上限"), new ArchiveSafetyError("ARCHIVE_ENTRY_LIMIT", "归档列表超过上限"), new ArchiveDecodeError("RAR 数据损坏")]) {
+    for (const error of [new ResourceBusyError(), new DOMException("请求取消", "AbortError"), new DOMException("请求超时", "TimeoutError"), new ArchiveSafetyError("ARCHIVE_TIMEOUT", "归档处理超时"), new ArchiveSafetyError("ARCHIVE_BYTE_LIMIT", "归档解压字节数超过上限"), new ArchiveSafetyError("ARCHIVE_ENTRY_LIMIT", "归档列表超过上限"), new ArchiveSafetyError("ARCHIVE_STDERR_LIMIT", "归档诊断超过上限"), new ArchiveDecodeError("RAR 数据损坏")]) {
       let calls = 0;
       context.mock.method(archiveBudget, "acquire", async () => { calls += 1; throw error; });
       for (const variant of ["thumbnail", "preview", "original"]) {

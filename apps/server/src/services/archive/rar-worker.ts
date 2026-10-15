@@ -44,8 +44,14 @@ class StreamingRarExtractor extends Extractor {
     this.entryCount += 1;
     if (this.entryCount > request.maxEntries) throw new ArchiveSafetyError("ARCHIVE_ENTRY_LIMIT", "RAR 条目数超过上限");
     this.accountListing(JSON.stringify(header));
+  }
+
+  selectHeader(header: FileHeader, solidArchive: boolean): boolean {
+    this.accountHeader(header);
     this.selected = normalizeArchiveEntryPath(header.name) === request.entryPath;
-    if (request.entryPath !== undefined && header.flags.encrypted) throw new Error("不支持加密 RAR 条目");
+    const required = !header.flags.directory && (this.selected || solidArchive);
+    if (required && header.flags.encrypted) throw new Error("不支持加密 RAR 条目");
+    return required;
   }
 
   accountListing(text: string): void {
@@ -116,10 +122,8 @@ const main = async (): Promise<void> => {
       }
     } else {
       let found = false;
-      const extraction = extractor.extract({ files: (header) => {
-        extractor.accountHeader(header);
-        return true;
-      } });
+      const extraction = extractor.extract({ files: (header): boolean =>
+        extractor.selectHeader(header, extraction.arcHeader.flags.solid) });
       extractor.accountListing(JSON.stringify(extraction.arcHeader));
       for (const file of extraction.files) {
         if (normalizeArchiveEntryPath(file.fileHeader.name) === request.entryPath && !file.fileHeader.flags.directory) {

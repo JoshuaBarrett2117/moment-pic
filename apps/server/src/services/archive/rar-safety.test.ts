@@ -7,12 +7,13 @@ import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import type { Worker } from "node:worker_threads";
 import { path7za } from "7zip-bin";
+import { createExtractorFromData } from "node-unrar-js";
 import { ResourceBusyError, WorkBudget } from "../../lib/work-budget.js";
 import { listRootImageEntries, openArchiveEntryBody, readArchiveEntryBuffer } from "../archive.js";
 import { archiveBudget, collectBounded } from "./archive-limits.js";
 import { detectRarVersion, readCbrStream } from "./cbr-reader.js";
 import { RAR_CHUNK_BYTES, RAR_WORKER_CHANNEL } from "./rar-protocol.js";
-import { createStoredRarArchive, createStoredRar5Archive } from "./rar-test-fixture.js";
+import { createStoredRarArchive, createStoredRar5Archive, RAR_FIXTURE_PASSWORD } from "./rar-test-fixture.js";
 import { run7zaStream } from "./sevenzip-reader.js";
 
 type ObservedWorker = { worker: Worker; control: Int32Array; exit: Promise<number> };
@@ -156,6 +157,73 @@ test("RAR 列表计数包含非图片，列表字节上限和解压真实字节�
   await assertReleased(records, budget, 4);
 }));
 
+for (const version of [4, 5]) {
+  test(`RAR${version} 非 solid 无关前置附件不解压、不占目标图片字节预算`, async () => withWorkers(async (records, directory) => {
+    const budget = new CountingBudget(1, 0);
+    const png = await fs.readFile("apps/server/src/services/archive/fixtures/pixel.png");
+    const archive = path.join(directory, "attachments.rar");
+    const bytes = (version === 4 ? createStoredRarArchive : createStoredRar5Archive)([
+      { entryPath: "attachment.bin", content: Buffer.alloc(2048, 65) },
+      { entryPath: "page.png", content: png }
+    ]);
+    const independent = await createExtractorFromData({ data: Uint8Array.from(bytes).buffer });
+    assert.deepEqual(Buffer.from([...independent.extract({ files: ["page.png"] }).files][0].extraction!), png);
+    await fs.writeFile(archive, bytes);
+    assert.deepEqual(await readArchiveEntryBuffer(archive, "page.png", { budget, maxBytes: 1024 }), png);
+    assert.equal(Atomics.load(records[0].control, 1), png.length);
+    await assertReleased(records, budget);
+  }));
+}
+
+test("RAR 非 solid 加密前置附件可跳过，但加密目标及必要 solid 依赖必须拒绝", async () => withWorkers(async (records, directory) => {
+  const budget = new CountingBudget(1, 0);
+  const png = await fs.readFile("apps/server/src/services/archive/fixtures/pixel.png");
+  const archive = path.join(directory, "encrypted.rar");
+  const entries = [
+    { entryPath: "secret.bin", content: Buffer.alloc(2048, 65), encrypted: true },
+    { entryPath: "page.png", content: png }
+  ];
+  const bytes = createStoredRarArchive(entries);
+  const independent = await createExtractorFromData({ data: Uint8Array.from(bytes).buffer });
+  assert.equal([...independent.getFileList().fileHeaders][0].flags.encrypted, true);
+  assert.deepEqual(Buffer.from([...independent.extract({ files: ["page.png"] }).files][0].extraction!), png);
+  assert.deepEqual(Buffer.from([...independent.extract({ files: ["secret.bin"], password: RAR_FIXTURE_PASSWORD }).files][0].extraction!), entries[0].content);
+  assert.throws(() => [...independent.extract({ files: ["secret.bin"] }).files], /password/i);
+  await fs.writeFile(archive, bytes);
+  assert.deepEqual(await readArchiveEntryBuffer(archive, "page.png", { budget, maxBytes: 1024 }), png);
+  assert.equal(Atomics.load(records[0].control, 1), png.length);
+  await assertReleased(records, budget);
+  await assert.rejects(readArchiveEntryBuffer(archive, "secret.bin", { budget }), { code: "ARCHIVE_DECODE_ERROR" });
+  await assertReleased(records, budget, 2);
+  const solidBytes = createStoredRarArchive(entries, { solid: true });
+  const independentSolid = await createExtractorFromData({ data: Uint8Array.from(solidBytes).buffer });
+  assert.deepEqual(Buffer.from([...independentSolid.extract({ files: ["page.png"], password: RAR_FIXTURE_PASSWORD }).files][0].extraction!), png);
+  await fs.writeFile(archive, solidBytes);
+  await assert.rejects(readArchiveEntryBuffer(archive, "page.png", { budget }), { code: "ARCHIVE_DECODE_ERROR" });
+  assert.equal(Atomics.load(records[2].control, 1), 0);
+  await assertReleased(records, budget, 3);
+}));
+
+test("solid RAR 即使条目未标 solid，解码器处理的前置输出仍全部计入实际字节", async () => withWorkers(async (records, directory) => {
+  const budget = new CountingBudget(1, 0);
+  const png = await fs.readFile("apps/server/src/services/archive/fixtures/pixel.png");
+  const archive = path.join(directory, "solid-reset.rar");
+  await fs.writeFile(archive, createStoredRarArchive([
+    { entryPath: "preceding.bin", content: Buffer.alloc(2048, 65) },
+    { entryPath: "chain-start.bin", content: Buffer.alloc(128, 66), solid: false },
+    { entryPath: "chain-middle.bin", content: Buffer.alloc(128, 67) },
+    { entryPath: "page.png", content: png },
+    { entryPath: "later.bin", content: Buffer.alloc(4096, 68), encrypted: true }
+  ], { solid: true }));
+  const neededBytes = 2048 + 256 + png.length;
+  assert.deepEqual(await readArchiveEntryBuffer(archive, "page.png", { budget, maxBytes: neededBytes, maxEntries: 4 }), png);
+  assert.equal(Atomics.load(records[0].control, 1), neededBytes);
+  await assertReleased(records, budget);
+  await assert.rejects(readArchiveEntryBuffer(archive, "page.png", { budget, maxBytes: neededBytes - 1 }), { code: "ARCHIVE_BYTE_LIMIT" });
+  assert.equal(Atomics.load(records[1].control, 1), neededBytes);
+  await assertReleased(records, budget, 2);
+}));
+
 test("solid RAR 前置隐藏条目也实际解码并计入字节预算，不仅限制目标图片", async () => withWorkers(async (records, directory) => {
   const budget = new CountingBudget(1, 0);
   const archive = path.join(directory, "solid.rar");
@@ -268,25 +336,36 @@ test("RAR 排队取消、排队超时、队列耗尽均不启动 worker，也不
   assert.equal(budget.releases, 2);
 }));
 
-test("RAR 和真实 7z 提取共享注入预算，worker 退出后才交接许可", async () => withWorkers(async (records, directory) => {
-  const budget = new CountingBudget(1, 1);
-  const archive = await writeArchive(directory);
-  await fs.writeFile(path.join(directory, "text.txt"), "sevenzip-shared-budget");
-  const sevenzip = path.join(directory, "book.7z");
-  assert.equal(spawnSync(path7za, ["a", "-t7z", sevenzip, "text.txt"], { cwd: directory }).status, 0);
-  const rar = await readCbrStream(archive, "page.png", { budget });
-  rar.read(0);
-  await waitFor(() => rar.readableLength > 0);
-  const queued = run7zaStream(["e", "-so", sevenzip, "text.txt"], { budget });
-  await waitFor(() => budget.usage.queued === 1);
-  rar.destroy();
-  const stream = await queued;
-  assert.equal(records[0].worker.threadId, -1);
-  assert.equal((await collectBounded(stream)).toString(), "sevenzip-shared-budget");
-  assert.deepEqual(budget.usage, { active: 0, queued: 0 });
-  assert.ok(budget.acquisitions >= 2);
-  assert.equal(budget.releases, budget.acquisitions);
-}));
+for (const emptyPath of [false, true]) {
+  test(`RAR 和真实 7z 提取共享注入预算，worker 退出后才交接许可（空 PATH：${emptyPath}）`, async () => withWorkers(async (records, directory) => {
+    const budget = new CountingBudget(1, 1);
+    const archive = await writeArchive(directory);
+    await fs.writeFile(path.join(directory, "text.txt"), "sevenzip-shared-budget");
+    const sevenzip = path.join(directory, "book.7z");
+    assert.equal(spawnSync(path7za, ["a", "-t7z", sevenzip, "text.txt"], { cwd: directory }).status, 0);
+    const rar = await readCbrStream(archive, "page.png", { budget });
+    rar.read(0);
+    await waitFor(() => rar.readableLength > 0);
+    const originalPath = process.env.PATH;
+    try {
+      if (emptyPath) process.env.PATH = "";
+      const queued = run7zaStream(["e", "-so", sevenzip, "text.txt"], { budget });
+      await waitFor(() => budget.usage.queued === 1);
+      rar.destroy();
+      const stream = await queued;
+      assert.equal(records[0].worker.threadId, -1);
+      assert.equal((await collectBounded(stream)).toString(), "sevenzip-shared-budget");
+      assert.deepEqual(budget.usage, { active: 0, queued: 0 });
+      assert.ok(budget.acquisitions >= (emptyPath ? 4 : 2));
+      assert.equal(budget.releases, budget.acquisitions);
+      console.log(`shared RAR/7z empty PATH=${emptyPath}: acquisitions=${budget.acquisitions}, releases=${budget.releases}, active=0, queued=0`);
+    } finally {
+      if (originalPath === undefined) delete process.env.PATH;
+      else process.env.PATH = originalPath;
+      rar.destroy();
+    }
+  }));
+}
 
 test("默认全局归档预算也由 RAR 和 7z 共用，而非独立 worker 池", async () => withWorkers(async (_records, directory) => {
   const archive = await writeArchive(directory);

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test src/**/*.test.ts"
+    "test": "node ../../scripts/test-workspace.mjs web",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "axios": "^1.20.0",

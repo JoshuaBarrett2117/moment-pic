@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "test": "cd ../.. && node --import tsx --test --test-concurrency=1 apps/server/src/**/*.test.ts",
+    "test": "node ../../scripts/test-workspace.mjs server",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js"
   },
   "dependencies": {

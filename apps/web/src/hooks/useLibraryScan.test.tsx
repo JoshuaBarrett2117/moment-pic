@@ -107,3 +107,21 @@ test('实际扫描 Hook：连续轮询故障可见且不会泄漏错误详情', 
     assert.equal(timers.size, 0);
   } finally { await hook.unmount(); }
 });
+
+test('实际扫描 Hook：请求层取消不留下永久 pending 或阻止下一次扫描', async (context) => {
+  setup();
+  context.mock.method(api, 'getWithOptions', () => Promise.resolve([]));
+  let posted = 0;
+  context.mock.method(api, 'postWithOptions', () => {
+    posted += 1;
+    return posted === 1 ? Promise.reject(new DOMException('取消', 'AbortError')) : Promise.resolve(task('completed', 'complete'));
+  });
+  const hook = await renderHook(() => useLibraryScan());
+  try {
+    await act(async () => { assert.equal(await hook.current.scan('root'), null); });
+    assert.equal(hook.current.scanError, null);
+    assert.equal(hook.current.isAnyScanning, false);
+    await act(async () => { assert.ok(await hook.current.scan('root')); });
+    assert.equal(posted, 2);
+  } finally { await hook.unmount(); }
+});

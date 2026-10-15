@@ -110,7 +110,12 @@ export function useLibraryScan({ onScanComplete, enabled = true }: UseLibrarySca
       else { stopTask(key); await onScanCompleteRef.current?.(); }
       return result;
     } catch (error) {
-      if (!isCurrent(key, request) || isRequestCancellation(error)) return null;
+      if (!isCurrent(key, request)) return null;
+      if (isRequestCancellation(error)) {
+        stopTask(key);
+        setScanTasks((previous) => { const next = new Map(previous); next.delete(key); return next; });
+        return null;
+      }
       updateTask(key, { taskId: '', libraryRootId: libraryRootId ?? null, status: 'failed', startedAt: null, finishedAt: new Date().toISOString(), error: SCAN_FAILURE_MESSAGE });
       stopTask(key);
       return null;

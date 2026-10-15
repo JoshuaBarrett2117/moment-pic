@@ -18,6 +18,8 @@
 
 扫描 Hook 按图库根持有可取消请求与串行轮询；重复点击只发一次，清除、卸载、退出登录取消请求，旧轮询/恢复结果不能重启任务或覆盖新状态。三次轮询故障有明确脱敏错误。新增 API、Hook 与真实 Settings renderer 回归均通过。
 
+最后补齐请求层直接返回取消错误的分支：该分支也删除 pending 状态并释放任务记录，不能静默卡住扫描按钮。`scan-cancel-red-baseline.log` 在 TMPDIR 中读取已提交源码的隔离副本，证明修复前此用例失败；`scan-cancel-final-web-retry.log` 50/50、零取消/跳过，`scan-cancel-final-types-retry.log` 通过。之前的试跑包含测试块错误嵌套导致的取消，已修正测试结构，最终只以零失败/零取消的完整复跑验收。
+
 `scan-api-final.log` 实际 API/WS 与单相册失败脱敏通过；`scan-ui-delivery-web.log` 49/49；`scan-ui-delivery-types.log` 两端类型检查、`scan-ui-delivery-build.log` 前端构建均通过。`browser-delivery.log` 与 `browser-results.json` 记录两种真实浏览器模式：正常 WS 和拦截 WS 的轮询回退，均实际点击 Settings 扫描、看到失败提示、在仍处于 Settings 时收到健康相册刷新，返回图库看到新增相册，页面脚本错误为零。
 
 截图为 `settings-scan-failure-{websocket,polling}.png`、`partial-healthy-gallery-{websocket,polling}.png`，均位于证据目录。无系统中文字体时，只在临时验收页面注入官方 Noto CJK 字体改善截图可读性，未修改应用字体依赖或安装系统包。

@@ -36,11 +36,13 @@
 
 HTTP Upgrade 必须具有有效会话与严格 Origin（协议、主机和端口均匹配）。缺失/null/恶意来源、畸形 Cookie、过期会话及异常路径均被拒绝；拒绝响应发送后主动销毁套接字，另有 250ms 清理兜底，不依赖对端主动结束半开连接。HTTP CORS 与 WS 采用同一允许来源策略，并设置 Vary: Origin，不信任任意 X-Forwarded-Host。
 
-真实目录监听器广播图库相对路径；会话过期主动关闭，连接与发送预算受限。前端未登录不连接、退出不重连，网络故障可重连，过期会话通知登录。启动要求显式强管理员密码；HTTPS Cookie 只信任配置的反向代理。升级配置见 README 与 .env.example，不再保留默认弱密码。
+真实目录监听器广播图库相对路径；会话过期主动关闭，连接与发送预算受限。前端未登录不连接、退出不重连，网络故障可重连，过期会话通知登录。启动要求显式设置非空的 1-128 字符管理员密码，不限制复杂度且原样保留空格；HTTPS Cookie 只信任配置的反向代理。升级配置见 README 与 .env.example，不提供默认密码。
 
 `ws-close-red.log` 复现旧实现遗留半开连接；`ws-followup-green-retry.log` 10/10 通过（真实 TCP Upgrade、实际 watcher 文件事件、实际 CORS/认证路由）；`ws-typecheck.log` 通过。watcher 测试在临时 SQLite 中将默认 60 秒轮询改为 50ms，未改变生产配置或访问外部图库。
 
-`startup-entry.log` 6/6 通过，额外通过真实 Node 子进程执行 index.ts 验证缺失/弱配置退出、无数据库创建、密码不回显。子进程只接收必要测试环境变量，dotenv 显式指向临时空文件，不读取仓库 .env；代理 HTTPS Cookie、伪造转发头、登录限流及 CORS 回归同时通过。
+2026-10-16 管理员密码策略回归（执行者：Codex）：使用现有 Node v22.23.3，通过 `scripts/test-isolation.mjs` 隔离运行 `auth-security.test.ts`，修复前 7 项中 5 通过、2 失败，修复后 7 项全部通过。直接校验和应用初始化均拒绝缺失、空值与 129 字符密码，并接受单字符、重复字符、单一字符类别、仅含空格及 128 字符边界，保留原始输入且报错不包含输入。真实启动子进程验证缺失或空配置退出且不创建数据库；`DOTENV_CONFIG_PATH` 显式指向临时空文件，不读取仓库 `.env`。
+
+父任务已使用现有 Node v22.23.3 完成全量验证：`npm run typecheck`（两个工作区均执行 `tsc --noEmit`）、`npm run test:discovery`（2/2）、`npm run test:server`（递归发现 32 个文件，136/136）、`npm run test:web`（递归发现 17 个文件，82/82）、`npm run build:server` 和 `npm run build:web` 全部退出码为 0；各测试均无跳过项，前端构建处理 2215 个模块，耗时 12.43 秒。另对构建后的 JavaScript `validateAdminPassword` 直接冒烟验证：单字符和 128 字符被接受，空值、未定义和 129 字符被拒绝，退出码为 0，所有密码值均脱敏。证据见 `$TMPDIR/momentpic-password-verification/results.json` 与 `$TMPDIR/momentpic-password-verification/direct-check.log`。本次未执行 Docker、NAS、生产数据库、UI/浏览器或生产部署验证；文档收尾仅核对上述证据，不重复运行测试或构建。
 
 ## 归档取消与资源所有权
 

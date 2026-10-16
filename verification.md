@@ -1,5 +1,23 @@
 # verification
 
+## 2026-10-16 管理员密码策略专项验证（执行者：Codex）
+
+- 当前策略：必须显式设置非空的 1-128 字符管理员密码，无默认密码；不限制字符类别、不同字符数量或最低复杂度，原样保留空格。缺失、空值和超过 128 字符仍拒绝启动，报错不包含输入。
+- 实际环境：复用已有 Node v22.23.3，未切换默认 Node 26，未安装依赖。
+- 实际命令：`TSX_TSCONFIG_PATH=/opt/data/projects/momentpic/apps/server/tsconfig.json /tmp/momentpic-tools/runtime/package/bin/node --import ./scripts/test-isolation.mjs --import tsx --test --test-concurrency=1 apps/server/src/routes/auth-security.test.ts`。
+- 实际结果：新增回归在修复前 7 项中 5 通过、2 失败；修复后 7 项全部通过。覆盖直接校验和应用初始化的拒绝及放行边界，以及真实启动入口缺失或空配置退出且不创建数据库；测试输出未回显密码。
+- 父任务已执行全量验证，以下命令退出码均为 0：
+  - `npm run typecheck`：两个工作区均通过 `tsc --noEmit`。
+  - `npm run test:discovery`：2/2 通过，无跳过。
+  - `npm run test:server`：递归发现 32 个测试文件，136/136 通过，无跳过。
+  - `npm run test:web`：递归发现 17 个测试文件，82/82 通过，无跳过。
+  - `npm run build:server`：构建通过。
+  - `npm run build:web`：构建通过，处理 2215 个模块，耗时 12.43 秒。
+- 构建产物冒烟：直接调用构建后的 JavaScript `validateAdminPassword`，单字符和 128 字符被接受，空值、未定义和 129 字符被拒绝，退出码为 0，所有密码值均脱敏。
+- 验证证据：`$TMPDIR/momentpic-password-verification/results.json` 和 `$TMPDIR/momentpic-password-verification/direct-check.log`；本次文档收尾仅核对现有证据，不重复运行测试或构建。
+- 隔离边界：通过现有 `scripts/test-isolation.mjs` 使用临时数据库，启动子进程只使用临时空配置且确认未创建数据库；未读取仓库 `.env`，未连接生产数据库、运行 Docker、访问 NAS 或推送。
+- 未执行：Docker、NAS、生产数据库、UI/浏览器及生产部署验证，不据此宣称这些环境或交互已验证。下文为历史验证记录，不代表本次重新执行。
+
 ## 2026-05-03 Codex
 
 ### 执行范围
@@ -20,7 +38,7 @@
   - `CACHE_DIR=./data/full-regression/cache`
   - `SQLITE_PATH=./data/full-regression/gallery.sqlite`
   - `INDEX_FILE_PATH=./data/full-regression/index.json`
-  - `ADMIN_PASSWORD=admin`
+  - `ADMIN_PASSWORD`：本地测试时显式设置非空的 1-128 字符密码，不限制复杂度；本文不记录密码值。
 - 说明：浏览器链路测试前，已向测试库写入样本库根目录并完成扫描，扫描结果为 `albumsDiscovered: 2`、`assetsDiscovered: 6`。
 
 ### 实际执行命令

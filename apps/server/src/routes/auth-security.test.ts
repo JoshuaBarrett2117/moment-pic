@@ -3,12 +3,13 @@ import test from "node:test";
 import Fastify from "fastify";
 import { buildApp } from "../app.js";
 import { env } from "../config/env.js";
+import { validateAdminPassword } from "../config/security.js";
 import { authRoutes } from "./auth.js";
 import { createAuthToken, isAuthenticated, buildAuthCookie } from "../lib/auth.js";
 
 const password = "Explicit-Test-Password-2026!";
 
-test("真实启动入口在缺失/弱配置时退出，不创建数据库也不读取本地凭据文件", async () => {
+test("真实启动入口在缺失或空配置时退出，不创建数据库也不读取本地凭据文件", async () => {
   const { spawnSync } = await import("node:child_process");
   const fs = await import("node:fs/promises");
   const os = await import("node:os");
@@ -18,7 +19,7 @@ test("真实启动入口在缺失/弱配置时退出，不创建数据库也不�
   const emptyConfig = path.join(directory, "empty-test-config");
   await fs.writeFile(emptyConfig, "");
   try {
-    for (const adminPassword of [undefined, "short-test-password"]) {
+    for (const adminPassword of [undefined, ""]) {
       const childEnv: NodeJS.ProcessEnv = { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, DOTENV_CONFIG_PATH: emptyConfig, SQLITE_PATH: path.join(directory, "must-not-create.sqlite"), CACHE_DIR: path.join(directory, "cache"), LIBRARY_ROOTS: path.join(directory, "library"), PUBLIC_DIR: path.join(directory, "public"), HOST: "127.0.0.1", PORT: "0" };
       if (adminPassword !== undefined) childEnv.ADMIN_PASSWORD = adminPassword;
       const child = spawnSync(process.execPath, ["--import", "tsx", "apps/server/src/index.ts"], { cwd: fileURLToPath(new URL("../../../../", import.meta.url)), env: childEnv, encoding: "utf8", timeout: 5000 });
@@ -38,16 +39,43 @@ const authApp = async (trustProxy: false | string[] = false, adminPassword = pas
   return app;
 };
 
-test("缺失/弱密码拒绝应用启动，不在报错中输出输入；强配置可用", async () => {
+test("缺失、空密码及超长密码拒绝启动和直接校验，错误不泄露输入", () => {
   const previous = env.adminPassword;
   try {
-    for (const value of ["", "short", "aaaaaaaaaaaaaaaaaaaa", "a".repeat(129)]) {
-      env.adminPassword = value;
-      assert.throws(() => buildApp(), /ADMIN_PASSWORD.*16/);
+    for (const value of [undefined, "", String.fromCharCode(97).repeat(129)]) {
+      const checkError = (error: unknown): boolean => {
+        assert.ok(error instanceof Error);
+        assert.ok(/ADMIN_PASSWORD.*1-128/.test(error.message));
+        assert.ok(error.message.includes("非空"));
+        assert.ok(error.message.includes("不限制复杂度"));
+        if (value) assert.ok(!error.message.includes(value));
+        return true;
+      };
+      env.adminPassword = value ?? "";
+      assert.throws(() => buildApp(), checkError);
+      assert.throws(() => validateAdminPassword(value), checkError);
     }
-    env.adminPassword = password;
-    const app = buildApp();
-    await app.close();
+  } finally { env.adminPassword = previous; }
+});
+
+test("非空的 1-128 字符密码无需复杂度限制，启动和直接校验均保留原值", async () => {
+  const previous = env.adminPassword;
+  const singleCharacter = String.fromCharCode(97);
+  const passwords = [
+    singleCharacter,
+    singleCharacter.repeat(16),
+    Array.from({ length: 26 }, (_, index) => String.fromCharCode(97 + index)).join(""),
+    String.fromCharCode(32).repeat(3),
+    singleCharacter.repeat(128)
+  ];
+  try {
+    for (const value of passwords) {
+      assert.ok(validateAdminPassword(value) === value);
+      env.adminPassword = value;
+      const app = buildApp();
+      try { assert.ok(app.config.adminPassword === value); }
+      finally { await app.close(); }
+    }
   } finally { env.adminPassword = previous; }
 });
 

@@ -41,7 +41,8 @@ export const useGalleryDataController = ({
     , cancelRequests: cancelDirectory
   } = useDirectoryAlbums();
   const { libraryRoots, fetchLibraryRoots, cancelRequests: cancelLibraryRoots } = useLibraryRoots();
-  const queryKey = JSON.stringify([currentScreen, debouncedKeyword, filters, galleryViewMode, isAuthenticated, isRecentActive, selectedSmartAlbum]);
+  // 最近浏览不消费关键词或筛选条件，防抖落地不应使其请求失效。
+  const queryKey = JSON.stringify([currentScreen, isRecentActive ? null : debouncedKeyword, isRecentActive ? null : filters, galleryViewMode, isAuthenticated, isRecentActive, selectedSmartAlbum]);
   const queryRef = useRef({ key: queryKey, generation: 0 });
   if (queryRef.current.key !== queryKey) {
     queryRef.current = { key: queryKey, generation: queryRef.current.generation + 1 };
@@ -180,9 +181,17 @@ export const useGalleryDataController = ({
         void loadFavoriteAlbums();
         return;
       }
+      if (isRecentActive) return;
       void loadAlbums();
     }
-  }, [currentScreen, galleryViewMode, isAuthenticated, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums]);
+  }, [currentScreen, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums]);
+
+  // 导航提交并清理旧视图后再加载，避免点击处理器发起的请求被 cleanup 取消。
+  useEffect(() => {
+    if (isAuthenticated && currentScreen === Screen.GALLERY && galleryViewMode === 'albums' && isRecentActive) {
+      void fetchRecentAlbums({ limit: 50 });
+    }
+  }, [currentScreen, fetchRecentAlbums, galleryViewMode, isAuthenticated, isRecentActive]);
 
   useEffect(() => {
     if (!isAuthenticated || currentScreen !== Screen.SMART_ALBUM_DETAIL || !selectedSmartAlbum) {

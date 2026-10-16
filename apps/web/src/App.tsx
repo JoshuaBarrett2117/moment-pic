@@ -262,9 +262,9 @@ function AuthenticatedMomentPicApp() {
     setIsRecentActive(true);
     setGalleryViewMode('albums');
     resetToAlbumFilters();
-    void fetchRecentAlbums({ limit: 50 });
+    if (isRecentActive) void fetchRecentAlbums({ limit: 50 });
     navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: true, galleryViewMode: 'albums' });
-  }, [fetchRecentAlbums, navigate, resetToAlbumFilters, setActiveTab, setGalleryViewMode, setIsRecentActive]);
+  }, [fetchRecentAlbums, isRecentActive, navigate, resetToAlbumFilters, setActiveTab, setGalleryViewMode, setIsRecentActive]);
 
   const handleSmartAlbumsClick = useCallback(() => {
     setActiveTab('gallery');

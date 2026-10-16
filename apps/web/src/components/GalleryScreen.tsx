@@ -143,6 +143,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   });
 
   const hasActiveFilters = hasGalleryActiveFilters({
+    isRecentActive,
     currentKeyword,
     currentSortBy,
     currentSortOrder,
@@ -163,7 +164,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const gridGapClass = isWideMobile ? 'gap-5' : 'gap-4 md:gap-6';
   const sortOptions = getGallerySortOptions(resolvedDisplayMode);
   const headerText = resolveGalleryHeaderText({ displayMode: resolvedDisplayMode, headerTitle, headerDescription });
-  const emptyText = resolveGalleryEmptyText({ displayMode: resolvedDisplayMode, hasActiveFilters, emptyTitle, emptyDescription });
+  const emptyText = resolveGalleryEmptyText({ displayMode: resolvedDisplayMode, isRecentActive, hasActiveFilters, emptyTitle, emptyDescription });
   useEffect(() => {
     if (isMobile) {
       setIsFilterExpanded(false);

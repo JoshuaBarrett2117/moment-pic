@@ -5,6 +5,7 @@ export type GallerySourceType = 'folder' | 'zip' | '';
 export type GallerySortOption = { value: GallerySortBy; label: string };
 
 export const hasGalleryActiveFilters = (input: {
+  isRecentActive?: boolean;
   currentKeyword: string;
   currentSortBy: GallerySortBy;
   currentSortOrder: 'asc' | 'desc';
@@ -13,11 +14,12 @@ export const hasGalleryActiveFilters = (input: {
   currentLibraryRootId: string;
   displayMode: GalleryDisplayMode;
 }) =>
+  !input.isRecentActive && (
   Boolean(input.currentKeyword) ||
   input.currentSortBy !== 'updatedAt' ||
   input.currentSortOrder !== 'desc' ||
   input.currentPageSize !== 24 ||
-  ((input.displayMode === 'albums' || input.displayMode === 'favorites') && Boolean(input.currentSourceType || input.currentLibraryRootId));
+  ((input.displayMode === 'albums' || input.displayMode === 'favorites') && Boolean(input.currentSourceType || input.currentLibraryRootId)));
 
 export const getGallerySortOptions = (displayMode: GalleryDisplayMode): GallerySortOption[] => {
   if (displayMode === 'smartAlbums') {
@@ -62,13 +64,14 @@ export const resolveGalleryHeaderText = (input: {
 });
 
 export const resolveGalleryEmptyText = (input: {
+  isRecentActive?: boolean;
   displayMode: GalleryDisplayMode;
   hasActiveFilters: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
 }) => ({
   title: input.emptyTitle ?? (
-    input.hasActiveFilters
+    input.isRecentActive ? '还没有浏览记录' : input.hasActiveFilters
       ? input.displayMode === 'smartAlbums'
         ? '没有找到匹配的自动整理'
         : input.displayMode === 'directoryAlbums'
@@ -85,7 +88,7 @@ export const resolveGalleryEmptyText = (input: {
           : '这里还是一片空白'
   ),
   description: input.emptyDescription ?? (
-    input.hasActiveFilters
+    input.isRecentActive ? '打开一个图集后，就会出现在这里。' : input.hasActiveFilters
       ? '试试清空筛选条件，或者换一个关键词。'
       : input.displayMode === 'smartAlbums'
         ? '先到设置里的“智能归纳”新增规则，再重建一次自动整理。'

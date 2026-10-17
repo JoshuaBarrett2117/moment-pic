@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+import { CacheMaintenance } from "./services/cache-maintenance.js";
 import { buildApp } from "./app.js";
 import { env } from "./config/env.js";
 import { startCoverThumbnailWarmup } from "./services/cover-thumbnail-warmup.js";
@@ -8,6 +9,8 @@ import { directoryWatcher } from "./services/directory-watcher.js";
 
 const start = async () => {
   const app = buildApp();
+  const cacheMaintenance = new CacheMaintenance({ cacheDir: env.cacheDir, maxBytes: env.cacheMaxBytes, minAgeMs: env.cacheGcMinAgeHours * 3600_000 });
+  app.addHook("onClose", async () => cacheMaintenance.stop());
 
   try {
     await ensureScannedLibrary();
@@ -16,6 +19,7 @@ const start = async () => {
       host: env.host,
       port: env.port
     });
+    cacheMaintenance.start(env.cacheGcIntervalHours * 3600_000);
     startCoverThumbnailWarmup({
       reason: "startup",
       concurrency: 2,

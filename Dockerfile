@@ -52,6 +52,7 @@ COPY --from=web-builder /app/apps/web/dist ./apps/server/dist/public
 RUN rm -rf node_modules/.bin \
     && find node_modules -type d \( -name "test" -o -name "tests" -o -name "example" -o -name "examples" -o -name "docs" -o -name "__tests__" \) -exec rm -rf {} + 2>/dev/null || true \
     && find node_modules -type f \( -name "*.md" -o -name "*.ts" -o -name "*.d.ts" -o -name "LICENSE*" -o -name "README*" -o -name ".npm*" \) -delete 2>/dev/null || true
+ENV CACHE_MAX_BYTES="5368709120" CACHE_GC_MIN_AGE_HOURS="24" CACHE_GC_INTERVAL_HOURS="6"
 ENV HOST="0.0.0.0" PORT="3210" PUBLIC_DIR="/app/apps/server/dist/public" LIBRARY_ROOTS="/data/library" CACHE_DIR="/data/cache" SQLITE_PATH="/data/gallery.sqlite" INDEX_FILE_PATH="/data/index.json" DATABASE_URL="file:/data/gallery.sqlite" LOG_LEVEL="info"
 WORKDIR /app/apps/server
 RUN mkdir -p /data/library /data/cache

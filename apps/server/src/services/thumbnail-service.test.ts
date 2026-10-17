@@ -384,3 +384,21 @@ test("inside 缩略图保留原图比例，cover/inside 使用不同 v5 缓存�
     assert.equal((await ensureThumbnail(id, { fit: "inside" })).filePath, inside.filePath);
   } finally { deleteAlbumDb(id); await fs.promises.rm(directory, { recursive: true, force: true }); }
 });
+
+test("GC 删除有 thumbnails 记录的文件后，请求重新生成可读缩略图", async () => {
+  const { maintainCache } = await import("./cache-maintenance.js");
+  const { findThumbnailByAssetIdDb, deleteAlbumDb } = await import("../repositories/album-repository.js");
+  const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "thumbnail-gc-"));
+  const sourcePath = path.join(directory, "page.png"); const id = crypto.randomUUID(); const timestamp = new Date().toISOString();
+  try {
+    await sharp({ create: { width: 20, height: 30, channels: 3, background: "blue" } }).png().toFile(sourcePath);
+    insertAlbumWithAssetsDb({ id, libraryRootId: id, name: id, sourcePath: directory, sourceType: "folder", sourceMtime: null, assetsFingerprint: null, coverAssetId: id, assetCount: 1, scanStatus: "ready", errorMessage: null, createdAt: timestamp, updatedAt: timestamp }, [createAssetRecord({ id, albumId: id, sourcePath })]);
+    const first = await ensureThumbnail(id);
+    assert.ok(findThumbnailByAssetIdDb(id));
+    await maintainCache({ cacheDir: env.cacheDir, maxBytes: 0, minAgeMs: 0 });
+    assert.equal(fs.existsSync(first.filePath), false);
+    assert.ok(findThumbnailByAssetIdDb(id));
+    const next = await ensureThumbnail(id);
+    assert.equal(next.filePath, first.filePath); assert.equal((await sharp(next.filePath).metadata()).width, 360);
+  } finally { deleteAlbumDb(id); await fs.promises.rm(directory, { recursive: true, force: true }); }
+});

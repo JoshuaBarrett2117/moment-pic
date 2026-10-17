@@ -78,3 +78,26 @@
 - `components/continue-reading.test.tsx`：`首页继续阅读无数据时隐藏，有进度显示页码并点击进入原图集`。
 
 验证：`npm run test:server` 175/175；`npm run test:web` 最终 92/92，均 0 失败；`npm run build:server`、`npm run build:web`、`npx tsc --noEmit -p apps/web/tsconfig.json` 通过。日志：`/opt/data/cache/momentpic-opt-step-3-tests.log`。浏览器可执行文件缺失，真实查看器手势/视觉/移动端验收尚未执行，不能视作浏览器验收通过。
+
+## 4. 缓存容量与 GC（已验证）
+
+文件：新增 `apps/server/src/services/cache-maintenance.ts` 及 `.test.ts`；修改 `config/env.ts`、`index.ts`、`services/thumbnail-service.test.ts`、`Dockerfile`、`docker-compose.yml`、`README.md`。
+
+- 纯函数返回 evict/freedBytes/remainingBytes；超 1h 的 tmp 残留优先清理，普通文件未超限不删，超限按 mtime/path 稳定排序并尊重 minAge。新文件受保护时允许暂时超限，不虚报容量达标。
+- 扁平异步文件扫描、不递归、不跟随链接；删除前复核 inode/mtime/size，单文件失败继续。摘要包含 scanned/deleted/failed/freedBytes/remainingBytes（本轮快照口径）；不访问或删除数据库记录。
+- 默认 5GiB/24h/6h，0 间隔关闭全部定时清理。启动 5 分钟后首轮，当前轮完成后安排下一轮。实例合并并发 run，onClose 取消并等待在途任务、清除定时器；失败记录日志，不影响服务。
+
+新增测试名（`cache-maintenance.test.ts`）：
+
+- `缓存未超限不删普通文件`
+- `超限按 mtime 最旧优先，同时间按路径稳定排序且不修改输入`
+- `minAge 内不删，即使仍超限`
+- `过期 tmp 优先清理，未超限也回收残留，年轻 tmp 不删`
+- `真实临时缓存 GC 降到上限并保留新文件、子目录和符号链接目标`
+- `GC 单文件删除失败继续处理其他文件`
+- `GC 并发合并，关闭取消正在执行的轮次且不重启`
+- `GC 启动延迟 5 分钟、失败后继续调度、0 关闭及 stop 清理定时器`
+
+`thumbnail-service.test.ts` 新增 `GC 删除有 thumbnails 记录的文件后，请求重新生成可读缩略图`，确认保留的数据库记录不会误命中缺失文件。
+
+验证：`npm run build:server` 通过；`npm run test:server` 184/184，0 失败。临时目录集成实测 scanned=4/deleted=3/freedBytes=300/remainingBytes=100（容量100），新文件及链接目标保留。日志：`/opt/data/cache/momentpic-opt-step-4-tests.log`。首次 build 因测试 mock 缺类型 TS7006 失败，补类型后通过，失败日志保留。Docker 环境变量仅静态修改，未进行 Docker 构建或镜像运行。

@@ -80,6 +80,20 @@ export const updateAlbumScanStatusDb = (albumId: string, status: "ready" | "erro
   getDb().prepare("UPDATE albums SET scan_status = ?, error_message = ? WHERE id = ?").run(status, message, albumId);
 };
 
+export type AlbumScanStatusUpdate = { albumId: string; status: "ready" | "error"; message: string | null };
+
+/** 小批同步事务只写发生变化的状态，避免在媒体 I/O 期间持有数据库写锁。 */
+export const updateAlbumScanStatusBatchDb = (updates: AlbumScanStatusUpdate[]): number => {
+  const db = getDb();
+  const statement = db.prepare(`UPDATE albums SET scan_status = @status, error_message = @message
+    WHERE id = @albumId AND (scan_status <> @status OR IFNULL(error_message, '') <> IFNULL(@message, ''))`);
+  const writeBatch = db.transaction((batch: AlbumScanStatusUpdate[]) =>
+    batch.reduce((changed, update) => changed + statement.run(update).changes, 0));
+  let changed = 0;
+  for (let offset = 0; offset < updates.length; offset += 1000) changed += writeBatch(updates.slice(offset, offset + 1000));
+  return changed;
+};
+
 export const listAlbumsDb = (
   page: number,
   pageSize: number,

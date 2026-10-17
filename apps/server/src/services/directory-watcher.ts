@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { startCoverThumbnailWarmup } from "./cover-thumbnail-warmup.js";
 import { listExistingLibraryRoots } from "./library-scanner.js";
-import { scanLibrary } from "./library-scanner.js";
+import { runIncrementalLibraryScan, type ScanPathEvent } from "./incremental-scan.js";
 import { createLogger } from "../lib/logger.js";
 import { nowIso } from "../lib/time.js";
 import { wsService } from "./websocket-service.js";
@@ -27,6 +27,7 @@ class DirectoryWatcherService {
   private callbacks: Set<WatchCallback> = new Set();
   private debounceTimersByRoot: Map<string, NodeJS.Timeout> = new Map();
   private incrementalScanStates: Map<string, { running: boolean; pending: boolean }> = new Map();
+  private pendingPaths = new Map<string, Map<string, ScanPathEvent> | null>();
   private readonly DEBOUNCE_MS = 2000;
 
   async startWatching(libraryRootId?: string): Promise<void> {
@@ -76,14 +77,20 @@ class DirectoryWatcherService {
         .on("add", (filePath) => this.handleFileEvent("add", filePath, root.id))
         .on("change", (filePath) => this.handleFileEvent("change", filePath, root.id))
         .on("unlink", (filePath) => this.handleFileEvent("unlink", filePath, root.id))
-        .on("addDir", (dirPath) => this.handleFileEvent("add", dirPath, root.id))
-        .on("unlinkDir", (dirPath) => this.handleFileEvent("unlink", dirPath, root.id));
+        .on("addDir", (dirPath) => this.handleFileEvent("addDir", dirPath, root.id))
+        .on("unlinkDir", (dirPath) => this.handleFileEvent("unlinkDir", dirPath, root.id));
 
       this.watchers.set(root.id, watcher);
     }
   }
 
-  private handleFileEvent(type: WatchEventType, filePath: string, libraryRootId: string): void {
+  private handleFileEvent(type: ScanPathEvent["type"], filePath: string, libraryRootId: string): void {
+    const pending = this.pendingPaths.get(libraryRootId);
+    if (pending !== null) {
+      const paths = pending ?? new Map<string, ScanPathEvent>();
+      paths.set(filePath, { type, path: filePath });
+      this.pendingPaths.set(libraryRootId, paths.size > 1024 ? null : paths);
+    }
     const existingTimer = this.debounceTimersByRoot.get(libraryRootId);
     if (existingTimer) {
       clearTimeout(existingTimer);
@@ -97,7 +104,7 @@ class DirectoryWatcherService {
     this.debounceTimersByRoot.set(libraryRootId, timer);
 
     const event: FileChangeEvent = {
-      type,
+      type: type === "addDir" ? "add" : type === "unlinkDir" ? "unlink" : type,
       path: path.relative(listExistingLibraryRoots().find((root) => root.id === libraryRootId)?.path ?? path.dirname(filePath), filePath).split(path.sep).join("/"),
       libraryRootId,
       timestamp: nowIso()
@@ -128,7 +135,9 @@ class DirectoryWatcherService {
 
   private async runIncrementalScan(libraryRootId: string): Promise<void> {
     try {
-      const result = await scanLibrary({ libraryRootId });
+      const paths = this.pendingPaths.get(libraryRootId);
+      this.pendingPaths.delete(libraryRootId);
+      const result = await runIncrementalLibraryScan(libraryRootId, paths === null ? null : [...(paths?.values() ?? [])]);
       const event: FileChangeEvent = {
         type: "change",
         path: "",
@@ -188,6 +197,7 @@ class DirectoryWatcherService {
       }
       this.debounceTimersByRoot.delete(libraryRootId);
       this.incrementalScanStates.delete(libraryRootId);
+      this.pendingPaths.delete(libraryRootId);
       return;
     }
 
@@ -201,6 +211,7 @@ class DirectoryWatcherService {
     }
     this.debounceTimersByRoot.clear();
     this.incrementalScanStates.clear();
+    this.pendingPaths.clear();
   }
 
   async restartWatching(): Promise<void> {

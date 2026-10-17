@@ -14,7 +14,7 @@ import {
   listAlbumsDb,
   listAssetsByAlbumIdDb,
   updateAlbumScanMetadataDb,
-  updateAlbumScanStatusDb,
+  updateAlbumScanStatusBatchDb,
   listAlbumsByLibraryRootIdDb
 } from "../repositories/album-repository.js";
 import { findLibraryRootByIdDb, listLibraryRootsDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
@@ -102,6 +102,8 @@ const scanFolderAlbum = async (
   const folderMtime = String(Math.trunc(folderStats.mtimeMs));
 
 
+  const existingAlbum = existingBySourcePath.get(folderPath);
+  const existingAssets = new Map((existingAlbum ? listAssetsByAlbumIdDb(existingAlbum.id) : []).map((asset) => [asset.sourcePath, asset]));
   const folderEntries = await fs.promises.readdir(folderPath, { withFileTypes: true });
   const fileEntries = folderEntries.filter((entry) => !entry.isDirectory());
   const imageFiles = await mapWithConcurrency(fileEntries, 12, async (entry) => {
@@ -116,7 +118,10 @@ const scanFolderAlbum = async (
     }
 
     let dimensions: { width: number | null; height: number | null };
-    try {
+    const existing = existingAssets.get(fullPath);
+    if (existing?.width && existing.height && existing.sizeBytes === String(stats.size) && existing.sourceMtime === String(stats.mtimeMs)) {
+      dimensions = { width: existing.width, height: existing.height };
+    } else try {
       dimensions = normalizeMetadataDimensions(await createSharp(fullPath).metadata());
       if (!dimensions.width || !dimensions.height) throw new Error("图片元数据不可用");
     } catch (error) {
@@ -165,6 +170,13 @@ const scanZipAlbum = async (
   const zipStats = await fs.promises.stat(zipPath);
   const zipMtime = String(zipStats.mtimeMs);
 
+  const existing = existingBySourcePath.get(zipPath);
+  if (existing?.assetsFingerprint && existing.sourceMtime === zipMtime) {
+    return {
+      name: existing.name, sourceType: "zip", sourcePath: zipPath, sourceMtime: zipMtime,
+      libraryRootPath, reuseExisting: true, reuseAssetCount: existing.assetCount, assets: []
+    };
+  }
   const entries = await listRootImageEntries(zipPath);
   if (entries.length === 0) {
     return null;
@@ -337,7 +349,8 @@ const shouldReplaceAlbum = (
       current.zipEntryPath !== next.zipEntryPath ||
       current.sortIndex !== next.sortIndex ||
       current.sizeBytes !== next.sizeBytes ||
-      current.sourceMtime !== next.sourceMtime
+      current.sourceMtime !== next.sourceMtime ||
+      current.width !== next.width || current.height !== next.height
     ) {
       return true;
     }
@@ -409,7 +422,7 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
       const assetsFingerprint = buildAssetsFingerprint(discoveredAlbum.assets);
 
       if (
-        existingAlbum &&
+        existingAlbum && discoveredAlbum.sourceType === "zip" &&
         existingAlbum.name === discoveredAlbum.name &&
         existingAlbum.sourceType === discoveredAlbum.sourceType &&
         existingAlbum.assetCount === assets.length &&
@@ -476,10 +489,11 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
     flushBatch();
 
     failureCount += failedScopes.size;
-    for (const existing of existingAlbums) {
-      const failed = [...failedScopes].some((scope) => existing.sourcePath === scope || existing.sourcePath.startsWith(scope + path.sep));
-      updateAlbumScanStatusDb(existing.id, failed ? "error" : "ready", failed ? "部分扫描失败，已跳过清理，请检查媒体目录后重试" : null);
-    }
+    const scopes = [...failedScopes];
+    updateAlbumScanStatusBatchDb(existingAlbums.map((existing) => {
+      const failed = scopes.some((scope) => existing.sourcePath === scope || existing.sourcePath.startsWith(scope + path.sep));
+      return { albumId: existing.id, status: failed ? "error" : "ready", message: failed ? "部分扫描失败，已跳过清理，请检查媒体目录后重试" : null };
+    }));
     const removedAlbumIds = (failedScopes.size ? [] : existingAlbums)
       .filter((album) => !discoveredSourcePaths.has(album.sourcePath))
       .map((album) => album.id);
@@ -519,66 +533,84 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
   };
 };
 
-export const rescanAlbum = async (albumId: string) => {
-  const existingAlbum = findAlbumByIdDb(albumId);
-  if (!existingAlbum) {
-    throw new ScanAlbumNotFoundError(albumId);
-  }
-
+const prepareAlbumRescan = async (existingAlbum: AlbumRecord) => {
   const libraryRoot = findLibraryRootByIdDb(existingAlbum.libraryRootId);
-  if (!libraryRoot) {
-    throw new ScanLibraryRootNotFoundError(existingAlbum.libraryRootId);
-  }
-
+  if (!libraryRoot) throw new ScanLibraryRootNotFoundError(existingAlbum.libraryRootId);
   const timestamp = nowIso();
-  const existingBySourcePath = new Map<string, AlbumRecord>();
-  const discoveredAlbum =
-    existingAlbum.sourceType === "zip"
-      ? await scanZipAlbum(libraryRoot.path, existingAlbum.sourcePath, existingBySourcePath)
-      : await scanFolderAlbum(libraryRoot.path, existingAlbum.sourcePath, existingBySourcePath);
-
-  if (!discoveredAlbum) {
-    throw new ScanAlbumSourceInvalidError(albumId, existingAlbum.sourcePath);
-  }
-
-  const assets = discoveredAlbum.assets.map((asset) => toAssetRecord(existingAlbum.id, timestamp, asset));
-  const assetsFingerprint = buildAssetsFingerprint(discoveredAlbum.assets);
-
-  const album: AlbumRecord = {
-    id: existingAlbum.id,
-    libraryRootId: existingAlbum.libraryRootId,
-    name: discoveredAlbum.name,
-    sourceType: discoveredAlbum.sourceType,
-    sourcePath: discoveredAlbum.sourcePath,
-    sourceMtime: discoveredAlbum.sourceMtime,
-    assetsFingerprint,
-    coverAssetId: assets[0]?.id ?? null,
-    assetCount: assets.length,
-    scanStatus: "ready",
-    errorMessage: null,
-    isFavorite: existingAlbum.isFavorite ?? false,
-    createdAt: existingAlbum.createdAt,
-    updatedAt: timestamp
-  };
-
-  applyLibraryRootScanDiffDb({
-    removedAlbumIds: [],
-    replacedAlbums: [
-      {
-        existingAlbumId: existingAlbum.id,
-        album,
-        assets
-      }
-    ]
-  });
-
-  await runPostLibraryScanTasks();
-
+  const existingBySourcePath = new Map([[existingAlbum.sourcePath, existingAlbum]]);
+  const discovered = existingAlbum.sourceType === "zip"
+    ? await scanZipAlbum(libraryRoot.path, existingAlbum.sourcePath, existingBySourcePath)
+    : await scanFolderAlbum(libraryRoot.path, existingAlbum.sourcePath, existingBySourcePath);
+  if (!discovered) return null;
+  if (discovered.reuseExisting) return { album: existingAlbum, assets: [], reused: true };
+  const assets = discovered.assets.map((asset) => toAssetRecord(existingAlbum.id, timestamp, asset));
   return {
-    albumId: existingAlbum.id,
-    name: album.name,
-    assetCount: assets.length
+    album: { ...existingAlbum, name: discovered.name, sourceMtime: discovered.sourceMtime,
+      assetsFingerprint: buildAssetsFingerprint(discovered.assets),
+      coverAssetId: assets.some((asset) => asset.id === existingAlbum.coverAssetId) ? existingAlbum.coverAssetId : assets[0]?.id ?? null,
+      assetCount: assets.length, scanStatus: "ready", errorMessage: null, updatedAt: timestamp } satisfies AlbumRecord,
+    assets, reused: false
   };
+};
+
+export const rescanAlbum = async (albumId: string) => {
+  const existing = findAlbumByIdDb(albumId);
+  if (!existing) throw new ScanAlbumNotFoundError(albumId);
+  const prepared = await prepareAlbumRescan(existing);
+  if (!prepared) throw new ScanAlbumSourceInvalidError(albumId, existing.sourcePath);
+  if (!prepared.reused) applyLibraryRootScanDiffDb({ removedAlbumIds: [], replacedAlbums: [{ existingAlbumId: albumId, ...prepared }] });
+  updateAlbumScanStatusBatchDb([{ albumId, status: "ready", message: null }]);
+  await runPostLibraryScanTasks();
+  return { albumId, name: prepared.album.name, assetCount: prepared.album.assetCount };
+};
+
+// ENOENT 也可能是挂载丢失：只有可读的图库祖先确认子路径消失才允许删除。
+const isSourceConfirmedRemoved = async (album: AlbumRecord): Promise<boolean> => {
+  const root = findLibraryRootByIdDb(album.libraryRootId);
+  if (!root) return false;
+  let candidate = album.sourcePath;
+  while (candidate !== root.path && candidate.startsWith(root.path + path.sep)) {
+    const parent = path.dirname(candidate);
+    try { return !(await fs.promises.readdir(parent)).includes(path.basename(candidate)); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
+      candidate = parent;
+    }
+  }
+  return false;
+};
+
+export const rescanAlbums = async (albumIds: string[]): Promise<{ rescanned: number; removed: number; failed: number }> => {
+  const ids = [...new Set(albumIds)];
+  const result = { rescanned: 0, removed: 0, failed: 0 };
+  for (let offset = 0; offset < ids.length; offset += 200) {
+    const diff: Parameters<typeof applyLibraryRootScanDiffDb>[0] = { removedAlbumIds: [], replacedAlbums: [] };
+    const statuses: Parameters<typeof updateAlbumScanStatusBatchDb>[0] = [];
+    for (const albumId of ids.slice(offset, offset + 200)) {
+      const existing = findAlbumByIdDb(albumId);
+      if (!existing) continue;
+      try {
+        const prepared = await prepareAlbumRescan(existing);
+        if (!prepared) { diff.removedAlbumIds.push(albumId); result.removed += 1; }
+        else {
+          if (!prepared.reused) diff.replacedAlbums.push({ existingAlbumId: albumId, ...prepared });
+          statuses.push({ albumId, status: "ready", message: null });
+          result.rescanned += 1;
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT" && await isSourceConfirmedRemoved(existing)) {
+          diff.removedAlbumIds.push(albumId); result.removed += 1;
+        } else {
+          statuses.push({ albumId, status: "error", message: "部分扫描失败，已保留旧索引，请检查媒体目录后重试" });
+          result.failed += 1;
+        }
+      }
+    }
+    if (diff.removedAlbumIds.length || diff.replacedAlbums.length) applyLibraryRootScanDiffDb(diff);
+    updateAlbumScanStatusBatchDb(statuses);
+  }
+  await runPostLibraryScanTasks();
+  return result;
 };
 
 export const ensureScannedLibrary = async () => {

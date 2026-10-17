@@ -183,3 +183,44 @@ test("目录 mtime 不变时全量扫描验证子文件元数据和集合，更�
     assert.equal(listAssetsByAlbumIdDb(data.album.id).length, 1);
   } finally { await data.cleanup(); }
 });
+
+test("连续扫描未变更图集：第二次 sharp.metadata 与 ZIP 打开次数均为零", async (context) => {
+  const data = await fixture();
+  const { default: yauzl } = await import("yauzl");
+  try {
+    const archive = path.join(data.directory, "unchanged.zip");
+    assert.equal(spawnSync(path7za, ["a", "-tzip", archive, data.image]).status, 0);
+    await scanLibrary({ libraryRootId: data.id });
+    const metadata = context.mock.method(sharp.prototype, "metadata");
+    const open = context.mock.method(yauzl, "open");
+    const result = await scanLibrary({ libraryRootId: data.id });
+    assert.equal(metadata.mock.callCount(), 0);
+    assert.equal(open.mock.callCount(), 0);
+    assert.equal(result.assetsDiscovered, 2);
+    assert.equal(listAssetsByAlbumIdDb(data.album.id)[0].width, 16);
+    await fs.promises.utimes(archive, new Date(), new Date(Date.now() + 4000));
+    await scanLibrary({ libraryRootId: data.id });
+    assert.ok(open.mock.callCount() > 0);
+  } finally { context.mock.restoreAll(); await data.cleanup(); }
+});
+
+test("定向批量重扫删除空图集和消失的目录，单图失败保留旧索引且不阻断其他图集", async () => {
+  const { rescanAlbums } = await import("./library-scanner.js");
+  const data = await fixture();
+  try {
+    const otherFolder = path.join(data.directory, "other");
+    await fs.promises.mkdir(otherFolder);
+    await fs.promises.copyFile(data.image, path.join(otherFolder, "page.png"));
+    await scanLibrary({ libraryRootId: data.id });
+    const other = listAlbumsByLibraryRootIdDb(data.id).find((album) => album.sourcePath === otherFolder)!;
+    await fs.promises.writeFile(data.image, "broken");
+    await fs.promises.rm(otherFolder, { recursive: true });
+    assert.deepEqual(await rescanAlbums([data.album.id, other.id]), { rescanned: 0, removed: 1, failed: 1 });
+    assert.equal(findAlbumByIdDb(other.id), null);
+    assert.equal(findAlbumByIdDb(data.album.id)?.scanStatus, "error");
+    assert.equal(listAssetsByAlbumIdDb(data.album.id).length, 1);
+    await fs.promises.rm(data.image);
+    assert.deepEqual(await rescanAlbums([data.album.id]), { rescanned: 0, removed: 1, failed: 0 });
+    assert.equal(findAlbumByIdDb(data.album.id), null);
+  } finally { await data.cleanup(); }
+});

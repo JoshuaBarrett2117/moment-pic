@@ -404,6 +404,7 @@ function AuthenticatedMomentPicApp() {
               }
             >
               <GalleryScreen
+                showContinueReading={galleryViewMode === "albums" && !isRecentActive}
                 displayMode={galleryViewMode}
                 albums={galleryScreenModel.albums}
                 isLoading={galleryScreenModel.isLoading}

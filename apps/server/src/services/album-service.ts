@@ -82,7 +82,7 @@ export const clearAlbumListCache = () => {
   albumListCache.clear();
 };
 
-const toAlbumListItem = (row: AlbumRecord): AlbumListItemDTO => ({
+export const toAlbumListItem = (row: AlbumRecord): AlbumListItemDTO => ({
   id: row.id,
   name: row.name,
   sourceType: row.sourceType,

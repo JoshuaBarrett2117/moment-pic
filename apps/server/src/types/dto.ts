@@ -268,3 +268,15 @@ export type SharedAlbumAuthDTO = {
   name: string;
   expiresAt: string;
 };
+
+export type AlbumProgressDTO = {
+  assetId: string;
+  /** 0 基页序；由服务端资产 sortIndex - 1 校验。 */
+  assetIndex: number;
+  total: number;
+  updatedAt: string;
+  finished: boolean;
+};
+
+/** 继续阅读列表过滤已读完的图集；单图集 progress 仍返回 finished=true。 */
+export type ContinueReadingDTO = { album: AlbumListItemDTO; progress: AlbumProgressDTO };

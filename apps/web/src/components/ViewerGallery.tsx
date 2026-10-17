@@ -26,6 +26,10 @@ interface ViewerGalleryProps {
   onClose: () => void;
   onRequestNextAlbum?: () => void;
   onRequestMoreItems?: () => Promise<boolean>;
+  onRequestPreviousItems?: () => Promise<boolean>;
+  hasPreviousItems?: boolean;
+  totalItems?: number;
+  onAssetChange?: (assetId: string, assetIndex: number) => void;
   hasMoreItems?: boolean;
   isLoadingMoreItems?: boolean;
   initialIndex?: number;
@@ -40,6 +44,10 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   onClose,
   onRequestNextAlbum,
   onRequestMoreItems,
+  onRequestPreviousItems,
+  hasPreviousItems = false,
+  totalItems,
+  onAssetChange,
   hasMoreItems = false,
   isLoadingMoreItems = false,
   initialIndex = 0,
@@ -64,7 +72,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       }));
   }, [safeItems]);
 
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(() => resolveViewerInitialIndex(initialIndex, images.length) ?? 0);
   const [showControls, setShowControls] = useState(false);
   const [isImageLoading, setIsImageLoading] = useState(true);
   const [showEndPrompt, setShowEndPrompt] = useState(false);
@@ -72,6 +80,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const [showQualityPanel, setShowQualityPanel] = useState(false);
   const [isRequestingMoreItems, setIsRequestingMoreItems] = useState(false);
   const [pendingAdvanceAfterLoad, setPendingAdvanceAfterLoad] = useState(false);
+  const [pendingRetreatAfterLoad, setPendingRetreatAfterLoad] = useState(false);
+  const previousImagesRef = useRef(images);
   const resetViewRef = useRef<() => void>(() => undefined);
   const hasInitializedOpenSessionRef = useRef(false);
 
@@ -79,14 +89,19 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     setIsImageLoading(true);
   }, []);
 
-  const goToPrev = useCallback(() => {
-    if (images.length === 0) {
+  const goToPrev = useCallback(async () => {
+    if (images.length === 0) return;
+    if (activeIndex === 0 && hasPreviousItems && onRequestPreviousItems) {
+      if (isLoadingMoreItems || isRequestingMoreItems) return;
+      setPendingRetreatAfterLoad(true); setIsRequestingMoreItems(true);
+      try { if (!(await onRequestPreviousItems())) setPendingRetreatAfterLoad(false); }
+      catch { setPendingRetreatAfterLoad(false); }
+      finally { setIsRequestingMoreItems(false); }
       return;
     }
-
     setActiveIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
     resetViewRef.current();
-  }, [images.length]);
+  }, [activeIndex, hasPreviousItems, images.length, isLoadingMoreItems, isRequestingMoreItems, onRequestPreviousItems]);
 
   const goToNext = useCallback(async () => {
     if (images.length === 0) {
@@ -174,12 +189,23 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   }, [defaultQualityPreset, images.length, initialIndex, isOpen, resetView]);
 
   useEffect(() => {
-    if (images.length === 0) {
-      return;
-    }
+    const previous = previousImagesRef.current;
+    previousImagesRef.current = images;
+    if (!images.length || previous === images) return;
+    setActiveIndex((prev) => {
+      const matched = images.findIndex((image) => image.id === previous[prev]?.id);
+      const index = matched >= 0 ? matched : resolveViewerIndexAfterImagesChange(prev, images.length) ?? 0;
+      return Math.max(0, Math.min(images.length - 1, index + (pendingAdvanceAfterLoad ? 1 : pendingRetreatAfterLoad ? -1 : 0)));
+    });
+    setPendingAdvanceAfterLoad(false); setPendingRetreatAfterLoad(false);
+    resetViewRef.current();
+  }, [images, pendingAdvanceAfterLoad, pendingRetreatAfterLoad]);
 
-    setActiveIndex((prev) => resolveViewerIndexAfterImagesChange(prev, images.length) ?? prev);
-  }, [images.length]);
+  useEffect(() => {
+    const image = images[activeIndex];
+    const asset = items.find((item) => item.id === image?.id);
+    if (isOpen && asset && hasInitializedOpenSessionRef.current) onAssetChange?.(asset.id, asset.sortIndex - 1);
+  }, [activeIndex, images, isOpen, items, onAssetChange]);
 
   useEffect(() => {
     saveViewerQualityPreset(qualityPreset);
@@ -233,18 +259,6 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       setShowQualityPanel(false);
     }
   }, [showControls]);
-
-  useEffect(() => {
-    if (!pendingAdvanceAfterLoad) {
-      return;
-    }
-
-    if (activeIndex < images.length - 1) {
-      setPendingAdvanceAfterLoad(false);
-      setActiveIndex((prev) => Math.min(prev + 1, images.length - 1));
-      resetView();
-    }
-  }, [activeIndex, images.length, pendingAdvanceAfterLoad, resetView]);
 
   const handleClose = useCallback(() => {
     setActiveIndex(0);
@@ -324,7 +338,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       />
 
       <div className="viewer-counter">
-        {activeIndex + 1} / {images.length} · {qualityLabel}
+        {totalItems ? (items.find((item) => item.id === currentImage.id)?.sortIndex ?? activeIndex + 1) : activeIndex + 1} / {totalItems ?? images.length} · {qualityLabel}
       </div>
 
       {preloadHint && showControls && (

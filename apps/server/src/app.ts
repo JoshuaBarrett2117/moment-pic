@@ -7,6 +7,7 @@ import { env } from "./config/env.js";
 import { validateAdminPassword } from "./config/security.js";
 import { isAuthenticated } from "./lib/auth.js";
 import { isAllowedOrigin } from "./lib/origin.js";
+import { albumProgressRoutes } from "./routes/album-progress.js";
 import { albumRoutes } from "./routes/albums.js";
 import { authRoutes } from "./routes/auth.js";
 import { assetRoutes } from "./routes/assets.js";
@@ -104,6 +105,7 @@ export const buildApp = () => {
   app.register(healthRoutes);
   app.register(authRoutes);
   app.register(albumRoutes);
+  app.register(albumProgressRoutes);
   app.register(assetRoutes);
   app.register(scanRoutes);
   app.register(smartAlbumRoutes);

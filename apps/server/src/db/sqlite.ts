@@ -87,6 +87,16 @@ const bootstrap = (db: Database.Database) => {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS album_progress (
+      album_id TEXT PRIMARY KEY,
+      asset_id TEXT NOT NULL,
+      asset_index INTEGER NOT NULL,
+      total INTEGER NOT NULL,
+      updated_at TEXT NOT NULL,
+      CHECK (asset_index >= 0),
+      CHECK (total >= 0)
+    );
+
     CREATE TABLE IF NOT EXISTS album_views (
       id TEXT PRIMARY KEY,
       album_id TEXT NOT NULL,
@@ -194,6 +204,7 @@ const bootstrap = (db: Database.Database) => {
     CREATE INDEX IF NOT EXISTS idx_assets_album_id ON assets (album_id);
     CREATE INDEX IF NOT EXISTS idx_assets_album_sort ON assets (album_id, sort_index);
     CREATE INDEX IF NOT EXISTS idx_assets_thumbnail_key ON assets (thumbnail_key);
+    CREATE INDEX IF NOT EXISTS idx_album_progress_updated_at ON album_progress (updated_at);
     CREATE INDEX IF NOT EXISTS idx_album_views_album_id ON album_views (album_id);
     CREATE INDEX IF NOT EXISTS idx_album_views_viewed_at ON album_views (viewed_at);
     CREATE INDEX IF NOT EXISTS idx_album_shares_token ON album_shares (token);

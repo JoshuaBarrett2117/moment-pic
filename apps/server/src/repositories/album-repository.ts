@@ -1,3 +1,4 @@
+import { reconcileAlbumProgressDb } from "./album-progress-repository.js";
 import { getDb } from "../db/sqlite.js";
 import type { AlbumRecord, AlbumShareRecord, AssetRecord, ThumbnailRecord } from "../types/store.js";
 import { rowToAlbum, rowToAlbumShare, rowToAsset, rowToThumbnail } from "./sqlite-mappers.js";
@@ -41,6 +42,7 @@ export const applyLibraryRootScanDiffDb = (input: {
   const deleteThumbnailByAlbumId = db.prepare("DELETE FROM thumbnails WHERE asset_id IN (SELECT id FROM assets WHERE album_id = ?)");
   const deleteAssetsByAlbumId = db.prepare("DELETE FROM assets WHERE album_id = ?");
   const deleteAlbumById = db.prepare("DELETE FROM albums WHERE id = ?");
+  const deleteProgressByAlbumId = db.prepare("DELETE FROM album_progress WHERE album_id = ?");
   const deleteSharesByAlbumId = db.prepare("DELETE FROM album_shares WHERE album_id = ?");
   const insertAlbum = db.prepare(`
     INSERT INTO albums (id, library_root_id, name, source_type, source_path, source_mtime, assets_fingerprint, cover_asset_id, asset_count, scan_status, error_message, is_favorite, created_at, updated_at)
@@ -53,6 +55,7 @@ export const applyLibraryRootScanDiffDb = (input: {
 
   const transaction = db.transaction(() => {
     for (const albumId of input.removedAlbumIds) {
+      deleteProgressByAlbumId.run(albumId);
       deleteSharesByAlbumId.run(albumId);
       deleteThumbnailByAlbumId.run(albumId);
       deleteAssetsByAlbumId.run(albumId);
@@ -70,6 +73,7 @@ export const applyLibraryRootScanDiffDb = (input: {
       for (const asset of item.assets) {
         insertAsset.run(asset);
       }
+      reconcileAlbumProgressDb(item.album.id);
     }
   });
 
@@ -239,8 +243,10 @@ export const deleteAlbumDb = (albumId: string) => {
   const deleteThumbnail = db.prepare("DELETE FROM thumbnails WHERE asset_id IN (SELECT id FROM assets WHERE album_id = ?)");
   const deleteAsset = db.prepare("DELETE FROM assets WHERE album_id = ?");
   const deleteAlbum = db.prepare("DELETE FROM albums WHERE id = ?");
+  const deleteProgress = db.prepare("DELETE FROM album_progress WHERE album_id = ?");
   const deleteShares = db.prepare("DELETE FROM album_shares WHERE album_id = ?");
   const transaction = db.transaction(() => {
+    deleteProgress.run(albumId);
     deleteShares.run(albumId);
     deleteThumbnail.run(albumId);
     deleteAsset.run(albumId);
@@ -335,7 +341,7 @@ export const deleteAssetDb = (assetId: string) => {
       const newCoverAssetId = remainingAssets?.id ?? null;
       const newAssetCount = album.asset_count - 1;
       db.prepare("UPDATE albums SET cover_asset_id = ?, asset_count = ?, updated_at = ? WHERE id = ?")
-        .run(newCoverAssetId, newAssetCount, Date.now(), album.id);
+        .run(newCoverAssetId, newAssetCount, new Date().toISOString(), album.id);
     }
   });
   transaction();

@@ -5,6 +5,7 @@ import { Polaroid } from './Polaroid';
 import { getAssetThumbnailPresentation } from '../lib/asset-thumbnail';
 import { AlbumShareDialog } from './AlbumShareDialog';
 import { useToast } from './Toast';
+import { useAlbumReader } from '../hooks/use-album-reader';
 import { ViewerGallery } from './ViewerGallery';
 import { useAlbumAssets, rescanAlbum, setAlbumFavorite, useMobile, useSystemConfig, useWideMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
@@ -23,13 +24,13 @@ const DEFAULT_PRELOAD_AFTER = 3;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
 
-export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onRequestNextAlbum }) => {
+export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onRequestNextAlbum, mode = "album" }) => {
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
   const { toast } = useToast();
-  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const reader = useAlbumReader(albumId, mode === "album");
   const [loadedItems, setLoadedItems] = useState<AssetListItemDTO[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
@@ -97,7 +98,6 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     setCurrentPage(0);
     setTotalItems(0);
     setVisibleRenderCount(RENDER_CHUNK_SIZE);
-    setSelectedImageIndex(null);
 
     if (albumId) {
       void loadPage(1, false);
@@ -202,14 +202,6 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     toast(result.isFavorite ? '已收藏图集' : '已取消收藏', 'success');
     setIsUpdatingFavorite(false);
   }, [albumId, assets?.album?.isFavorite, isUpdatingFavorite, loadPage, toast]);
-
-  const handleLoadMoreForViewer = useCallback(async (): Promise<boolean> => {
-    if (isLoadingMore || loadedItems.length >= totalItems) {
-      return false;
-    }
-
-    return loadPage(currentPage + 1, true);
-  }, [currentPage, isLoadingMore, loadedItems.length, loadPage, totalItems]);
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-surface">
@@ -334,6 +326,9 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           </header>
         )}
 
+        {reader.progress && <button onClick={() => void reader.open(reader.progress!.assetId, reader.progress!.assetIndex)} className="px-4 py-2 text-left text-sm text-primary md:px-12">继续上次第 {reader.progress.assetIndex + 1} 页</button>}
+        {reader.loading && !reader.session && <p role="status" className="px-4 text-sm text-outline md:px-12">正在定位阅读位置…</p>}
+        {reader.error && <p role="status" className="px-4 text-sm text-error md:px-12">{reader.error}</p>}
         <section
           ref={scrollContainerRef}
           className={isMobile ? mobileSectionClass : 'custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth md:px-12 md:py-8 md:pb-8'}
@@ -376,7 +371,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                     }}
                     className="group relative cursor-pointer"
                   >
-                    <div onClick={() => setSelectedImageIndex(index)}>
+                    <div onClick={() => void reader.open(asset.id, asset.sortIndex - 1)}>
                       <Polaroid {...getAssetThumbnailPresentation(asset)} caption="" rotation={(index % 5 - 2) * 1} className="w-full" />
                     </div>
                   </motion.div>
@@ -401,16 +396,21 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
         </footer>
       </main>
 
-      {selectedImageIndex !== null && (
+      {reader.session && (
         <ViewerGallery
-          items={loadedItems}
+          key={reader.session.key}
+          items={reader.session.items}
           isOpen
-          initialIndex={selectedImageIndex}
-          onClose={() => setSelectedImageIndex(null)}
+          initialIndex={reader.session.initialIndex}
+          onClose={reader.close}
           onRequestNextAlbum={onRequestNextAlbum}
-          onRequestMoreItems={handleLoadMoreForViewer}
-          hasMoreItems={hasMore}
-          isLoadingMoreItems={isLoadingMore}
+          onRequestMoreItems={reader.loadNext}
+          onRequestPreviousItems={reader.loadPrevious}
+          hasPreviousItems={reader.hasPrevious}
+          totalItems={reader.session.total}
+          onAssetChange={mode === "album" ? reader.savePosition : undefined}
+          hasMoreItems={reader.hasNext}
+          isLoadingMoreItems={reader.loading}
           defaultQualityPreset={systemConfig?.defaultImageQualityPreset ?? 'original'}
           preloadBefore={preloadBefore}
           preloadAfter={preloadAfter}

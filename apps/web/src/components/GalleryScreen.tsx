@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ContinueReading } from './ContinueReading';
 import { Sidebar } from './Sidebar';
 import { GalleryPagination } from './GalleryPagination';
 import { AlbumShareDialog } from './AlbumShareDialog';
@@ -20,6 +21,7 @@ import { useMobile, useSystemConfig, useWideMobile } from '../hooks';
 import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO, SmartAlbumListItemDTO, DirectoryAlbumNodeDTO, DirectoryAlbumBreadcrumbDTO } from '../types/api';
 
 interface GalleryScreenProps {
+  showContinueReading?: boolean;
   displayMode?: GalleryDisplayMode;
   albums: Array<AlbumListItemDTO | SmartAlbumListItemDTO | DirectoryAlbumNodeDTO>;
   isLoading: boolean;
@@ -77,6 +79,7 @@ const DEFAULT_GALLERY_DISPLAY_MODE: GalleryDisplayMode = 'albums';
 const DEFAULT_GALLERY_SOURCE_TYPE: GallerySourceType = '';
 
 export const GalleryScreen: React.FC<GalleryScreenProps> = ({
+  showContinueReading = false,
   displayMode,
   albums,
   isLoading,
@@ -257,6 +260,7 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
           </div>
         )}
 
+        {showContinueReading && <ContinueReading onOpen={onNavigateToAlbum} />}
         <GalleryAlbumGrid
           albums={albums}
           renderedAlbums={renderedAlbums}

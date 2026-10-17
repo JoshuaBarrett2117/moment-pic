@@ -38,12 +38,14 @@ export const upsertLibraryRootDb = (root: LibraryRootRecord) => {
 export const deleteLibraryRootDb = (id: string) => {
   const db = getDb();
   const albumIds = db.prepare("SELECT id FROM albums WHERE library_root_id = ?").all(id) as Array<{ id: string }>;
+  const deleteProgress = db.prepare("DELETE FROM album_progress WHERE album_id = ?");
   const deleteThumbnail = db.prepare("DELETE FROM thumbnails WHERE asset_id IN (SELECT id FROM assets WHERE album_id = ?)");
   const deleteAsset = db.prepare("DELETE FROM assets WHERE album_id = ?");
   const deleteAlbum = db.prepare("DELETE FROM albums WHERE id = ?");
   const deleteLibraryRoot = db.prepare("DELETE FROM library_roots WHERE id = ?");
   const transaction = db.transaction(() => {
     for (const album of albumIds) {
+      deleteProgress.run(album.id);
       deleteThumbnail.run(album.id);
       deleteAsset.run(album.id);
       deleteAlbum.run(album.id);
@@ -87,11 +89,13 @@ export const updateLibraryRootDb = (id: string, updates: { name?: string; path?:
 export const clearLibraryDataDb = (libraryRootId: string) => {
   const db = getDb();
   const albumIds = db.prepare("SELECT id FROM albums WHERE library_root_id = ?").all(libraryRootId) as Array<{ id: string }>;
+  const deleteProgress = db.prepare("DELETE FROM album_progress WHERE album_id = ?");
   const deleteThumbnail = db.prepare("DELETE FROM thumbnails WHERE asset_id IN (SELECT id FROM assets WHERE album_id = ?)");
   const deleteAsset = db.prepare("DELETE FROM assets WHERE album_id = ?");
   const deleteAlbum = db.prepare("DELETE FROM albums WHERE id = ?");
   const transaction = db.transaction(() => {
     for (const album of albumIds) {
+      deleteProgress.run(album.id);
       deleteThumbnail.run(album.id);
       deleteAsset.run(album.id);
       deleteAlbum.run(album.id);
@@ -103,6 +107,7 @@ export const clearLibraryDataDb = (libraryRootId: string) => {
 export const clearLibraryCatalogDb = () => {
   const db = getDb();
   const transaction = db.transaction(() => {
+    db.prepare("DELETE FROM album_progress").run();
     db.prepare("DELETE FROM album_views").run();
     db.prepare("DELETE FROM thumbnails").run();
     db.prepare("DELETE FROM assets").run();

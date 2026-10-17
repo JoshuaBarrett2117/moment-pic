@@ -34,7 +34,7 @@
 
 ## 待验证项
 
-后续四项尚未交付；Docker 未构建，镜像体积和镜像内运行效果未验证；浏览器验证在 UI 实现后记录。
+截至第 3 项，后续 GC 与运维项尚未交付；Docker 未构建，镜像体积和镜像内运行效果未验证；浏览器验证在 UI 实现后记录。
 
 ## 2. 等比缩略图与有界尺寸回填（实现及自动验证完成，缺浏览器验证）
 
@@ -60,3 +60,21 @@
 验证：`npm run test:server` 167/167，之后补充 fit 协议用例并运行 `node --import ./scripts/test-isolation.mjs --import tsx --test apps/server/src/routes/assets.test.ts` 4/4；`npm run build:server`、`npm run build:web`、`npx tsc --noEmit -p apps/web/tsconfig.json` 通过；`npm run test:web` 最终 87/87。日志：`/opt/data/cache/momentpic-opt-step-2-tests.log`。中间 SSR 测试因 react-cool-img 在 Node 下默认导出互操作失败（85/86）；未掩盖失败，改为测试实际使用的比例/URL selector 后通过。
 
 浏览器：实际尝试 playwright-core 启动本机 Chromium，得到 `executable doesn't exist`；安装目录只有 ABOUT/LICENSE。未执行真实浏览器视觉/滚动 CLS 验证，不能将“首屏与滚动无跳动”标为完全验收。自动测试只能确认预留比例逻辑；最终仍需有浏览器环境验证。
+
+## 3. 阅读进度与继续阅读（实现及自动验证完成，缺浏览器验证）
+
+服务端文件：`db/sqlite.ts`、`repositories/album-progress-repository.ts`（新增）、`repositories/album-repository.ts`、`repositories/library-root-repository.ts`、`services/album-progress-service.ts`（新增）、`services/album-service.ts`、`routes/album-progress.ts`（新增）、`app.ts`、`types/dto.ts`。前端文件：`lib/album-progress.ts`（新增）、`hooks/use-album-reader.ts`（新增）、`hooks/use-continue-reading.ts`（新增）、`components/ContinueReading.tsx`（新增）、`components/ViewerGallery.tsx`、`components/AlbumDetailScreen.tsx`、`components/GalleryScreen.tsx`、`App.tsx`、`types/api.ts`。
+
+- 按 DBA DDL 新增 album_progress 和 updated_at 索引，无其它 schema 修改；bootstrap 幂等，时间统一 ISO。资产归属、0 基页序与服务端 sort_index-1 必须一致，total 读取图集资产数。continue JOIN 图集，按阅读时间倒序并排除已读完；单图 progress 保留 finished 状态，DTO 注释明确。
+- 所有图集删除、扫描清理、库根删除、清库入口在父删除事务内清理进度。重扫替换后同事务对账：稳定资产存在则重算下标/total、不改阅读时间，消失则删行。按 DBA 批准修复 deleteAssetDb 写图集时间使用 epoch 的既有问题，改为 ISO。
+- 查看器翻页 2 秒防抖保存，写入串行化，失败静默，关闭/卸载 flush 最后位置；已记录图集打开后直接加载目标页并定位稳定资产 ID，头部显示“继续上次第 N 页”。单独阅读 Hook 维护最多 3 页（72 张）窗口，前后翻页可请求相邻页并按稳定 ID 保持位置。
+- 首页“继续阅读”有数据才显示，点击打开图集并恢复进度。公开分享查看器没有传进度回调，分享路径没有新增写接口。
+
+新增测试文件/测试名：
+
+- `routes/album-progress.test.ts`：`进度 API：鉴权 401、空进度、upsert、越界/错误归属/错误页序 400、缺图集 404`；`continue 按阅读 ISO 时间倒序，排除读完但单图进度保留 finished`；`重扫对账：保留稳定资产进度、重算页序和 total、不改阅读时间，资产消失则清理`；`进度清理与父删除同事务：scan-remove/delete-root/clear-root/clear-catalog`（4例）。
+- `lib/album-progress.test.ts`：`阅读定位只请求第 N 张所属页，按稳定 assetId 定位而非错误旧下标`；`阅读进度 debounce 2 秒只保存最后页，flush 保存末页且失败静默`。
+- `hooks/use-album-reader.test.tsx`：`阅读控制器自动定位第 98 张，只取目标页；前后翻页窗口有界，关闭保存最后页`；`分享模式不读取或写入进度；离开图集后旧进度响应不能打开查看器`。
+- `components/continue-reading.test.tsx`：`首页继续阅读无数据时隐藏，有进度显示页码并点击进入原图集`。
+
+验证：`npm run test:server` 175/175；`npm run test:web` 最终 92/92，均 0 失败；`npm run build:server`、`npm run build:web`、`npx tsc --noEmit -p apps/web/tsconfig.json` 通过。日志：`/opt/data/cache/momentpic-opt-step-3-tests.log`。浏览器可执行文件缺失，真实查看器手势/视觉/移动端验收尚未执行，不能视作浏览器验收通过。

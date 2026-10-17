@@ -11,6 +11,8 @@ interface PolaroidProps {
   rotation?: number;
   className?: string;
   onClick?: () => void;
+  aspectRatio?: number;
+  fit?: "cover" | "inside";
 }
 
 export const Polaroid: React.FC<PolaroidProps> = ({ 
@@ -20,7 +22,9 @@ export const Polaroid: React.FC<PolaroidProps> = ({
   date, 
   rotation = 0, 
   className = '',
-  onClick
+  onClick,
+  aspectRatio = 1,
+  fit = "cover",
 }) => {
   const [hasError, setHasError] = useState(false);
 
@@ -31,7 +35,7 @@ export const Polaroid: React.FC<PolaroidProps> = ({
       className={`polaroid cursor-pointer transition-transform duration-500 ${className}`}
       onClick={onClick}
     >
-      <div className="relative overflow-hidden aspect-square rounded-sm mb-4">
+      <div className="relative overflow-hidden rounded-sm mb-4" style={{ aspectRatio }}>
         {hasError ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-surface-container text-outline">
             <ImageOff className="h-8 w-8" />
@@ -42,7 +46,7 @@ export const Polaroid: React.FC<PolaroidProps> = ({
             src={src} 
             alt={alt} 
             referrerPolicy="no-referrer"
-            className="w-full h-full object-cover"
+            className={`absolute inset-0 w-full h-full ${fit === "inside" ? "object-contain" : "object-cover"}`}
             onError={() => setHasError(true)}
           />
         )}

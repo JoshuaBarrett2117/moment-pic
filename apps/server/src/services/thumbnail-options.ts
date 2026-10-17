@@ -7,6 +7,7 @@ export const DEFAULT_THUMBNAIL_HEIGHT = 360;
 export const MIN_THUMBNAIL_SIZE = 80;
 export const MAX_THUMBNAIL_SIZE = 720;
 
+export type ThumbnailFit = "cover" | "inside";
 export type ThumbnailFormat = "webp" | "jpeg";
 export type PreviewPreset = "low" | "balanced" | "high";
 export type ImageVariantKind = "thumbnail" | "preview";
@@ -41,10 +42,11 @@ export const buildCacheKey = (input: {
   height: number;
   format: ThumbnailFormat;
   quality: number;
+  fit?: ThumbnailFit;
 }) =>
   crypto
     .createHash("sha1")
-    .update(`${input.kind}|${input.sourcePath}|${input.zipEntryPath ?? ""}|${input.sourceMtime ?? ""}|${input.width}x${input.height}|${input.format}|q${input.quality}|v4`)
+    .update(`${input.kind}|${input.sourcePath}|${input.zipEntryPath ?? ""}|${input.sourceMtime ?? ""}|${input.width}x${input.height}|${input.format}|q${input.quality}|fit=${input.fit ?? (input.kind === "preview" ? "inside" : "cover")}|v5`)
     .digest("hex");
 
 export const sanitizeDimension = (value: number | undefined, fallback: number) => {

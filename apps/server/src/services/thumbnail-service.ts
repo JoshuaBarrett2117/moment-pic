@@ -25,6 +25,7 @@ import {
   resolveThumbnailFormat,
   resolveThumbnailSize,
   type PreviewPreset,
+  type ThumbnailFit,
   type ThumbnailFormat
 } from "./thumbnail-options.js";
 
@@ -45,6 +46,7 @@ const ensureCacheDir = async () => {
 export const ensureThumbnail = async (
   assetId: string,
   input?: {
+    fit?: ThumbnailFit;
     width?: number;
     height?: number;
     format?: ThumbnailFormat;
@@ -60,8 +62,10 @@ export const ensureThumbnail = async (
   const { width, height } = resolveThumbnailSize(input);
   const format = resolveThumbnailFormat(input?.format);
   const quality = format === "webp" ? 80 : 82;
+  const fit = input?.fit ?? "cover";
   const cacheKey = buildCacheKey({
     kind: "thumbnail",
+    fit,
     sourcePath: asset.sourcePath,
     zipEntryPath: asset.zipEntryPath,
     sourceMtime: asset.sourceMtime,
@@ -71,13 +75,14 @@ export const ensureThumbnail = async (
     quality
   });
   const dedupeKey = cacheKey;
-  if (input?.signal) return ensureThumbnailVariant({ asset, width, height, format, cacheKey, quality, signal: input.signal });
+  if (input?.signal) return ensureThumbnailVariant({ fit, asset, width, height, format, cacheKey, quality, signal: input.signal });
   const inFlight = inFlightVariantTasks.get(dedupeKey);
   if (inFlight) {
     return inFlight;
   }
 
   const task = ensureThumbnailVariant({
+    fit,
     asset,
     width,
     height,

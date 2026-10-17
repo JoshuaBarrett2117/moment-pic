@@ -238,3 +238,16 @@ test("thumbnail route falls back to streaming the original body when thumbnail g
     await fs.promises.rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("thumbnail fit 白名单拒绝非法值，cover/inside 可通过协议校验", async () => {
+  const app = Fastify();
+  try {
+    await app.register(assetRoutes);
+    for (const fit of ["stretch", "", "cover&fit=inside"]) {
+      assert.equal((await app.inject({ url: `/api/v1/assets/missing/thumbnail?fit=${fit}` })).statusCode, 400);
+    }
+    for (const fit of ["cover", "inside"]) {
+      assert.equal((await app.inject({ url: `/api/v1/assets/missing/thumbnail?fit=${fit}` })).statusCode, 404);
+    }
+  } finally { await app.close(); }
+});

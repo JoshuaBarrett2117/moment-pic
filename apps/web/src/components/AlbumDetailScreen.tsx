@@ -2,6 +2,7 @@ import { type FC, useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, RefreshCw, Share2, Star } from 'lucide-react';
 import { Polaroid } from './Polaroid';
+import { getAssetThumbnailPresentation } from '../lib/asset-thumbnail';
 import { AlbumShareDialog } from './AlbumShareDialog';
 import { useToast } from './Toast';
 import { ViewerGallery } from './ViewerGallery';
@@ -376,7 +377,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                     className="group relative cursor-pointer"
                   >
                     <div onClick={() => setSelectedImageIndex(index)}>
-                      <Polaroid src={asset.thumbnailUrl} caption="" rotation={(index % 5 - 2) * 1} className="w-full" />
+                      <Polaroid {...getAssetThumbnailPresentation(asset)} caption="" rotation={(index % 5 - 2) * 1} className="w-full" />
                     </div>
                   </motion.div>
                 ))}

@@ -390,3 +390,15 @@ export const listAssetNamesByAlbumIdDb = (albumId: string): string[] => {
   const rows = db.prepare("SELECT name FROM assets WHERE album_id = ? ORDER BY sort_index ASC").all(albumId) as Array<{ name: string }>;
   return rows.map((row) => row.name);
 };
+
+/** 只回填缺失尺寸，不触碰缩略图键及图集时间；媒体探测必须在调用前结束。 */
+export const updateAssetDimensionsDb = (updates: Array<{ assetId: string; width: number; height: number }>): number => {
+  const db = getDb();
+  const statement = db.prepare(`UPDATE assets SET width=@width, height=@height, updated_at=@updatedAt
+    WHERE id=@assetId AND (width IS NULL OR height IS NULL)`);
+  const updatedAt = new Date().toISOString();
+  const writeBatch = db.transaction((batch: typeof updates) => batch.reduce((count, update) => count + statement.run({ ...update, updatedAt }).changes, 0));
+  let changed = 0;
+  for (let offset = 0; offset < updates.length; offset += 500) changed += writeBatch(updates.slice(offset, offset + 500));
+  return changed;
+};

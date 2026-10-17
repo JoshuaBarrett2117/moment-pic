@@ -96,7 +96,9 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/v1/assets/:assetId/thumbnail", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
     const signal = mediaRequestSignal(request, reply);
-    const query = request.query as { w?: string; h?: string; format?: "webp" | "jpeg" };
+    const query = request.query as { w?: string; h?: string; fit?: string; format?: "webp" | "jpeg" };
+    const fit = parseEnumValue(query.fit, ["cover", "inside"] as const);
+    if (query.fit !== undefined && !fit) return reply.status(400).send({ code: 4006, message: "fit must be cover or inside" });
     const requestedWidth = query.w ? parseBoundedInteger(query.w, { defaultValue: 0, min: 1, max: 4096 }) : undefined;
     const requestedHeight = query.h ? parseBoundedInteger(query.h, { defaultValue: 0, min: 1, max: 4096 }) : undefined;
     const acceptHeader = normalizeHeader(request.headers.accept) ?? "";
@@ -119,6 +121,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
     try {
       try {
         const thumbnail = await ensureThumbnail(assetId, {
+          fit,
           width: requestedWidth,
           height: requestedHeight,
           format: preferredFormat,

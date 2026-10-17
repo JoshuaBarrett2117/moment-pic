@@ -5,6 +5,7 @@ import { isSupportedImageExtension } from "../lib/image-formats.js";
 import { createLogger } from "../lib/logger.js";
 import { normalizeExtension, toPosixPath } from "../lib/paths.js";
 import { nowIso } from "../lib/time.js";
+import { headerDimensions } from "./thumbnail/header-dimensions.js";
 import { createSharp } from "./thumbnail/sharp-runtime.js";
 import { normalizeMetadataDimensions } from "./thumbnail-options.js";
 import type { AlbumRecord, AssetRecord, LibraryRootRecord, SourceType } from "../types/store.js";
@@ -183,6 +184,7 @@ const scanZipAlbum = async (
   }
 
   entries.sort((left, right) => sortNames(left.name, right.name));
+  const dimensions = await headerDimensions.fill(entries.map((entry) => ({ sourceType: "zip", sourcePath: zipPath, zipEntryPath: entry.entryPath, sourceMtime: zipMtime, sizeBytes: String(entry.sizeBytes) })));
 
   return {
     name: path.basename(zipPath, path.extname(zipPath)),
@@ -193,6 +195,7 @@ const scanZipAlbum = async (
     reuseExisting: false,
     reuseAssetCount: 0,
     assets: entries.map((entry, index) => ({
+      ...dimensions[index],
       name: entry.name,
       extension: entry.extension,
       sourceType: "zip" as const,

@@ -224,3 +224,30 @@ test("定向批量重扫删除空图集和消失的目录，单图失败保留�
     assert.equal(findAlbumByIdDb(data.album.id), null);
   } finally { await data.cleanup(); }
 });
+
+test("新 ZIP 扫描填尺寸，旧 NULL 仅按当页回填且失败不写库、不改缩略图键", async () => {
+  const { getDb } = await import("../db/sqlite.js");
+  const { getAlbumAssets } = await import("./album-service.js");
+  const data = await fixture();
+  try {
+    const archive = path.join(data.directory, "dimension.zip");
+    await fs.promises.copyFile(data.image, path.join(data.folder, "second.png"));
+    await fs.promises.writeFile(path.join(data.folder, "bad.jpg"), "broken header");
+    assert.equal(spawnSync(path7za, ["a", "-tzip", archive, path.join(data.folder, "*.png"), path.join(data.folder, "bad.jpg")]).status, 0);
+    await scanLibrary({ libraryRootId: data.id });
+    const album = listAlbumsByLibraryRootIdDb(data.id).find((item) => item.sourcePath === archive)!;
+    assert.ok(album);
+    const images = listAssetsByAlbumIdDb(album.id);
+    assert.equal(images.find((item) => item.name === "page.png")?.width, 16);
+    getDb().prepare("UPDATE assets SET width=NULL, height=NULL, thumbnail_key='keep-key' WHERE album_id=?").run(album.id);
+    const page = await getAlbumAssets(album.id, 2, 1);
+    assert.equal(page?.items[0].width, 16);
+    const after = listAssetsByAlbumIdDb(album.id);
+    assert.equal(after.filter((item) => item.width !== null).length, 1);
+    assert.ok(after.every((item) => item.thumbnailKey === "keep-key"));
+    const bad = await getAlbumAssets(album.id, 1, 1);
+    assert.equal(bad?.items[0].width, null);
+    const plan = getDb().prepare("EXPLAIN QUERY PLAN SELECT * FROM assets WHERE album_id=? ORDER BY sort_index LIMIT 1").all(album.id);
+    assert.ok(JSON.stringify(plan).includes("idx_assets_album_sort"));
+  } finally { await data.cleanup(); }
+});

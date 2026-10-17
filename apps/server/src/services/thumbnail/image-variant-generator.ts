@@ -11,6 +11,7 @@ import {
   DEFAULT_THUMBNAIL_WIDTH,
   type PreviewPreset,
   PREVIEW_PRESET_OPTIONS,
+  type ThumbnailFit,
   type ThumbnailFormat
 } from "../thumbnail-options.js";
 import { readOriginalSharpInput } from "./original-image-source.js";
@@ -62,6 +63,7 @@ const writeVariantFile = async (
 };
 
 export const ensureThumbnailVariant = async (input: {
+  fit?: ThumbnailFit;
   asset: AssetRecord;
   width: number;
   height: number;
@@ -70,8 +72,9 @@ export const ensureThumbnailVariant = async (input: {
   quality: number;
   signal?: AbortSignal;
 }): Promise<ImageVariantResult> => {
+  const fit = input.fit ?? "cover";
   const isDefaultSize = input.width === DEFAULT_THUMBNAIL_WIDTH && input.height === DEFAULT_THUMBNAIL_HEIGHT;
-  const canUseDbRecord = isDefaultSize && input.format === "jpeg";
+  const canUseDbRecord = isDefaultSize && input.format === "jpeg" && fit === "cover";
   const filePath = getFilePath(input.cacheKey, input.format);
   const existing = canUseDbRecord ? findThumbnailByAssetIdDb(input.asset.id) : null;
 
@@ -141,8 +144,8 @@ export const ensureThumbnailVariant = async (input: {
       let finalCacheKey = input.cacheKey;
 
       try {
-        const pipeline = createSharp(sharpInput).resize(input.width, input.height, {
-          fit: "cover",
+        const pipeline = createSharp(sharpInput).rotate().resize(input.width, input.height, {
+          fit,
           position: "centre"
         });
         if (input.format === "webp") {
@@ -157,6 +160,7 @@ export const ensureThumbnailVariant = async (input: {
         finalFormat = "jpeg";
         finalCacheKey = buildCacheKey({
           kind: "thumbnail",
+          fit,
           sourcePath: input.asset.sourcePath,
           zipEntryPath: input.asset.zipEntryPath,
           sourceMtime: input.asset.sourceMtime,
@@ -168,8 +172,9 @@ export const ensureThumbnailVariant = async (input: {
         finalFilePath = getFilePath(finalCacheKey, "jpeg");
         await writeVariantFile(finalFilePath, (targetPath) =>
           createSharp(sharpInput)
+            .rotate()
             .resize(input.width, input.height, {
-              fit: "cover",
+              fit,
               position: "centre"
             })
             .jpeg({ quality: input.quality })
@@ -246,7 +251,7 @@ export const ensurePreviewVariant = async (input: {
       let finalCacheKey = input.cacheKey;
 
       try {
-        const pipeline = createSharp(sharpInput).resize(presetOptions.maxWidth, presetOptions.maxHeight, {
+        const pipeline = createSharp(sharpInput).rotate().resize(presetOptions.maxWidth, presetOptions.maxHeight, {
           fit: "inside",
           withoutEnlargement: true
         });
@@ -273,6 +278,7 @@ export const ensurePreviewVariant = async (input: {
         finalFilePath = getFilePath(finalCacheKey, "jpeg");
         await writeVariantFile(finalFilePath, (targetPath) =>
           createSharp(sharpInput)
+            .rotate()
             .resize(presetOptions.maxWidth, presetOptions.maxHeight, {
               fit: "inside",
               withoutEnlargement: true

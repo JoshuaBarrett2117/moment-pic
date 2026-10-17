@@ -362,3 +362,25 @@ test("ensurePreview regenerates zero byte preview cache files", async () => {
     await fs.promises.rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("inside 缩略图保留原图比例，cover/inside 使用不同 v5 缓存文件且仅 cover 入库", async () => {
+  const { findThumbnailByAssetIdDb, deleteAlbumDb } = await import("../repositories/album-repository.js");
+  const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), "thumbnail-fit-"));
+  const id = crypto.randomUUID();
+  const sourcePath = path.join(directory, "portrait.png");
+  const timestamp = new Date().toISOString();
+  try {
+    await sharp({ create: { width: 120, height: 300, channels: 3, background: "red" } }).png().toFile(sourcePath);
+    const asset = createAssetRecord({ id, albumId: id, sourcePath });
+    insertAlbumWithAssetsDb({ id, libraryRootId: id, name: id, sourcePath: directory, sourceType: "folder", sourceMtime: null, assetsFingerprint: null, coverAssetId: id, assetCount: 1, scanStatus: "ready", errorMessage: null, createdAt: timestamp, updatedAt: timestamp }, [asset]);
+    const cover = await ensureThumbnail(id, { fit: "cover" });
+    const inside = await ensureThumbnail(id, { fit: "inside" });
+    const meta = await sharp(inside.filePath).metadata();
+    assert.ok(Math.abs(meta.width! - meta.height! * 120 / 300) <= 1);
+    assert.notEqual(cover.cacheKey, inside.cacheKey); assert.notEqual(cover.filePath, inside.filePath);
+    const coverMeta = await sharp(cover.filePath).metadata();
+    assert.equal(coverMeta.width, coverMeta.height);
+    assert.equal(findThumbnailByAssetIdDb(id)?.cacheKey, cover.cacheKey);
+    assert.equal((await ensureThumbnail(id, { fit: "inside" })).filePath, inside.filePath);
+  } finally { deleteAlbumDb(id); await fs.promises.rm(directory, { recursive: true, force: true }); }
+});

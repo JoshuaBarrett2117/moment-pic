@@ -8,7 +8,7 @@ import { toArchiveBody } from "./archive/archive-body.js";
 import { collectCbrImageEntries, readCbrBuffer, readCbrStream } from "./archive/cbr-reader.js";
 import { collect7zImageEntries, read7zBuffer, read7zStream } from "./archive/sevenzip-reader.js";
 import type { ArchiveImageEntry } from "./archive/archive-types.js";
-import { collectZipImageEntries, readZipBuffer, readZipStream } from "./archive/zip-reader.js";
+import { collectZipImageEntries, readZipBuffer, readZipStream, readZipHead } from "./archive/zip-reader.js";
 
 export { detectArchiveType } from "./archive-utils.js";
 export type { ArchiveImageEntry } from "./archive/archive-types.js";
@@ -98,4 +98,10 @@ export const openArchiveEntryBody = async (archivePath: string, entryPath: strin
   }
 
   throw new Error(`archive format stream reader is not implemented: ${archiveType}`);
+};
+
+/** 头部探测仅支持 ZIP；RAR/7z 保持既有解码通道。 */
+export const readArchiveEntryHead = async (archivePath: string, entryPath: string, options: ArchiveOptions = {}): Promise<Buffer> => {
+  if (detectArchiveType(archivePath) !== "zip") throw new Error("仅 ZIP 支持有界头部探测");
+  return readZipHead(archivePath, entryPath, options);
 };

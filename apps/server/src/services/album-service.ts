@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { fillAssetDimensions } from "./thumbnail/header-dimensions.js";
 import { sharePasswords } from "./share-password.js";
 import { AttemptLimiter } from "../lib/rate-limit.js";
 import { MAX_PASSWORD_LENGTH } from "../config/security.js";
@@ -86,7 +87,7 @@ const toAlbumListItem = (row: AlbumRecord): AlbumListItemDTO => ({
   name: row.name,
   sourceType: row.sourceType,
   assetCount: row.assetCount,
-  coverUrl: row.coverAssetId ? `/api/v1/assets/${row.coverAssetId}/thumbnail` : null,
+  coverUrl: row.coverAssetId ? `/api/v1/assets/${row.coverAssetId}/thumbnail?fit=cover` : null,
   isFavorite: Boolean(row.isFavorite),
   scanStatus: row.scanStatus,
   errorMessage: row.scanStatus === "error" ? "部分扫描失败，已跳过清理，请检查媒体目录后重试" : null,
@@ -164,7 +165,7 @@ export const getAlbumAssets = async (albumId: string, page = 1, pageSize = 120):
     return null;
   }
 
-  const assets = listAssetsByAlbumIdDb(albumId, page, pageSize);
+  const assets = await fillAssetDimensions(listAssetsByAlbumIdDb(albumId, page, pageSize));
   const total = countAssetsByAlbumIdDb(albumId);
 
   return {

@@ -35,3 +35,28 @@
 ## 待验证项
 
 后续四项尚未交付；Docker 未构建，镜像体积和镜像内运行效果未验证；浏览器验证在 UI 实现后记录。
+
+## 2. 等比缩略图与有界尺寸回填（实现及自动验证完成，缺浏览器验证）
+
+文件（apps/server/src）：`services/thumbnail-options.ts`、`services/thumbnail-service.ts`、`services/thumbnail/image-variant-generator.ts`、新增 `services/thumbnail/image-header-probe.ts` 和 `header-dimensions.ts`、`services/archive.ts`、`services/archive/zip-reader.ts`、`services/library-scanner.ts`、`services/album-service.ts`、`repositories/album-repository.ts`、`routes/assets.ts`。前端：`components/Polaroid.tsx`、`components/AlbumDetailScreen.tsx`、新增 `lib/asset-thumbnail.ts`。
+
+- cover 默认保持首页封面，coverUrl 显式带 fit；inside 全链路进入 v5 cacheKey 与实际 Sharp resize，旋转先归一化。规范缩略图 DB 记录仅存 cover，inside 使用独立文件缓存，非法 fit 返回 400。
+- JPEG SOF0/1/2/9/10、PNG IHDR、GIF、WebP VP8/VP8L/VP8X、BMP 头部解析；支持头部中的 EXIF 旋转，不解码像素。文件使用 open/read/close，ZIP 使用现有 archive lease、列表/条目限制，最多返回 128KB 即销毁流并关闭归档。超过头部范围或不支持的格式保留未知尺寸，后续正常缩略图生成仍可补齐。
+- 新/变更 ZIP 顺带探测；每次扫描图集和分页各有 3 秒总期限，全局并发 ≤4，单资产版本 in-flight 去重，失败负缓存 10 分钟且最多 10000 条。超时取消并停止新任务，返回已完成结果；RAR/CBR/7z 不执行本期探测。
+- 当页 JS 过滤、不改变分页 SQL；条件写回每批 ≤500 行，只更新缺失尺寸，保留 thumbnail_key，不刷新 albums.updated_at，写前检查资产版本防止重扫竞态。
+- 详情缩略图使用 inside/object-contain，渲染前用已知宽高预留 aspect-ratio，未知时方形；图片 load 不触发比例更新。
+- v4 → v5 使旧缓存自然失效，升级后首次访问会重新生成缩略图；无数据迁移或全量回填。
+
+新增测试文件/测试名：
+
+- `services/thumbnail/image-header-probe.test.ts`：`头部探测 jpeg/png/gif/webp 返回真实图片尺寸`（4例）、`JPEG EXIF orientation 6 归一化宽高`、`JPEG SOF c0/c1/c2/c9/ca 有界解析`（5例）、`BMP 负高度与 OS/2 头部解析`、`WebP VP8 /VP8L/VP8X 分支解析`（3例）、`损坏、截断和 128KB 以后的尺寸不被误识别`。
+- `services/thumbnail/header-dimensions.test.ts`：`分页探测跨请求并发最多 4，同资产 in-flight 合并`、`分页整体期限取消正在读取的头部，停止剩余项并返回已有结果`、`失败负缓存按版本生效，已知尺寸与 RAR/7z 不探测`。
+- `services/archive/zip-reader.test.ts`：`ZIP 头部读取截断 128KB 并释放预算，支持取消、超时和条目限制`。
+- `services/library-scanner-safety.test.ts`：`新 ZIP 扫描填尺寸，旧 NULL 仅按当页回填且失败不写库、不改缩略图键`（同时断言查询计划使用既有 idx_assets_album_sort）。
+- `services/thumbnail-service.test.ts`：`inside 缩略图保留原图比例，cover/inside 使用不同 v5 缓存文件且仅 cover 入库`（真实 Sharp 文件 metadata）。
+- `routes/assets.test.ts`：`thumbnail fit 白名单拒绝非法值，cover/inside 可通过协议校验`。
+- `apps/web/src/lib/asset-thumbnail.test.ts`：`详情缩略图使用原图比例，缺失或非法尺寸预留方形`、`详情 inside 覆盖旧 fit 并保留其他查询参数`。
+
+验证：`npm run test:server` 167/167，之后补充 fit 协议用例并运行 `node --import ./scripts/test-isolation.mjs --import tsx --test apps/server/src/routes/assets.test.ts` 4/4；`npm run build:server`、`npm run build:web`、`npx tsc --noEmit -p apps/web/tsconfig.json` 通过；`npm run test:web` 最终 87/87。日志：`/opt/data/cache/momentpic-opt-step-2-tests.log`。中间 SSR 测试因 react-cool-img 在 Node 下默认导出互操作失败（85/86）；未掩盖失败，改为测试实际使用的比例/URL selector 后通过。
+
+浏览器：实际尝试 playwright-core 启动本机 Chromium，得到 `executable doesn't exist`；安装目录只有 ABOUT/LICENSE。未执行真实浏览器视觉/滚动 CLS 验证，不能将“首屏与滚动无跳动”标为完全验收。自动测试只能确认预留比例逻辑；最终仍需有浏览器环境验证。

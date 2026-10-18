@@ -39,7 +39,11 @@ test("真实临时缓存 GC 降到上限并保留新文件、子目录和符号�
 test("GC 单文件删除失败继续处理其他文件", async (context) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cache-gc-fail-"));
   try {
-    for (const name of ["a.jpg", "b.jpg"]) await fs.writeFile(path.join(directory, name), "123");
+    for (const name of ["a.jpg", "b.jpg"]) {
+      const file = path.join(directory, name);
+      await fs.writeFile(file, "123");
+      await fs.utimes(file, new Date(0), new Date(0));
+    }
     const unlink = fs.unlink.bind(fs);
     context.mock.method(fs, "unlink", async (file: Parameters<typeof fs.unlink>[0]) => { if (String(file).endsWith("a.jpg")) throw new Error("unwritable"); return unlink(file); });
     const summary = await maintainCache({ cacheDir: directory, maxBytes: 0, minAgeMs: 0 });

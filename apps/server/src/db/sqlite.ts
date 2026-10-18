@@ -13,6 +13,7 @@ const ensureDbDir = () => {
 
 const bootstrap = (db: Database.Database) => {
   db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 2000");
   db.exec(`
     CREATE TABLE IF NOT EXISTS library_roots (
       id TEXT PRIMARY KEY,

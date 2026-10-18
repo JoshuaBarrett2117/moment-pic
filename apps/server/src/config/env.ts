@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { resolveLogLevel } from "./log-level.js";
 import path from "node:path";
 
 const toNumber = (value: string | undefined, fallback: number): number => {
@@ -40,6 +41,7 @@ const resolvePublicDir = (): string => {
 };
 
 export const env = {
+  logLevel: resolveLogLevel(process.env.LOG_LEVEL),
   host: process.env.HOST ?? "0.0.0.0",
   port: toNumber(process.env.PORT, 3001),
   adminPassword: process.env.ADMIN_PASSWORD ?? "",

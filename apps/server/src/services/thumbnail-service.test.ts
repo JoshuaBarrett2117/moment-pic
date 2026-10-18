@@ -395,6 +395,7 @@ test("GC 删除有 thumbnails 记录的文件后，请求重新生成可读缩�
     insertAlbumWithAssetsDb({ id, libraryRootId: id, name: id, sourcePath: directory, sourceType: "folder", sourceMtime: null, assetsFingerprint: null, coverAssetId: id, assetCount: 1, scanStatus: "ready", errorMessage: null, createdAt: timestamp, updatedAt: timestamp }, [createAssetRecord({ id, albumId: id, sourcePath })]);
     const first = await ensureThumbnail(id);
     assert.ok(findThumbnailByAssetIdDb(id));
+    await fs.promises.utimes(first.filePath, new Date(0), new Date(0));
     await maintainCache({ cacheDir: env.cacheDir, maxBytes: 0, minAgeMs: 0 });
     assert.equal(fs.existsSync(first.filePath), false);
     assert.ok(findThumbnailByAssetIdDb(id));

@@ -44,7 +44,7 @@ test("真实目录监听事件经认证 WS 广播只包含图库相对路径", a
     assert.ok(!text.includes(directory));
     assert.ok(!text.includes("watcher-private"));
   } finally {
-    directoryWatcher.stopWatching();
+    await directoryWatcher.stopWatching();
     client.terminate();
     await app.close();
     deleteLibraryRootDb(id);

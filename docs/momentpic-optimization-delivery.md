@@ -32,10 +32,6 @@
 
 验证：`npm run test:server` 基线 136/136，修改后 146/146，0 失败；`npm run build:server` 通过；最终统计调整后的 incremental-scan 定向测试 7/7。完整日志：`/opt/data/cache/momentpic-opt-step-1-tests.log`。
 
-## 待验证项
-
-截至第 3 项，后续 GC 与运维项尚未交付；Docker 未构建，镜像体积和镜像内运行效果未验证；浏览器验证在 UI 实现后记录。
-
 ## 2. 等比缩略图与有界尺寸回填（实现及自动验证完成，缺浏览器验证）
 
 文件（apps/server/src）：`services/thumbnail-options.ts`、`services/thumbnail-service.ts`、`services/thumbnail/image-variant-generator.ts`、新增 `services/thumbnail/image-header-probe.ts` 和 `header-dimensions.ts`、`services/archive.ts`、`services/archive/zip-reader.ts`、`services/library-scanner.ts`、`services/album-service.ts`、`repositories/album-repository.ts`、`routes/assets.ts`。前端：`components/Polaroid.tsx`、`components/AlbumDetailScreen.tsx`、新增 `lib/asset-thumbnail.ts`。
@@ -101,3 +97,51 @@
 `thumbnail-service.test.ts` 新增 `GC 删除有 thumbnails 记录的文件后，请求重新生成可读缩略图`，确认保留的数据库记录不会误命中缺失文件。
 
 验证：`npm run build:server` 通过；`npm run test:server` 184/184，0 失败。临时目录集成实测 scanned=4/deleted=3/freedBytes=300/remainingBytes=100（容量100），新文件及链接目标保留。日志：`/opt/data/cache/momentpic-opt-step-4-tests.log`。首次 build 因测试 mock 缺类型 TS7006 失败，补类型后通过，失败日志保留。Docker 环境变量仅静态修改，未进行 Docker 构建或镜像运行。
+
+## 5. 优雅退出、健康检查、日志与镜像（自动验证完成，镜像验收未执行）
+
+文件：`apps/server/src/index.ts`、`app.ts`、`config/env.ts`、新增 `config/log-level.ts`、`lib/logger.ts`、`db/sqlite.ts`、新增 `repositories/health-repository.ts`、`services/health-service.ts`、`services/graceful-shutdown.ts`，修改 `routes/health.ts`、`services/directory-watcher.ts` 及 `.test.ts`；`apps/server/package.json`、`package-lock.json`、`Dockerfile`、`docker-compose.yml`、`README.md`。
+
+- SIGTERM/SIGINT 重复信号只执行一次关闭。等待 chokidar.close 和在途定向扫描后 app.close，关闭 WebSocket 与 GC；成功 exit 0，10s 期限到期日志并 exit 1。
+- health 服务通过 repository 执行 SELECT 1，返回 data.status/db/dbLatencyMs/uptime/version，版本实际读取 server/package.json；异常 503，响应不泄露数据库路径，no-store，免鉴权。
+- 遵守 DBA 审批：全局 SQLite busy_timeout=2000，保持 WAL/synchronous 原设置；同步驱动不能被 JS timer 抢占。此处**不是端到端 2s 硬超时**，锁等待有上限，任意慢 I/O 超过 2s 只事后告警，并按探测结果返回 200/503；未使用无效 Promise.race 冒充超时。
+- LOG_LEVEL 白名单及 info 回落，Fastify 与 createLogger 都生效。
+- prod-deps 阶段 npm ci --omit=dev，编译工具不进入 runtime；@types/ws 移至 devDependencies 并同步 lock，生产阶段去掉声明目录。runtime USER node/NODE_ENV=production，Node fetch HEALTHCHECK，Compose init 和宿主卷 uid 1000 权限前置说明；ADMIN_PASSWORD 必填表达式保持原样。
+- 本项全量回归暴露第 4 项测试时间波动：刚写文件 mtime 精度可比 Date.now() 更细，导致 age<0 正常保护。两处 GC 删除回归夹具改为明确过去时间，测试断言未放宽、业务 GC 未改变；此修正在第 5 个提交内，无额外修正提交。
+
+新增测试：
+
+- `routes/health.test.ts`：`health 数据库路径不可用返回 503，免鉴权且不泄露路径`（真实临时路径阻断）；`health SELECT 1 成功返回真实版本、uptime/时延，SQLite 锁等待为 2000ms`。
+- `services/graceful-shutdown.test.ts`：`SIGTERM/SIGINT 重复信号只退出一次，先等待监听关闭再 app.close，退出码 0`；`优雅退出真实 10 秒期限到期强制退出，解除处理器不留下定时器`（Node fake timers 验证期限，实进程见下）。
+- `config/log-level.test.ts`：`LOG_LEVEL 白名单与非法值回落 info，Fastify 使用配置等级`；`业务 createLogger 同样遵守 LOG_LEVEL，warn 下不输出 info`。
+
+实际 SIGTERM 验收（日志保留原始进程输出）：
+
+```text
+PORT=3211 ADMIN_PASSWORD=test1234 node /opt/data/projects/momentpic/apps/server/dist/index.js
+# cwd、SQLITE_PATH、CACHE_DIR、INDEX_FILE_PATH、LIBRARY_ROOTS、DOTENV_CONFIG_PATH 全部设为 TMPDIR 下临时目录；预置一个空图库根以启动真实监听。
+HEALTH: 200 {"code":0,"message":"ok","data":{"status":"ok","db":"ok","dbLatencyMs":0.08638,"uptime":0.412086363,"version":"0.1.0"}}
+kill -TERM 1049040
+[Shutdown] [INFO] 收到退出信号，停止监听并关闭服务
+[Shutdown] [INFO] 服务已优雅退出
+OBSERVED EXIT CODE: 0 elapsed_seconds: 0.018
+```
+
+随后实际 bind 127.0.0.1:3211 成功，确认端口释放；子进程已 wait，临时库/配置/缓存目录已清理。
+
+Docker 验证仅限静态：四阶段引用、COPY 来源、RUN 的 `/bin/sh -n` 语法、生产依赖来源、非 root/healthcheck 配置断言通过。Docker CLI 存在但遵守任务禁止构建，没有调用 Docker daemon；**镜像 ≤400MB、镜像实际不含 typescript/tsx/playwright-core/@types、非 root 容器实际运行均未验证**。
+
+日志：`/opt/data/cache/momentpic-opt-step-5-tests.log`。保留了首次 npm 配置隔离误用同一个 /dev/null 作为 user/global config 的失败，改为两个独立空临时配置后离线 lock 更新通过；无凭据读取。首轮 server 189/190（上述 GC 测试时间边界）后最终全部通过。
+
+## 最终验证与剩余限制
+
+- `npm test`：server **190 tests / 190 pass / 0 fail**；web **92 tests / 92 pass / 0 fail**；web lint、server build、web build 全部通过。
+- `npx tsc --noEmit -p apps/web/tsconfig.json`：退出码 0。
+- `npm run typecheck`：server/web 均通过，退出码 0。
+- `git diff --check`：通过。RAR 红线核对：node-unrar-js 保持 2.0.2；cbr-reader.ts、rar-worker.ts 相对任务前无改动。
+- Vite 有既有的大于 500kB chunk 提示，非构建失败；未声称本期完成 bundle 拆分。
+- **缺浏览器验收**：本机 Chromium 可执行文件不存在，虽有自动 Hook/组件/selector 测试，但真实视觉、首屏/滚动布局稳定性、移动手势未完成验证。
+- **缺镜像验收**：没有 Docker 构建，体积、镜像内依赖和非 root 实运行未验证。
+- 健康探测按批准方案为锁等待上限加耗时观测，非抢占式 2 秒总期限。CBR/RAR/7z 不进行新头部回填；超过 128KB 才出现的元数据可能保持未知；当页 3s 未完成项保持已有数据，后续访问可重试。
+- 全部实现与验证只使用隔离临时数据库；未访问生产、未 push、未改写 docs 外历史记录。五个本地提交及完整 SHA 由 `/opt/data/cache/momentpic-opt-progress.md` 记录。
+- 第 1 次 git commit 因缺作者身份失败，进度脚本误记旧 HEAD；原行保留，已追加“更正”行使其明确无效，真实提交 SHA 以更正行为准。后续提交均先成功 commit 再追加进度。

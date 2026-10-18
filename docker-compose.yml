@@ -1,5 +1,8 @@
 services:
   gallery:
+    init: true
+    # 非 root 部署前在宿主机执行：chown -R 1000:1000 /volume4/docker/moment-pic/config
+    # 覆盖 gallery.sqlite、-wal、-shm 和 cache；数据库卷必须使用本地 ext4/btrfs，不能放 NFS/SMB。
     build: .
     image: moment-pic:latest
     container_name: moment-pic

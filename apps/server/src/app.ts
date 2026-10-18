@@ -46,7 +46,7 @@ const appendUtf8Charset = (contentType: string): string => {
 export const buildApp = () => {
   validateAdminPassword(env.adminPassword);
   const app = Fastify({
-    logger: true,
+    logger: { level: env.logLevel },
     trustProxy: env.trustedProxies.length ? env.trustedProxies : false
   });
 

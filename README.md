@@ -111,3 +111,13 @@ moment-pic/
 清理仅遍历 `CACHE_DIR` 的扁平普通文件，不递归、不跟随符号链接、不修改数据库。超过 1 小时的 `.tmp` 残留优先删除；普通缓存仅超限时按文件 mtime 从旧到新删除，保留保护期内文件，因此全部文件较新时可能暂时超过容量。单文件删除失败不阻断其余文件。mtime 是生成/修改时间，并非精确的最近访问时间。删除的缓存在下次请求时自动重新生成。
 
 缩略图 v5 缓存键包含 `fit=cover|inside`：封面默认 cover，详情使用等比 inside。升级后旧版本缓存按容量策略逐步回收，首次请求会重新生成；未超限的旧缓存不会强制清空。
+
+### 运行与升级说明（2026-10-18，Codex）
+
+- SIGTERM/SIGINT 会停止目录监听、等待在途定向扫描，关闭 Fastify（含 WebSocket/缓存 GC），成功退出码为 0；超过 10 秒强制以 1 退出并记录错误。Compose 使用 `init: true` 回收子进程。
+- `/api/v1/health` 无需登录，正常 200，数据库异常 503，`data` 内包含 `status`、`db`、`dbLatencyMs`、`uptime`、`version`，禁止缓存。SQLite `busy_timeout=2000` 限制锁竞争等待；它作用于所有数据库语句，**不是对同步驱动任意慢调用的抢占式 2 秒超时**。超过 2 秒的探测按实际成功/失败返回并记录时延告警。
+- `LOG_LEVEL` 支持 trace/debug/info/warn/error/fatal，非法值回落 info，Fastify 和业务日志均生效。
+- 镜像独立安装服务端生产依赖，运行阶段不带编译工具，使用 `NODE_ENV=production` 和 `USER node`。部署前必须在宿主机执行 `chown -R 1000:1000 /volume4/docker/moment-pic/config`，覆盖目录、缓存、SQLite 主文件和 `-wal`/`-shm`。数据库卷必须使用本地 ext4/btrfs，不支持 NFS/SMB 上的 WAL。
+- HEALTHCHECK 用 Node 内建 fetch（30s 间隔、5s 超时、60s 启动宽限、3 次重试）。Docker 本身不会因 unhealthy 自动重启；外部 autoheal 会改变这一行为。
+- 本次未执行 Docker 构建；≤400MB 体积目标、最终镜像依赖内容和非 root 容器运行均**未验证**。
+- 阅读进度仅对登录用户保存；详情恢复上次图片，首页继续阅读过滤已读完图集，公开分享不读写个人进度。新增表由 bootstrap 幂等创建，无存量数据全量重算。

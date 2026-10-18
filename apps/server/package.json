@@ -13,7 +13,6 @@
   "dependencies": {
     "@fastify/static": "^10.1.6",
     "@fastify/websocket": "^11.2.0",
-    "@types/ws": "^8.18.1",
     "7zip-bin": "^5.2.0",
     "better-sqlite3": "^12.8.0",
     "chokidar": "^4.0.3",
@@ -32,6 +31,7 @@
     "@types/yauzl": "^2.10.3",
     "playwright-core": "^1.59.1",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@types/ws": "^8.18.1"
   }
 }

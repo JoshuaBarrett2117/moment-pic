@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+import { installGracefulShutdown } from "./services/graceful-shutdown.js";
 import { CacheMaintenance } from "./services/cache-maintenance.js";
 import { buildApp } from "./app.js";
 import { env } from "./config/env.js";
@@ -11,6 +12,7 @@ const start = async () => {
   const app = buildApp();
   const cacheMaintenance = new CacheMaintenance({ cacheDir: env.cacheDir, maxBytes: env.cacheMaxBytes, minAgeMs: env.cacheGcMinAgeHours * 3600_000 });
   app.addHook("onClose", async () => cacheMaintenance.stop());
+  installGracefulShutdown({ stopWatching: () => directoryWatcher.stopWatching(), close: () => app.close() });
 
   try {
     await ensureScannedLibrary();

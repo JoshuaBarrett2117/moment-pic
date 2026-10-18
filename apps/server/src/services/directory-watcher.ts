@@ -27,6 +27,7 @@ class DirectoryWatcherService {
   private callbacks: Set<WatchCallback> = new Set();
   private debounceTimersByRoot: Map<string, NodeJS.Timeout> = new Map();
   private incrementalScanStates: Map<string, { running: boolean; pending: boolean }> = new Map();
+  private activeScans = new Set<Promise<void>>();
   private pendingPaths = new Map<string, Map<string, ScanPathEvent> | null>();
   private readonly DEBOUNCE_MS = 2000;
 
@@ -130,7 +131,13 @@ class DirectoryWatcherService {
       running: true,
       pending: false
     });
-    void this.runIncrementalScan(libraryRootId);
+    this.launchIncrementalScan(libraryRootId);
+  }
+
+  private launchIncrementalScan(libraryRootId: string): void {
+    const task = this.runIncrementalScan(libraryRootId);
+    this.activeScans.add(task);
+    void task.finally(() => this.activeScans.delete(task));
   }
 
   private async runIncrementalScan(libraryRootId: string): Promise<void> {
@@ -173,7 +180,7 @@ class DirectoryWatcherService {
           running: true,
           pending: false
         });
-        void this.runIncrementalScan(libraryRootId);
+        this.launchIncrementalScan(libraryRootId);
         return;
       }
 
@@ -184,11 +191,12 @@ class DirectoryWatcherService {
     }
   }
 
-  stopWatching(libraryRootId?: string): void {
+  async stopWatching(libraryRootId?: string): Promise<void> {
+    const closing: Promise<void>[] = [];
     if (libraryRootId) {
       const watcher = this.watchers.get(libraryRootId);
       if (watcher) {
-        watcher.close();
+        closing.push(watcher.close());
         this.watchers.delete(libraryRootId);
       }
       const timer = this.debounceTimersByRoot.get(libraryRootId);
@@ -198,11 +206,12 @@ class DirectoryWatcherService {
       this.debounceTimersByRoot.delete(libraryRootId);
       this.incrementalScanStates.delete(libraryRootId);
       this.pendingPaths.delete(libraryRootId);
+      await Promise.all([...closing, ...this.activeScans]);
       return;
     }
 
     for (const [id, watcher] of this.watchers) {
-      watcher.close();
+      closing.push(watcher.close());
     }
     this.watchers.clear();
 
@@ -212,10 +221,11 @@ class DirectoryWatcherService {
     this.debounceTimersByRoot.clear();
     this.incrementalScanStates.clear();
     this.pendingPaths.clear();
+    await Promise.all([...closing, ...this.activeScans]);
   }
 
   async restartWatching(): Promise<void> {
-    this.stopWatching();
+    await this.stopWatching();
     await this.startWatching();
   }
 

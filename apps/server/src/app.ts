@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { STATUS_CODES } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
@@ -6,6 +7,7 @@ import fastifyStatic from "@fastify/static";
 import { env } from "./config/env.js";
 import { validateAdminPassword } from "./config/security.js";
 import { isAuthenticated } from "./lib/auth.js";
+import { CLIENT_CLOSED_STATUS, isClientAbortError, isReplyChannelClosed } from "./lib/media-request.js";
 import { isAllowedOrigin } from "./lib/origin.js";
 import { albumProgressRoutes } from "./routes/album-progress.js";
 import { albumRoutes } from "./routes/albums.js";
@@ -133,6 +135,36 @@ export const buildApp = () => {
         res.header("Cache-Control", "no-store");
       }
     }
+  });
+
+  // 客户端主动断开（快速翻页/关页面/切换视图）会让提取链路抛 AbortError。
+  // 这类中止属正常用户行为：回 499 并降为 info 日志，不能算服务端 500。
+  // 其余错误保持 Fastify 默认语义（取 error.statusCode，error 级日志，返回 { statusCode, code?, error, message }）。
+  app.setErrorHandler((error, request, reply) => {
+    if (isClientAbortError(error)) {
+      request.log.info({ err: error, url: request.url }, "客户端断开，请求已取消");
+      if (isReplyChannelClosed(reply)) {
+        return;
+      }
+      reply.status(CLIENT_CLOSED_STATUS).send({
+        statusCode: CLIENT_CLOSED_STATUS,
+        error: "Client Closed Request",
+        message: "客户端已断开"
+      });
+      return;
+    }
+
+    const rawStatus = (error as { statusCode?: unknown }).statusCode;
+    const statusCode = typeof rawStatus === "number" && rawStatus >= 400 && rawStatus <= 599 ? rawStatus : 500;
+    const code = (error as { code?: unknown }).code;
+
+    request.log.error({ err: error }, (error as Error).message);
+    reply.status(statusCode).send({
+      statusCode,
+      ...(code === undefined ? {} : { code }),
+      error: STATUS_CODES[String(statusCode)] ?? "Error",
+      message: (error as Error).message
+    });
   });
 
   app.setNotFoundHandler(async (request, reply) => {

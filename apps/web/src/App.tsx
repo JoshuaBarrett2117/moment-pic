@@ -465,6 +465,7 @@ function AuthenticatedMomentPicApp() {
                 albumId={selectedAlbum || ''}
                 onBack={handleBackToGallery}
                 onRequestNextAlbum={nextAlbumId ? () => handleNavigateToAlbum(nextAlbumId) : undefined}
+                onOpenAlbum={handleNavigateToAlbum}
               />
             </Suspense>
           )}

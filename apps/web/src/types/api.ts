@@ -103,6 +103,11 @@ export type AlbumAssetsDTO = {
     assetCount: number;
     isFavorite: boolean;
     updatedAt: string;
+    /** 图库根与相对路径：详情页左侧「目录」用它定位当前图集 */
+    libraryRootId?: string;
+    relativePath?: string;
+    /** 图集所在目录（相对图库根），用于列同级图集 */
+    parentRelativePath?: string;
   };
   items: AssetListItemDTO[];
   pagination: PaginationDTO;

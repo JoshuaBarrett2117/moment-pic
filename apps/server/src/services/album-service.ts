@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import { fillAssetDimensions } from "./thumbnail/header-dimensions.js";
 import { sharePasswords } from "./share-password.js";
 import { AttemptLimiter } from "../lib/rate-limit.js";
@@ -35,7 +36,7 @@ import {
   updateAlbumFavoriteDb,
   updateAlbumSharePasswordDb,
 } from "../repositories/album-repository.js";
-import { listLibraryRootsDb, deleteLibraryRootDb, upsertLibraryRootDb, updateLibraryRootDb } from "../repositories/library-root-repository.js";
+import { findLibraryRootByIdDb, listLibraryRootsDb, deleteLibraryRootDb, upsertLibraryRootDb, updateLibraryRootDb } from "../repositories/library-root-repository.js";
 import { makeId } from "../repositories/ids.js";
 import { recordAlbumViewDb, getRecentAlbumIdsDb } from "../repositories/system-config-repository.js";
 
@@ -168,13 +169,24 @@ export const getAlbumAssets = async (albumId: string, page = 1, pageSize = 120):
   const assets = await fillAssetDimensions(listAssetsByAlbumIdDb(albumId, page, pageSize));
   const total = countAssetsByAlbumIdDb(albumId);
 
+  const libraryRoot = findLibraryRootByIdDb(album.libraryRootId);
+  const relativePath = libraryRoot
+    ? path.relative(path.resolve(libraryRoot.path), path.resolve(album.sourcePath)).split(path.sep).join("/")
+    : "";
+  const parentRelativePath = relativePath.includes("/")
+    ? relativePath.slice(0, relativePath.lastIndexOf("/"))
+    : "";
+
   return {
     album: {
       id: album.id,
       name: album.name,
       assetCount: album.assetCount,
       isFavorite: Boolean(album.isFavorite),
-      updatedAt: album.updatedAt
+      updatedAt: album.updatedAt,
+      libraryRootId: album.libraryRootId,
+      relativePath,
+      parentRelativePath
     },
     items: assets.map((asset) => ({
       id: asset.id,

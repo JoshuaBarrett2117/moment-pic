@@ -30,17 +30,20 @@ export const AlbumPathTrail: FC<AlbumPathTrailProps> = ({
 
   return (
     <div
-      className={`flex items-center gap-2 rounded-lg border border-black/5 bg-surface-container-low/70 px-3 py-2 text-xs text-on-surface-variant ${className}`}
+      className={`rounded-lg border border-black/5 bg-surface-container-low/70 px-3 py-2 text-xs text-on-surface-variant ${className}`}
       title={fullPath}
       aria-label={`所在路径：${fullPath}`}
     >
-      <FolderTree className="h-4 w-4 shrink-0 opacity-70" aria-hidden="true" />
-      <span className="shrink-0 opacity-70">所在路径</span>
-      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mb-1 flex items-center gap-1.5 opacity-70">
+        <FolderTree className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span>所在路径</span>
+      </div>
+      {/* 换行展示完整路径：侧栏宽度有限，单行滚动会把当前图集名挤出可视区 */}
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 break-words leading-relaxed">
         {crumbs.map((crumb, index) => {
           const isLast = index === crumbs.length - 1;
           return (
-            <span key={`${crumb}-${index}`} className="flex shrink-0 items-center gap-1">
+            <span key={`${crumb}-${index}`} className="flex min-w-0 items-center gap-1">
               {index > 0 && <span className="opacity-40">/</span>}
               <span className={isLast ? "font-semibold text-on-surface" : "opacity-80"}>{crumb}</span>
             </span>

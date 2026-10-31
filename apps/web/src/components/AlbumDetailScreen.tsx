@@ -4,7 +4,7 @@ import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, 
 import { Polaroid } from './Polaroid';
 import { getAssetThumbnailPresentation } from '../lib/asset-thumbnail';
 import { AlbumShareDialog } from './AlbumShareDialog';
-import { AlbumDirectoryNav } from './AlbumDirectoryNav';
+import { AlbumPathTrail } from './AlbumPathTrail';
 import { useToast } from './Toast';
 import { useAlbumReader } from '../hooks/use-album-reader';
 import { ViewerGallery } from './ViewerGallery';
@@ -17,7 +17,6 @@ interface AlbumDetailScreenProps {
   onBack: () => void;
   onRequestNextAlbum?: () => void;
   /** 侧栏目录里点了同级图集：直接跳到对应图集 */
-  onOpenAlbum?: (albumId: string) => void;
 }
 
 const PAGE_SIZE = 24;
@@ -27,7 +26,7 @@ const DEFAULT_PRELOAD_AFTER = 3;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
 
-export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onRequestNextAlbum, onOpenAlbum, mode = "album" }) => {
+export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onRequestNextAlbum, mode = "album" }) => {
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
@@ -228,21 +227,11 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           </div>
 
           {mode === "album" && assets?.album?.libraryRootId && (
-            <AlbumDirectoryNav
-              className="mb-8"
-              libraryRootId={assets.album.libraryRootId}
+            <AlbumPathTrail
+              className="mb-6"
+              rootName={assets.album.libraryRootName}
               relativePath={assets.album.parentRelativePath ?? ""}
-              currentAlbumId={albumId}
-              onSelectAlbum={(nextAlbumId) => {
-                if (nextAlbumId === albumId) {
-                  return;
-                }
-                if (onOpenAlbum) {
-                  onOpenAlbum(nextAlbumId);
-                  return;
-                }
-                onRequestNextAlbum?.();
-              }}
+              albumName={assets.album.name}
             />
           )}
 

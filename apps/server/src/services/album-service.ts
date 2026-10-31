@@ -185,6 +185,7 @@ export const getAlbumAssets = async (albumId: string, page = 1, pageSize = 120):
       isFavorite: Boolean(album.isFavorite),
       updatedAt: album.updatedAt,
       libraryRootId: album.libraryRootId,
+      libraryRootName: libraryRoot?.name ?? "",
       relativePath,
       parentRelativePath
     },

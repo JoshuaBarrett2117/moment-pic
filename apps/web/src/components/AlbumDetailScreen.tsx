@@ -226,15 +226,6 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
             </button>
           </div>
 
-          {mode === "album" && assets?.album?.libraryRootId && (
-            <AlbumPathTrail
-              className="mb-6"
-              rootName={assets.album.libraryRootName}
-              relativePath={assets.album.parentRelativePath ?? ""}
-              albumName={assets.album.name}
-            />
-          )}
-
           <div className="mb-8 flex flex-col gap-3">
             <button
               onClick={() => void handleFavoriteToggle()}
@@ -335,6 +326,15 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
               {assets?.album?.name || albumId} · 相册详情
             </h2>
           </header>
+        )}
+
+        {mode === "album" && assets?.album?.libraryRootId && (
+          <AlbumPathTrail
+            className="mx-4 mt-2 md:mx-12 md:mt-1"
+            rootName={assets.album.libraryRootName}
+            relativePath={assets.album.parentRelativePath ?? ""}
+            albumName={assets.album.name}
+          />
         )}
 
         {reader.progress && <button onClick={() => void reader.open(reader.progress!.assetId, reader.progress!.assetIndex)} className="px-4 py-2 text-left text-sm text-primary md:px-12">继续上次第 {reader.progress.assetIndex + 1} 页</button>}

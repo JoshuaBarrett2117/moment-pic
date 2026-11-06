@@ -20,6 +20,9 @@ const withUtf8Charset = (contentType: string): string => {
   return shouldAttach ? `${contentType}; charset=utf-8` : contentType;
 };
 
+// 开发模式：Vite 在 3210，服务端在 3211（见 .env.example 的 PORT）。可用 VITE_API_TARGET 覆盖。
+const apiTarget = process.env.VITE_API_TARGET ?? 'http://localhost:3211';
+
 export default defineConfig(() => {
   return {
     plugins: [
@@ -54,11 +57,11 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       proxy: {
         '/api': {
-          target: 'http://localhost:3211',
+          target: apiTarget,
           changeOrigin: true,
         },
         '/ws': {
-          target: 'ws://localhost:3211',
+          target: apiTarget.replace(/^http/, 'ws'),
           ws: true,
           changeOrigin: true,
         },

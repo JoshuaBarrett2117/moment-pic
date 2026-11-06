@@ -9,6 +9,7 @@ import { validateAdminPassword } from "./config/security.js";
 import { isAuthenticated } from "./lib/auth.js";
 import { CLIENT_CLOSED_STATUS, isClientAbortError, isReplyChannelClosed } from "./lib/media-request.js";
 import { isAllowedOrigin } from "./lib/origin.js";
+import { applySecurityHeaders } from "./lib/security-headers.js";
 import { albumProgressRoutes } from "./routes/album-progress.js";
 import { albumRoutes } from "./routes/albums.js";
 import { authRoutes } from "./routes/auth.js";
@@ -57,6 +58,7 @@ export const buildApp = () => {
   wsService.initialize(app);
 
   app.addHook("onRequest", async (request, reply) => {
+    applySecurityHeaders(reply);
     const origin = request.headers.origin;
     if (origin) reply.header("Vary", "Origin");
     if (origin && isAllowedOrigin(request.raw, app.config.wsAllowedOrigins)) {

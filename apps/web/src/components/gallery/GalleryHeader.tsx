@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, LogOut } from 'lucide-react';
 
 type GalleryHeaderProps = {
   title: string;
@@ -43,11 +43,9 @@ export function GalleryHeader({
         title="退出登录"
         className={`cursor-pointer overflow-hidden rounded-full border-2 border-white shadow-md transition-transform hover:scale-105 ${isWideMobile ? 'h-12 w-12' : 'h-11 w-11 md:h-14 md:w-14 md:border-4 md:shadow-xl'}`}
       >
-        <img
-          alt="退出登录"
-          className="h-full w-full object-cover"
-          src="https://picsum.photos/seed/portrait/200/200"
-        />
+        <span aria-label="退出登录" className="flex h-full w-full items-center justify-center bg-primary-fixed text-on-primary-fixed-variant">
+          <LogOut className="h-1/2 w-1/2" />
+        </span>
       </button>
     </header>
   );

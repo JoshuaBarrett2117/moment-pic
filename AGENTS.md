@@ -10,7 +10,6 @@ Moment Pic 是一个以图片、相册、缩略图、智能相册和媒体浏览
 
 - `apps/server`：TypeScript + Fastify 服务端，负责 API、数据库、缩略图、媒体索引、WebSocket 等能力。
 - `apps/web`：React + Vite 前端，负责图片浏览、相册交互、系统配置和用户界面。
-- `apps/server-rs`：Rust 服务端实验或补充模块，使用 Axum/Tokio 生态。
 
 所有改动必须先理解所属模块职责，再按既有分层和命名方式落地。
 
@@ -62,12 +61,6 @@ Moment Pic 是一个以图片、相册、缩略图、智能相册和媒体浏览
 - `types` 放前端 API 类型、领域类型和共享类型。
 
 组件不要直接承担复杂业务编排；复杂流程优先下沉到 Hook、控制器或纯函数。
-
-### 4.3 Rust `apps/server-rs`
-
-- 使用 Rust 2021 风格，优先采用 Axum/Tokio 官方生态。
-- 路由、状态、领域逻辑、序列化类型应分层清晰。
-- 对可失败路径使用 `Result` 表达错误，不使用 `unwrap`/`expect` 处理业务错误。
 
 ## 5. 设计原则
 
@@ -172,7 +165,7 @@ Moment Pic 是一个以图片、相册、缩略图、智能相册和媒体浏览
 
 - 服务端 TypeScript 测试使用 `node:test` 与 `node:assert/strict`。
 - 前端至少运行类型检查和构建。
-- Rust 修改至少运行 `cargo test`。
+- 前端运行 `npm run lint:web`（ESLint + react-hooks 规则）。
 
 常用验证命令：
 
@@ -180,8 +173,7 @@ Moment Pic 是一个以图片、相册、缩略图、智能相册和媒体浏览
 npm run build:server
 npm run build --workspace @moment-pic/web
 npm run lint --workspace @moment-pic/web
-node --import tsx --test apps/server/src/**/*.test.ts
-cargo test --manifest-path apps/server-rs/Cargo.toml
+npm test
 ```
 
 测试覆盖要求：
@@ -226,7 +218,7 @@ cargo test --manifest-path apps/server-rs/Cargo.toml
 - 禁止新增未使用依赖、重复工具链或并行框架。
 - 禁止用全局可变状态承载业务流程，除非有明确生命周期管理。
 - 禁止提交只有占位、TODO 或不可运行的半成品实现。
-- 禁止忽略 TypeScript、Rust 或构建错误后继续交付。
+- 禁止忽略 TypeScript 或构建错误后继续交付。
 
 ## 17. 交付格式
 

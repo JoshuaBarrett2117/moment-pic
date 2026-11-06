@@ -20,8 +20,6 @@ services:
       CACHE_GC_INTERVAL_HOURS: "${CACHE_GC_INTERVAL_HOURS:-6}"
       CACHE_DIR: "${CACHE_DIR:-/data/cache}"
       SQLITE_PATH: "${SQLITE_PATH:-/data/gallery.sqlite}"
-      INDEX_FILE_PATH: "${INDEX_FILE_PATH:-/data/index.json}"
-      DATABASE_URL: "${DATABASE_URL:-file:/data/gallery.sqlite}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
     volumes:
       - gallery-data:/data

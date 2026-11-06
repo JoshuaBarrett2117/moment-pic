@@ -11,7 +11,10 @@ on:
 env:
   REGISTRY: docker.io
   IMAGE_NAME: joshualoooooo/moment-pic
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
@@ -19,46 +22,105 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends 7zip 7zip-rar
       - run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run test:discovery
       - run: npm run typecheck
+      # npm test 已包含 test:server、test:web、lint:web、build:server、build:web
       - run: npm test
-      - run: npm run build:server
-      - run: npm run build:web
 
-  build-and-push:
+  # PR 只验证 amd64 镜像能构建，不推送、不跑 arm64
+  pr-image:
+    if: github.event_name == 'pull_request'
     needs: quality
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
-          platforms: arm64
+          context: .
+          push: false
+          cache-from: type=gha,scope=linux-amd64
 
-      - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
+  # 原生 runner 分架构构建（arm64 不再走 QEMU 模拟），按 digest 推送
+  build:
+    if: github.event_name != 'pull_request'
+    needs: quality
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - name: Prepare
+        run: echo "PLATFORM_PAIR=${{ matrix.platform }}" | sed 's#/#-#' >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,scope=${{ env.PLATFORM_PAIR }},mode=min
+      - name: Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+          echo "${digest}" > "${{ runner.temp }}/digests/arch-${{ env.PLATFORM_PAIR }}.txt"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
 
-      - name: Extract metadata
-        id: meta
+  # 合并为一个多架构 manifest：同一个 tag 自动匹配 amd64 / arm64
+  merge:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/artifacts
+          pattern: digests-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -70,36 +132,18 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=sha
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')) }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=x86
-          cache-to: type=gha,scope=x86,mode=min
-
-      - name: Generate ARM64 tags
-        id: arm64-tags
-        shell: bash
+      - name: Create multi-arch manifest
+        working-directory: ${{ runner.temp }}/artifacts
         run: |
-          {
-            echo "tags<<EOF"
-            while IFS= read -r tag; do
-              [ -n "$tag" ] && echo "${tag}-arm64"
-            done <<< "${{ steps.meta.outputs.tags }}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Build and push ARM64 Docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/arm64
-          push: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')) }}
-          tags: ${{ steps.arm64-tags.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=arm64
-          cache-to: type=gha,scope=arm64,mode=min
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' $(ls | grep -v '\.txt$'))
+      - name: Keep legacy -arm64 tags (兼容已固定 *-arm64 标签的部署)
+        working-directory: ${{ runner.temp }}/artifacts
+        run: |
+          arm_digest="$(cat arch-linux-arm64.txt)"
+          for tag in $(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON"); do
+            docker buildx imagetools create -t "${tag}-arm64" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${arm_digest}"
+          done
+      - name: Inspect
+        run: docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}

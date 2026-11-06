@@ -20,3 +20,6 @@ data/cache/**
 apps/server/tmp/
 !.gitkeep
 .logs/
+
+# AI 代理工作产物
+.codex/

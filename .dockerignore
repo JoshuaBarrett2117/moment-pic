@@ -5,7 +5,6 @@ debug
 apps/server/data
 apps/server/tmp
 apps/server/samples
-apps/server-rs
 docs
 moment-pic-ui
 *.db

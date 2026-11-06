@@ -3,13 +3,14 @@ import "dotenv/config";
 import { installGracefulShutdown } from "./services/graceful-shutdown.js";
 import { CacheMaintenance } from "./services/cache-maintenance.js";
 import { buildApp } from "./app.js";
-import { env } from "./config/env.js";
+import { collectEnvWarnings, env } from "./config/env.js";
 import { startCoverThumbnailWarmup } from "./services/cover-thumbnail-warmup.js";
 import { ensureScannedLibrary } from "./services/library-scanner.js";
 import { directoryWatcher } from "./services/directory-watcher.js";
 
 const start = async () => {
   const app = buildApp();
+  for (const warning of collectEnvWarnings()) app.log.warn(warning);
   const cacheMaintenance = new CacheMaintenance({ cacheDir: env.cacheDir, maxBytes: env.cacheMaxBytes, minAgeMs: env.cacheGcMinAgeHours * 3600_000 });
   app.addHook("onClose", async () => cacheMaintenance.stop());
   installGracefulShutdown({ stopWatching: () => directoryWatcher.stopWatching(), close: () => app.close() });

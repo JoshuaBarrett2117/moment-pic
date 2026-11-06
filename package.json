@@ -15,7 +15,6 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test:server": "npm run test --workspace @moment-pic/server",
     "test:web": "npm run test --workspace @moment-pic/web",
-    "test:rust": "node scripts/test-rust.mjs",
     "test": "npm run test:server && npm run test:web && npm run lint:web && npm run build:server && npm run build:web"
   }
 }

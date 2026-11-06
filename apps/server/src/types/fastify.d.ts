@@ -1,4 +1,4 @@
-﻿import "fastify";
+import "fastify";
 
 import type { env } from "../config/env.js";
 import type { ResolvedSession } from "../services/auth-service.js";

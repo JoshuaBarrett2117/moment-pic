@@ -11,7 +11,10 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "3210"
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?请显式设置非空的1-128字符管理员密码，不限制复杂度，参阅 README 升级说明}
+      # 首次启动必填（创建 admin）；之后以页面上修改的密码为准
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_PASSWORD_RESET: ${ADMIN_PASSWORD_RESET:-}
+      AI_API_TOKEN: ${AI_API_TOKEN:-}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS:-}
       LIBRARY_ROOTS: "${LIBRARY_ROOTS:-/data/library}"

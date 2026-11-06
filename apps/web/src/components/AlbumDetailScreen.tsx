@@ -1,5 +1,6 @@
 import { type FC, useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'motion/react';
+import { useCurrentUser } from '../app/current-user';
 import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, RefreshCw, Share2, Star } from 'lucide-react';
 import { Polaroid } from './Polaroid';
 import { getAssetThumbnailPresentation } from '../lib/asset-thumbnail';
@@ -27,6 +28,7 @@ const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
 
 export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onRequestNextAlbum, mode = "album" }) => {
+  const { isAdmin } = useCurrentUser();
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
@@ -227,6 +229,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           </div>
 
           <div className="mb-8 flex flex-col gap-3">
+            {isAdmin && (
+            <>
             <button
               onClick={() => void handleFavoriteToggle()}
               disabled={isUpdatingFavorite}
@@ -242,6 +246,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
               <Share2 className="h-4 w-4" />
               分享图集
             </button>
+            </>
+            )}
           </div>
 
           <div className="mb-8 flex">
@@ -293,6 +299,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
               {assets?.album?.name || albumId}
             </h2>
             <div className="flex items-center gap-1">
+              {isAdmin && (
+              <>
               <button
                 onClick={() => void handleFavoriteToggle()}
                 disabled={isUpdatingFavorite}
@@ -316,6 +324,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
               >
                 {isRescanningAlbum ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
               </button>
+              </>
+              )}
             </div>
           </header>
         )}

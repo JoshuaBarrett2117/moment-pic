@@ -1,4 +1,5 @@
-﻿import { AnimatePresence, motion } from 'motion/react';
+import { useCurrentUser } from '../app/current-user';
+import { AnimatePresence, motion } from 'motion/react';
 import { Camera, Clock, FolderTree, Images, Layers3, Loader2, Menu, RefreshCw, Settings, Share2, Star, X } from 'lucide-react';
 import { type FC, useState } from 'react';
 import { useMobile, useWideMobile } from '../hooks';
@@ -49,6 +50,7 @@ export const Sidebar: FC<SidebarProps> = ({
   onShareManagementClick,
   isShareManagementActive,
 }) => {
+  const { isAdmin } = useCurrentUser();
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
   const [isOpen, setIsOpen] = useState(false);
@@ -196,6 +198,8 @@ export const Sidebar: FC<SidebarProps> = ({
           <span className="text-sm font-semibold">目录相册</span>
         </button>
 
+        {isAdmin && (
+        <>
         <button
           onClick={() => {
             onShareManagementClick();
@@ -212,6 +216,8 @@ export const Sidebar: FC<SidebarProps> = ({
           <Share2 className="h-5 w-5" />
           <span className="text-sm font-semibold">分享管理</span>
         </button>
+        </>
+        )}
 
         {libraryRoots.map((root) => (
           <div

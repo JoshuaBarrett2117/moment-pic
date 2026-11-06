@@ -1,4 +1,4 @@
-import { useCallback, useEffect, lazy, Suspense, useMemo } from 'react';
+import { useCallback, useEffect, Suspense, useMemo } from 'react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
 import { PaperGrain } from './components/PaperGrain';
@@ -14,55 +14,7 @@ import { useAppAuthBootstrap } from './app/useAppAuthBootstrap';
 import { useGalleryFilterActions } from './app/useGalleryFilterActions';
 import { CurrentUserProvider } from './app/current-user';
 import { PageTransitionFrame } from './app/PageTransitionFrame';
-
-const GalleryScreen = lazy(() =>
-  import('./components/GalleryScreen').then((module) => ({
-    default: module.GalleryScreen
-  }))
-);
-const AlbumDetailScreen = lazy(() =>
-  import('./components/AlbumDetailScreen').then((module) => ({
-    default: module.AlbumDetailScreen
-  }))
-);
-const SettingsScreen = lazy(() =>
-  import('./components/SettingsScreen').then((module) => ({
-    default: module.SettingsScreen
-  }))
-);
-const ShareManagementScreen = lazy(() =>
-  import('./components/ShareManagementScreen').then((module) => ({
-    default: module.ShareManagementScreen
-  }))
-);
-const SharedAlbumScreen = lazy(() =>
-  import('./components/SharedAlbumScreen').then((module) => ({
-    default: module.SharedAlbumScreen
-  }))
-);
-
-const getShareTokenFromPath = (): string => {
-  if (!window.location.pathname.startsWith('/share/')) {
-    return '';
-  }
-
-  return decodeURIComponent(window.location.pathname.slice('/share/'.length));
-};
-
-const SharedAlbumApp = ({ token }: { token: string }) => (
-  <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
-    <PaperGrain />
-    <Suspense
-      fallback={
-        <div className="w-full h-full flex items-center justify-center text-outline">
-          正在加载分享图集...
-        </div>
-      }
-    >
-      <SharedAlbumScreen token={token} />
-    </Suspense>
-  </div>
-);
+import { AlbumDetailScreen, GalleryScreen, getShareTokenFromPath, SettingsScreen, ShareManagementScreen, SharedAlbumApp } from './app/screens';
 
 function AuthenticatedMomentPicApp() {
   const { systemConfig, fetchSystemConfig } = useSystemConfig();

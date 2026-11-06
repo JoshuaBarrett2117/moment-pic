@@ -1,4 +1,4 @@
-﻿export type ApiSuccess<T> = {
+export type ApiSuccess<T> = {
   code: 0;
   message: "ok";
   data: T;

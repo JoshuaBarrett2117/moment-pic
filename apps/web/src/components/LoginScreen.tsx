@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { AlertCircle, ArrowRight, Camera, Info, Lock, PersonStanding } from 'lucide-react';
 import { useAuth, useWideMobile } from '../hooks';
 import { Polaroid } from './Polaroid';

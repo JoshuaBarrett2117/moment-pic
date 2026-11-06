@@ -1,4 +1,4 @@
-﻿export const SUPPORTED_IMAGE_EXTENSIONS = [
+export const SUPPORTED_IMAGE_EXTENSIONS = [
   "jpg",
   "jpeg",
   "png",

@@ -1,3 +1,4 @@
+import { useCurrentUser } from '../../app/current-user';
 import { motion } from 'motion/react';
 import { ArrowRight, Plus, Share2, Star } from 'lucide-react';
 import { ThrottledImage } from '../ThrottledImage';
@@ -22,6 +23,7 @@ export function AlbumCard({
   onFavoriteToggle,
   onShare,
 }: AlbumCardProps) {
+  const { isAdmin } = useCurrentUser();
   const colorScheme = galleryAlbumTagColors[album.sourceType] || galleryAlbumTagColors.folder;
 
   return (
@@ -56,6 +58,7 @@ export function AlbumCard({
               ))
             )}
           </div>
+          {isAdmin && (
           <div className="pointer-events-none absolute inset-x-6 bottom-24 z-20 flex items-center justify-between opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
             <button
               type="button"
@@ -82,6 +85,7 @@ export function AlbumCard({
               <Star className={`h-5 w-5 ${album.isFavorite ? 'fill-amber-400' : ''}`} />
             </button>
           </div>
+          )}
           <div className="mt-4 px-2 pb-2">
             <h3 className="mb-1 truncate font-headline text-lg font-bold leading-tight text-on-surface" title={album.name}>
               {album.name}

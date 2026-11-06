@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # 阶段 1: 构建前端
-FROM node:22-slim AS web-builder
+FROM node:25-slim AS web-builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/package.json
@@ -11,7 +11,7 @@ WORKDIR /app/apps/web
 RUN npm run typecheck && npm run build
 
 # 阶段 2: 构建后端
-FROM node:22-slim AS builder
+FROM node:25-slim AS builder
 ARG APT_MIRROR=""
 ARG APT_SECURITY_MIRROR=""
 WORKDIR /app
@@ -33,7 +33,7 @@ WORKDIR /app/apps/server
 RUN npx tsc -p tsconfig.json
 
 # 阶段 3: 仅安装服务端生产依赖，编译工具不会进入 runtime
-FROM node:22-slim AS prod-deps
+FROM node:25-slim AS prod-deps
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
@@ -42,7 +42,7 @@ RUN npm ci --omit=dev --workspace @moment-pic/server --include-workspace-root=fa
     && rm -rf node_modules/@types
 
 # 阶段 4: 运行镜像（最小化体积）
-FROM node:22-slim AS runtime
+FROM node:25-slim AS runtime
 ARG APT_MIRROR=""
 ARG APT_SECURITY_MIRROR=""
 WORKDIR /app

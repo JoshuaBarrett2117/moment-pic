@@ -85,7 +85,7 @@ for (const stage of ['detail', 'members', 'list'] as const) {
       if (stage !== 'members') await act(async () => { calls.find((call) => call.url === '/smart-albums/selected')!.resolve({ id: 'selected' }); });
       await act(async () => { calls.find((call) => call.url.endsWith('/selected/albums'))!.resolve({ items: [{ id: 'member' }] }); await detail; });
       assert.equal(hook.current.smartAlbumDetail?.id, 'selected');
-      assert.equal(hook.current.smartAlbumMembers?.[0].id, 'member');
+      assert.equal((hook.current.smartAlbumMembers?.[0] as unknown as { id: string } | undefined)?.id, 'member');
       assert.equal(hook.current.smartAlbums?.items[0].id, 'list');
       assert.equal(hook.current.isLoading, false);
     } finally { await hook.unmount(); }
@@ -112,7 +112,7 @@ test('useSmartAlbums 详情的两阶段请求都遵守最新代次，旧 members
     await act(async () => { calls[3].resolve({ items: [{ id: 'new-member' }] }); await newer; });
     await act(async () => { calls[1].reject(new Error('old members failure')); await older; });
     assert.equal(hook.current.smartAlbumDetail?.id, 'new');
-    assert.equal(hook.current.smartAlbumMembers[0].id, 'new-member');
+    assert.equal((hook.current.smartAlbumMembers?.[0] as unknown as { id: string } | undefined)?.id, 'new-member');
     assert.equal(hook.current.error, null);
     assert.equal(hook.current.isLoading, false);
     let pending!: Promise<unknown>;

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { buildApp } from "../app.js";
 import { env } from "../config/env.js";
-import { createAuthToken } from "../lib/auth.js";
+import { testSessionCookie } from "../test-support/session.js";
 import { ResourceBusyError } from "../lib/work-budget.js";
 import { deleteAlbumDb, insertAlbumWithAssetsDb } from "../repositories/album-repository.js";
 import { deleteLibraryRootDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
@@ -26,7 +26,7 @@ test("真实管理/分享媒体路由遇到预算、取消、超时、上限或�
       for (const variant of ["thumbnail", "preview", "original"]) {
         for (const url of [`/api/v1/assets/${id}/${variant}`, `/api/v1/shares/${share.token}/assets/${id}/${variant}?accessToken=${encodeURIComponent(auth.accessToken)}`]) {
           calls = 0;
-          const response = await app.inject({ url, headers: { cookie: `moment_pic_auth=${createAuthToken(env.adminPassword, Date.now() + 60_000)}` } });
+          const response = await app.inject({ url, headers: { cookie: testSessionCookie(60_000) } });
           assert.ok(response.statusCode >= 400);
           assert.equal(calls, 1, `${url} 不可重试 ${error.name}`);
         }

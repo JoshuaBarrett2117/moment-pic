@@ -1,3 +1,4 @@
+import { isSealed, sealSecret } from "../lib/secret-box.js";
 import { getDb } from "../db/sqlite.js";
 import type {
   SmartAlbumAiConfigRecord,
@@ -211,6 +212,7 @@ export const updateSmartAlbumAiConfigDb = (
     WHERE id = @id
   `).run({
     ...next,
+    apiToken: next.apiToken ? sealSecret(next.apiToken) : null,
     enabled: next.enabled ? 1 : 0,
     allowAliasMerge: next.allowAliasMerge ? 1 : 0,
     allowCrossRootGrouping: next.allowCrossRootGrouping ? 1 : 0
@@ -273,4 +275,13 @@ export const replaceSmartAlbumsDb = (input: {
   });
 
   transaction();
+};
+
+/** 启动时把历史明文 AI token 原地加密（幂等）。 */
+export const sealLegacyAiTokenDb = (): boolean => {
+  const db = getDb();
+  const row = db.prepare("SELECT api_token FROM smart_album_ai_configs WHERE id = 'smart_album_ai_config'").get() as { api_token: string | null } | undefined;
+  if (!row?.api_token || isSealed(row.api_token)) return false;
+  db.prepare("UPDATE smart_album_ai_configs SET api_token = ? WHERE id = 'smart_album_ai_config'").run(sealSecret(row.api_token));
+  return true;
 };

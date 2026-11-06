@@ -10,7 +10,7 @@ import sharp from "sharp";
 import { WebSocket } from "ws";
 import { buildApp } from "../app.js";
 import { env } from "../config/env.js";
-import { createAuthToken } from "../lib/auth.js";
+import { testSessionCookie } from "../test-support/session.js";
 import { deleteLibraryRootDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
 import { updateAlbumScanStatusDb } from "../repositories/album-repository.js";
 import { clearAlbumListCache } from "../services/album-service.js";
@@ -25,7 +25,7 @@ test("实际扫描 API 与 WebSocket 暴露脱敏失败及部分成果，失败�
   upsertLibraryRootDb({ id, name: id, path: directory, enabled: true, lastScannedAt: null, createdAt: timestamp, updatedAt: timestamp });
   const app = buildApp();
   const address = await app.listen({ host: "127.0.0.1", port: 0 });
-  const cookie = `moment_pic_auth=${createAuthToken(env.adminPassword, Date.now() + 60_000)}`;
+  const cookie = testSessionCookie(60_000);
   const client = new WebSocket(address.replace("http", "ws") + "/ws", { headers: { origin: address, cookie } });
   try {
     await once(client, "open");

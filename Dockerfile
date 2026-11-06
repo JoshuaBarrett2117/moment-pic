@@ -60,7 +60,7 @@ COPY --from=builder /app/apps/server/dist ./apps/server/dist
 COPY --from=web-builder /app/apps/web/dist ./apps/server/dist/public
 ENV NODE_ENV="production"
 ENV CACHE_MAX_BYTES="5368709120" CACHE_GC_MIN_AGE_HOURS="24" CACHE_GC_INTERVAL_HOURS="6"
-ENV HOST="0.0.0.0" PORT="3210" PUBLIC_DIR="/app/apps/server/dist/public" LIBRARY_ROOTS="/data/library" CACHE_DIR="/data/cache" SQLITE_PATH="/data/gallery.sqlite" INDEX_FILE_PATH="/data/index.json" DATABASE_URL="file:/data/gallery.sqlite" LOG_LEVEL="info"
+ENV HOST="0.0.0.0" PORT="3210" PUBLIC_DIR="/app/apps/server/dist/public" LIBRARY_ROOTS="/data/library" CACHE_DIR="/data/cache" SQLITE_PATH="/data/gallery.sqlite" LOG_LEVEL="info"
 WORKDIR /app/apps/server
 RUN install -d -o node -g node /data /data/library /data/cache
 USER node

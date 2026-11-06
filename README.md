@@ -1,123 +1,104 @@
 # Moment Pic
 
-## 2026-10-15 安全升级说明（执行者：Codex）
-
-- 运行与测试使用 Node.js 22（推荐最新维护版）；不支持用 Node 26 加载旧版 SQLite 原生模块。构建不需要管理员密码，运行启动必须显式设置 `ADMIN_PASSWORD`。
-- 升级前复制 `.env.example` 到本地 `.env`，必须显式设置非空的 1-128 字符管理员密码。管理员密码不再限制复杂度：不要求至少 16 字符、至少三类字符或至少八种不同字符；单字符、重复字符、单一字符类别及仅含空格的密码均可使用，密码原样保留且不裁剪空格。未配置、空密码或超过 128 字符会拒绝启动。不要把密码写进镜像、Git、日志或共享的 Compose 文件；`.env.example` 保持空值，Compose 不提供默认口令。
-- HTTPS 直连自动使用 Secure Cookie。反向代理必须设置 `TRUSTED_PROXIES` 为实际代理 IP/CIDR（逗号分隔，不要配置通配信任），代理需覆盖而非透传客户端的转发头。WebSocket 跨代理或本地开发时显式设置 `WS_ALLOWED_ORIGINS` 为可信网页 origin（如 `https://photos.example`，不要附带路径）；未列出的跨源升级会拒绝。
-- 登录限制为每真实客户端 IP 每分钟 10 次；公开分享认证同时限制每 IP 20 次、每分享标识 10 次。哈希使用异步 scrypt，最多 2 个活动任务和 16 个排队任务；密码最长 128 字符。进程内限制适用于单实例，多实例必须在可信网关再加统一限流。
-- 新分享只持久化哈希；密码仅创建响应显示一次，管理列表不会返回密码。重置密码后旧分享会话立即失效。历史明文由 DBA 备份、审核、单独清理，本版本不自动清理历史数据或更改旧哈希；旧库可保留不再使用的明文列。
-- 全量扫描总是校验文件集合和文件元数据；目录 mtime 不能代表图片未修改。任何枚举、stat、元数据或归档失败都会保留对应旧索引，且该根目录本轮不执行删除差异。扫描任务和界面显示脱敏失败摘要；目录重新可读后再完整扫描才确认删除。
-- 归档解压使用生产端背压与请求取消，默认墙钟上限 30 秒、解压输出上限 256 MiB、列表输出 8 MiB、条目数 50,000、错误输出 64 KiB。所有归档读取/流/列表共用 4 个活动、32 个排队预算。2026-10-16 修复（执行者：Codex）：真实 RAR4/RAR5/CBR 使用 `node-unrar-js` 纯 WASM worker，背压直接阻塞 WASM 写钩子，同步解码时也能强制终止；只有 worker 实际退出后才释放预算。非 solid 归档跳过无关条目（包括加密附件）；solid 归档仍显式解码并累计前置输出，不能只计算返回的图片。加密目标、必要的加密 solid 前置条目和损坏 RAR 明确报错，不 fallback 重试。实现、验证与限制见 `docs/rar-wasm-verification.md`。
-- `npm test` 递归发现两工作区所有 `.test.ts`/`.test.tsx`，测试自动创建临时 SQLite/缓存，不读取 `.env` 或真实图库。CI 的独立质量 job 通过后才能发布任意架构镜像。
-- 依赖公告逐项前置条件与修复版本见 `docs/dependency-security-2026-10-15.md`；行为、验收证据及限制见 `docs/safety-verification.md`。本次只做本地验证，不推送、不部署。
-
-[![Node.js](https://img.shields.io/badge/Node.js-22%2B-green?style=flat&logo=node.js)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22-green?style=flat&logo=node.js)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?style=flat&logo=react)](https://react.dev/)
 [![Fastify](https://img.shields.io/badge/Fastify-5-purple?style=flat)](https://fastify.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=flat&logo=typescript)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-轻量级本地图片库管理与浏览工具，支持目录相册、ZIP/CBZ/RAR 压缩包解析、缩略图生成与实时预览。
+轻量级本地图片库：把 NAS / 硬盘上的图片目录和压缩包（ZIP / CBZ / RAR / CBR / 7z）变成可在手机和电脑上浏览的相册，支持缩略图、阅读进度、智能归纳、分享链接和多用户。
 
-## 限制
+> 本程序面向本地 / 内网私有部署。需要外网访问时，请放在 HTTPS 反向代理之后并设置 `TRUSTED_PROXIES`。
 
-- 本程序仅用于本地私有部署，请勿公网暴露
-- 支持的图片格式：`jpg`、`jpeg`、`png`、`webp`、`gif`、`bmp`
+## 功能
 
-## 技术架构
+- 目录图集与压缩包图集，自动扫描、目录监听、增量重扫
+- 缩略图与多档画质（原图 / 高清 / 省流），大图查看器支持缩放、旋转、手势翻页、预加载
+- 阅读进度与首页「继续阅读」（每个用户独立）
+- 收藏、最近浏览、目录相册、按名称全文搜索
+- 智能归纳：按规则或 OpenAI 兼容接口自动整理相册
+- 带密码和有效期的分享链接
+- 多用户：管理员 / 只读两种角色，页面上修改用户名和密码
+- 图片格式：jpg、jpeg、png、webp、gif、bmp
 
-| 组件 | 技术选型 | 作用 |
+## 快速开始（Docker）
+
+```bash
+cp .env.example .env          # 至少填写 ADMIN_PASSWORD
+docker compose up -d
+```
+
+打开 `http://<服务器IP>:3210`，用户名 `admin`，密码为 `ADMIN_PASSWORD`。登录后可在「设置 → 账号」修改用户名和密码，在「设置 → 用户管理」添加其他用户。
+
+也可以直接使用 Docker Hub 镜像 `joshualoooooo/moment-pic:latest`（多架构，amd64 / arm64 自动匹配）。
+
+```yaml
+services:
+  gallery:
+    image: joshualoooooo/moment-pic:latest
+    init: true
+    ports: ["3210:3210"]
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    volumes:
+      - ./config:/data                   # 数据库与缩略图缓存（需本地 ext4/btrfs，不支持 NFS/SMB）
+      - /path/to/photos:/data/library:ro # 你的图片目录
+    restart: unless-stopped
+```
+
+容器以 uid 1000 运行，首次部署前执行 `chown -R 1000:1000 ./config`。
+
+## 配置
+
+| 变量 | 默认值 | 说明 |
 | :--- | :--- | :--- |
-| 前端 | React 19 + Vite | 响应式交互与美观 UI |
-| 后端 | Fastify + TypeScript | 高性能 REST API 服务 |
-| 数据库 | better-sqlite3 + SQLite | 数据持久化存储 |
-| 图片处理 | Sharp | 缩略图生成与图片处理 |
+| `ADMIN_PASSWORD` | — | 首次启动（数据库里还没有用户）时必填，用来创建 `admin`；之后以页面上设置的密码为准 |
+| `ADMIN_PASSWORD_RESET` | — | 设为 `true` 重启一次，用 `ADMIN_PASSWORD` 重置第一个管理员的密码（忘记密码时用，用完删掉） |
+| `PORT` / `HOST` | `3210` / `0.0.0.0` | 监听地址 |
+| `LIBRARY_ROOTS` | `/data/library` | 图库目录，多个用逗号、分号或换行分隔 |
+| `SQLITE_PATH` | `/data/gallery.sqlite` | 数据库文件 |
+| `CACHE_DIR` | `/data/cache` | 缩略图缓存目录 |
+| `CACHE_MAX_BYTES` | `5368709120` | 缓存容量上限（5 GiB），超出按最旧优先回收 |
+| `CACHE_GC_MIN_AGE_HOURS` / `CACHE_GC_INTERVAL_HOURS` | `24` / `6` | 缓存保护期与清理间隔，间隔为 0 关闭定时清理 |
+| `TRUSTED_PROXIES` | 空 | 反向代理 IP/CIDR，逗号分隔；只有这些代理的 `X-Forwarded-*` 会被信任 |
+| `WS_ALLOWED_ORIGINS` | 空 | 跨源访问时允许的网页 origin，如 `https://photos.example` |
+| `AI_API_TOKEN` | 空 | 可选：智能归纳的 AI Token，优先于页面中保存的值 |
+| `LOG_LEVEL` | `info` | trace / debug / info / warn / error / fatal |
 
-## 快速开始
-
-### 环境依赖
-
-- Node.js 22
-- ZIP/CBZ/7z 与非 RAR 的伪装 CBR 继续使用既有 ZIP/7z 读取器；7z 可使用发行版 `7zz` 或内置 `7zip-bin`。真实 RAR4/RAR5 只需要 Node 与生产依赖中的 `node-unrar-js`，不需要系统 `unrar` 或带 RAR 插件的 7z。
-- pnpm（推荐）或 npm
-
-### 启动指令
-
-```bash
-# 安装依赖
-npm install
-
-# 启动后端服务
-npm run dev:server
-
-# 启动前端开发服务器（可选，前端会自动嵌入后端）
-cd apps/web && npm run dev
-```
-
-访问地址：`http://127.0.0.1:3210`
-
-默认账号：`admin`  
-
-### Docker 启动
+## 本地开发
 
 ```bash
-docker compose up --build
+npm ci
+cp .env.example apps/server/.env   # 开发模式服务端用 3211 端口
+npm run dev:server                 # 后端 http://localhost:3211
+npm run dev --workspace @moment-pic/web   # 前端 http://localhost:3210，/api 与 /ws 代理到 3211
 ```
 
-访问地址：`http://127.0.0.1:3210`
+常用命令：
 
-## 当前支持
+```bash
+npm test          # 服务端 + 前端测试、ESLint、类型检查、构建
+npm run typecheck
+```
 
-1. 目录图集浏览（如 `风景1/001.jpg`）
-2. ZIP/CBZ 根目录图集解析
-3. 图片格式：`jpg`、`jpeg`、`png`、`webp`、`gif`、`bmp`
-4. 首页图集浏览
-5. 图集缩略图浏览
-6. 单图查看器（支持缩放、旋转、全屏）
-7. 上一张、下一张切换
-8. 手动重新扫描
-9. 目录监听与自动同步
-10. WebSocket 实时推送
-11. 自定义图片查看器组件（集成缩放、旋转、全屏功能）
+测试会自动创建临时 SQLite / 缓存目录，不读取 `.env` 或真实图库。
 
 ## 项目结构
 
 ```
-moment-pic/
-├── apps/
-│   ├── server/           # 后端服务
-│   │   └── src/
-│   │       ├── routes/  # API 路由
-│   │       ├── services/# 业务逻辑
-│   │       └── lib/     # 工具库
-│   └── web/              # 前端应用
-│       └── src/
-│           ├── components/ # React 组件
-│           └── hooks/      # 自定义 Hooks
-├── docs/                 # 项目文档
-└── package.json         # 工作空间配置
+apps/
+  server/   Fastify + better-sqlite3 + sharp
+    src/routes        API 路由
+    src/services      业务逻辑（扫描、缩略图、压缩包、智能归纳、认证）
+    src/repositories  SQLite 数据访问
+    src/db/migrations 版本化数据库迁移（PRAGMA user_version）
+  web/      React 19 + Vite + Tailwind 4
+docs/       设计文档；docs/archive 为历史验收记录
 ```
 
-## 开发规范
+## 升级
 
-- **重构原则**：遵循单一职责，消除代码坏味道
-- **日志追踪**：[模块名] 中文日志规范说明
-- **临时文件**：所有调试产物存放于 `/debug` 目录，需定期清理
+版本变化与升级注意事项见 [CHANGELOG.md](CHANGELOG.md)。数据库结构在启动时自动迁移，迁移失败会回滚并拒绝启动，不会留下半升级状态；升级前仍建议备份 `/data/gallery.sqlite`。
 
-### 缩略图缓存容量（2026-10-18，Codex）
+## 许可证
 
-`CACHE_MAX_BYTES` 默认 5368709120（5 GiB），`CACHE_GC_MIN_AGE_HOURS` 默认 24，`CACHE_GC_INTERVAL_HOURS` 默认 6。间隔为 0 时关闭定时清理（包括启动后的首次清理）。启用时启动 5 分钟后执行首轮，完成后按间隔调度，重叠请求合并；退出时取消并等待当前轮。
-
-清理仅遍历 `CACHE_DIR` 的扁平普通文件，不递归、不跟随符号链接、不修改数据库。超过 1 小时的 `.tmp` 残留优先删除；普通缓存仅超限时按文件 mtime 从旧到新删除，保留保护期内文件，因此全部文件较新时可能暂时超过容量。单文件删除失败不阻断其余文件。mtime 是生成/修改时间，并非精确的最近访问时间。删除的缓存在下次请求时自动重新生成。
-
-缩略图 v5 缓存键包含 `fit=cover|inside`：封面默认 cover，详情使用等比 inside。升级后旧版本缓存按容量策略逐步回收，首次请求会重新生成；未超限的旧缓存不会强制清空。
-
-### 运行与升级说明（2026-10-18，Codex）
-
-- SIGTERM/SIGINT 会停止目录监听、等待在途定向扫描，关闭 Fastify（含 WebSocket/缓存 GC），成功退出码为 0；超过 10 秒强制以 1 退出并记录错误。Compose 使用 `init: true` 回收子进程。
-- `/api/v1/health` 无需登录，正常 200，数据库异常 503，`data` 内包含 `status`、`db`、`dbLatencyMs`、`uptime`、`version`，禁止缓存。SQLite `busy_timeout=2000` 限制锁竞争等待；它作用于所有数据库语句，**不是对同步驱动任意慢调用的抢占式 2 秒超时**。超过 2 秒的探测按实际成功/失败返回并记录时延告警。
-- `LOG_LEVEL` 支持 trace/debug/info/warn/error/fatal，非法值回落 info，Fastify 和业务日志均生效。
-- 镜像独立安装服务端生产依赖，运行阶段不带编译工具，使用 `NODE_ENV=production` 和 `USER node`。部署前必须在宿主机执行 `chown -R 1000:1000 /volume4/docker/moment-pic/config`，覆盖目录、缓存、SQLite 主文件和 `-wal`/`-shm`。数据库卷必须使用本地 ext4/btrfs，不支持 NFS/SMB 上的 WAL。
-- HEALTHCHECK 用 Node 内建 fetch（30s 间隔、5s 超时、60s 启动宽限、3 次重试）。Docker 本身不会因 unhealthy 自动重启；外部 autoheal 会改变这一行为。
-- 本次未执行 Docker 构建；≤400MB 体积目标、最终镜像依赖内容和非 root 容器运行均**未验证**。
-- 阅读进度仅对登录用户保存；详情恢复上次图片，首页继续阅读过滤已读完图集，公开分享不读写个人进度。新增表由 bootstrap 幂等创建，无存量数据全量重算。
+[MIT](LICENSE)

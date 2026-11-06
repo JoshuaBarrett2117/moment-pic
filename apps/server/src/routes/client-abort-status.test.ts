@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { buildApp } from "../app.js";
 import { env } from "../config/env.js";
-import { createAuthToken } from "../lib/auth.js";
+import { testSessionCookie } from "../test-support/session.js";
 import { CLIENT_CLOSED_STATUS, isClientAbortError } from "../lib/media-request.js";
 import { deleteAlbumDb, insertAlbumWithAssetsDb } from "../repositories/album-repository.js";
 import { deleteLibraryRootDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
@@ -27,7 +27,7 @@ test("客户端断开导致的中止返回 499，而不是 500", async (context)
     context.mock.method(archiveBudget, "acquire", async () => {
       throw new DOMException("媒体请求已取消", "AbortError");
     });
-    const cookie = `moment_pic_auth=${createAuthToken(env.adminPassword, Date.now() + 60_000)}`;
+    const cookie = testSessionCookie(60_000);
     for (const variant of ["thumbnail", "preview", "original"]) {
       const response = await app.inject({ url: `/api/v1/assets/${id}/${variant}`, headers: { cookie } });
       assert.equal(response.statusCode, CLIENT_CLOSED_STATUS, `${variant} 应为 499，实际 ${response.statusCode}`);

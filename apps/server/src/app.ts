@@ -5,10 +5,14 @@ import { fileURLToPath } from "node:url";
 import fastifyStatic from "@fastify/static";
 
 import { env } from "./config/env.js";
-import { validateAdminPassword } from "./config/security.js";
-import { isAuthenticated } from "./lib/auth.js";
+import { getSession } from "./lib/auth.js";
+import { isAllowedForRole } from "./lib/permissions.js";
+import { ensureInitialAdmin, purgeExpiredSessions } from "./services/auth-service.js";
+import { AdminPasswordConfigError } from "./config/security.js";
+import { sealLegacyAiTokenDb } from "./repositories/smart-album-repository.js";
 import { CLIENT_CLOSED_STATUS, isClientAbortError, isReplyChannelClosed } from "./lib/media-request.js";
 import { isAllowedOrigin } from "./lib/origin.js";
+import { applySecurityHeaders } from "./lib/security-headers.js";
 import { albumProgressRoutes } from "./routes/album-progress.js";
 import { albumRoutes } from "./routes/albums.js";
 import { authRoutes } from "./routes/auth.js";
@@ -46,17 +50,29 @@ const appendUtf8Charset = (contentType: string): string => {
 };
 
 export const buildApp = () => {
-  validateAdminPassword(env.adminPassword);
+  let startupDbError: unknown = null;
+  try {
+    ensureInitialAdmin(env.adminPassword, { reset: process.env.ADMIN_PASSWORD_RESET === "true" });
+    purgeExpiredSessions();
+    sealLegacyAiTokenDb();
+  } catch (error) {
+    // 配置错误（缺少/非法 ADMIN_PASSWORD）拒绝启动；数据库暂不可用时继续启动，由 /api/v1/health 报 503
+    if (error instanceof AdminPasswordConfigError) throw error;
+    startupDbError = error;
+  }
   const app = Fastify({
     logger: { level: env.logLevel },
     trustProxy: env.trustedProxies.length ? env.trustedProxies : false
   });
 
   app.decorate("config", env);
+  app.decorateRequest("authSession", null);
+  if (startupDbError) app.log.error({ err: startupDbError }, "启动时初始化管理员失败（数据库不可用），稍后登录将失败");
 
   wsService.initialize(app);
 
   app.addHook("onRequest", async (request, reply) => {
+    applySecurityHeaders(reply);
     const origin = request.headers.origin;
     if (origin) reply.header("Vary", "Origin");
     if (origin && isAllowedOrigin(request.raw, app.config.wsAllowedOrigins)) {
@@ -80,12 +96,16 @@ export const buildApp = () => {
       if (pathname === "/api/v1/auth/login" || pathname === "/api/v1/auth/logout" || pathname === "/api/v1/health" || pathname.startsWith("/api/v1/shares/")) {
         return;
       }
-      const authed = isAuthenticated(request, app.config.adminPassword);
-      if (!authed) {
+      const session = getSession(request);
+      if (!session) {
         return reply.status(401).send({
           code: 4010,
           message: "unauthorized"
         });
+      }
+      request.authSession = session;
+      if (!isAllowedForRole(session.user.role, request.method, pathname)) {
+        return reply.status(403).send({ code: 4030, message: "当前账号没有权限执行此操作" });
       }
     }
   });

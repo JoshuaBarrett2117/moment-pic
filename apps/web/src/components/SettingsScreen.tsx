@@ -6,6 +6,9 @@ import { SmartAlbumSettingsPanel } from './SmartAlbumSettingsPanel';
 import { SettingsAdvancedPanel } from './SettingsAdvancedPanel';
 import { SettingsBasicPanel } from './SettingsBasicPanel';
 import { SettingsSidebar, type SettingsTab } from './SettingsSidebar';
+import { SettingsAccountPanel } from './SettingsAccountPanel';
+import { SettingsUsersPanel } from './SettingsUsersPanel';
+import { useCurrentUser } from '../app/current-user';
 
 interface SettingsScreenProps {
   scanError?: string | null;
@@ -44,7 +47,10 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
     setAlbumListItemMinWidthMobile,
     systemConfig
   } = useSettingsConfigForm();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('basic');
+  const { isAdmin } = useCurrentUser();
+  const [selectedTab, setActiveTab] = useState<SettingsTab>('basic');
+  // 只读用户只能看到“账号”页
+  const activeTab: SettingsTab = isAdmin ? selectedTab : 'account';
   const [newPath, setNewPath] = useState('');
   const [newName, setNewName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -109,7 +115,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
 
   return (
     <div className="flex flex-col md:flex-row h-[100dvh] w-full bg-background overflow-hidden">
-      <SettingsSidebar activeTab={activeTab} onBack={onBack} onTabChange={setActiveTab} />
+      <SettingsSidebar activeTab={activeTab} onBack={onBack} onTabChange={setActiveTab} isAdmin={isAdmin} />
 
       <main className="flex-1 p-4 md:p-12 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] overflow-y-auto custom-scrollbar">
         {(localScanError || scanError) && <div role="alert" className="mb-4 rounded-lg border border-error/30 bg-error/10 p-4 text-error">{localScanError ?? scanError}</div>}
@@ -178,6 +184,9 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
             <SmartAlbumSettingsPanel onRebuildComplete={onScanComplete} />
           </>
         )}
+
+        {activeTab === 'account' && <SettingsAccountPanel />}
+        {activeTab === 'users' && isAdmin && <SettingsUsersPanel />}
       </main>
     </div>
   );

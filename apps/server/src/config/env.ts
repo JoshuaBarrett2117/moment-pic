@@ -2,29 +2,43 @@ import fs from "node:fs";
 import { resolveLogLevel } from "./log-level.js";
 import path from "node:path";
 
-const toNumber = (value: string | undefined, fallback: number): number => {
+/** 生产 / Docker 默认端口；开发模式下服务端用 3211，由 Vite（3210）代理。 */
+export const DEFAULT_PORT = 3210;
+
+export class EnvConfigError extends Error {}
+
+/** 已知环境变量。启动时对未知的 MOMENT_PIC 相关变量与已废弃变量给出提示。 */
+export const KNOWN_ENV_KEYS = [
+  "HOST", "PORT", "ADMIN_PASSWORD", "SESSION_SECRET", "TRUSTED_PROXIES", "WS_ALLOWED_ORIGINS",
+  "LIBRARY_ROOTS", "CACHE_DIR", "CACHE_MAX_BYTES", "CACHE_GC_MIN_AGE_HOURS", "CACHE_GC_INTERVAL_HOURS",
+  "SQLITE_PATH", "PUBLIC_DIR", "LOG_LEVEL", "AI_API_TOKEN"
+] as const;
+
+export const DEPRECATED_ENV_KEYS: Readonly<Record<string, string>> = {
+  LIBRARY_ROOT_PATH: "请改用 LIBRARY_ROOTS（支持逗号/分号/换行分隔多个目录）",
+  INDEX_FILE_PATH: "已不再使用，可删除",
+  DATABASE_URL: "已不再使用（Prisma 已移除），数据库路径请用 SQLITE_PATH"
+};
+
+/** 数字型变量：未设置用默认值；设置了但非法则拒绝启动，而不是静默回退。 */
+export const readNumber = (name: string, value: string | undefined, fallback: number, options: { min?: number; max?: number; integer?: boolean } = {}): number => {
+  if (value === undefined || value.trim() === "") return fallback;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const splitLibraryRoots = (value: string | undefined): string[] => {
-  if (!value?.trim()) {
-    return [];
+  const { min = 0, max = Number.MAX_SAFE_INTEGER, integer = false } = options;
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max || (integer && !Number.isInteger(parsed))) {
+    throw new EnvConfigError(`环境变量 ${name}=${JSON.stringify(value)} 非法，应为 ${integer ? "整数" : "数字"}，范围 ${min}-${max}`);
   }
-
-  return value
-    .split(/[\r\n;,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return parsed;
 };
+
+const splitList = (value: string | undefined, separator: RegExp): string[] =>
+  (value ?? "").split(separator).map((item) => item.trim()).filter(Boolean);
 
 const libraryRootPaths = (() => {
-  const roots = splitLibraryRoots(process.env.LIBRARY_ROOTS);
-  if (roots.length > 0) {
-    return roots;
-  }
-
-  return [process.env.LIBRARY_ROOT_PATH ?? "./samples/library"];
+  const roots = splitList(process.env.LIBRARY_ROOTS, /[\r\n;,]+/);
+  if (roots.length > 0) return roots;
+  // 兼容旧变量，启动时会提示迁移
+  return [process.env.LIBRARY_ROOT_PATH?.trim() || "./samples/library"];
 })();
 
 const resolvePublicDir = (): string => {
@@ -43,17 +57,24 @@ const resolvePublicDir = (): string => {
 export const env = {
   logLevel: resolveLogLevel(process.env.LOG_LEVEL),
   host: process.env.HOST ?? "0.0.0.0",
-  port: toNumber(process.env.PORT, 3001),
+  port: readNumber("PORT", process.env.PORT, DEFAULT_PORT, { min: 0, max: 65535, integer: true }), // 0 = 随机端口（测试用）
   adminPassword: process.env.ADMIN_PASSWORD ?? "",
-  trustedProxies: (process.env.TRUSTED_PROXIES ?? "").split(",").map((value) => value.trim()).filter(Boolean),
-  wsAllowedOrigins: (process.env.WS_ALLOWED_ORIGINS ?? "").split(",").map((value) => value.trim()).filter(Boolean),
+  sessionSecret: process.env.SESSION_SECRET ?? "",
+  aiApiToken: process.env.AI_API_TOKEN ?? "",
+  trustedProxies: splitList(process.env.TRUSTED_PROXIES, /,/),
+  wsAllowedOrigins: splitList(process.env.WS_ALLOWED_ORIGINS, /,/),
   libraryRootPath: libraryRootPaths[0],
   libraryRootPaths,
-  cacheMaxBytes: Math.max(0, toNumber(process.env.CACHE_MAX_BYTES, 5 * 1024 ** 3)),
-  cacheGcMinAgeHours: Math.max(0, toNumber(process.env.CACHE_GC_MIN_AGE_HOURS, 24)),
-  cacheGcIntervalHours: Math.max(0, toNumber(process.env.CACHE_GC_INTERVAL_HOURS, 6)),
+  cacheMaxBytes: readNumber("CACHE_MAX_BYTES", process.env.CACHE_MAX_BYTES, 5 * 1024 ** 3),
+  cacheGcMinAgeHours: readNumber("CACHE_GC_MIN_AGE_HOURS", process.env.CACHE_GC_MIN_AGE_HOURS, 24),
+  cacheGcIntervalHours: readNumber("CACHE_GC_INTERVAL_HOURS", process.env.CACHE_GC_INTERVAL_HOURS, 6),
   cacheDir: process.env.CACHE_DIR ?? "./data/cache",
-  indexFilePath: process.env.INDEX_FILE_PATH ?? "./data/index.json",
   sqlitePath: process.env.SQLITE_PATH ?? "./data/gallery.sqlite",
   publicDir: resolvePublicDir()
 };
+
+/** 返回需要提示给运维的配置警告（废弃变量）。 */
+export const collectEnvWarnings = (source: NodeJS.ProcessEnv = process.env): string[] =>
+  Object.entries(DEPRECATED_ENV_KEYS)
+    .filter(([key]) => source[key] !== undefined && source[key] !== "")
+    .map(([key, hint]) => `环境变量 ${key} 已废弃：${hint}`);

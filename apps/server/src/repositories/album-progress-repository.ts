@@ -8,8 +8,8 @@ const toProgress = (row: Record<string, unknown>): AlbumProgressDTO => ({
   updatedAt: String(row.progress_updated_at ?? row.updated_at), finished: Number(row.asset_index) === Number(row.total) - 1
 });
 
-export const findAlbumProgressDb = (albumId: string): AlbumProgressDTO | null => {
-  const row = getDb().prepare("SELECT * FROM album_progress WHERE album_id = ?").get(albumId) as Record<string, unknown> | undefined;
+export const findAlbumProgressDb = (userId: string, albumId: string): AlbumProgressDTO | null => {
+  const row = getDb().prepare("SELECT * FROM album_progress WHERE user_id = ? AND album_id = ?").get(userId, albumId) as Record<string, unknown> | undefined;
   return row ? toProgress(row) : null;
 };
 
@@ -18,18 +18,18 @@ export const findAlbumAssetIndexDb = (albumId: string, assetId: string): number 
   return row ? row.sort_index - 1 : null;
 };
 
-export const upsertAlbumProgressDb = (albumId: string, progress: Omit<AlbumProgressDTO, "finished">): void => {
-  getDb().prepare(`INSERT INTO album_progress (album_id, asset_id, asset_index, total, updated_at)
-    VALUES (@albumId, @assetId, @assetIndex, @total, @updatedAt)
-    ON CONFLICT(album_id) DO UPDATE SET asset_id=excluded.asset_id, asset_index=excluded.asset_index,
-    total=excluded.total, updated_at=excluded.updated_at`).run({ albumId, ...progress });
+export const upsertAlbumProgressDb = (userId: string, albumId: string, progress: Omit<AlbumProgressDTO, "finished">): void => {
+  getDb().prepare(`INSERT INTO album_progress (user_id, album_id, asset_id, asset_index, total, updated_at)
+    VALUES (@userId, @albumId, @assetId, @assetIndex, @total, @updatedAt)
+    ON CONFLICT(user_id, album_id) DO UPDATE SET asset_id=excluded.asset_id, asset_index=excluded.asset_index,
+    total=excluded.total, updated_at=excluded.updated_at`).run({ userId, albumId, assetId: progress.assetId, assetIndex: progress.assetIndex, total: progress.total, updatedAt: progress.updatedAt });
 };
 
-export const listContinueReadingDb = (limit: number): Array<{ album: AlbumRecord; progress: AlbumProgressDTO }> => {
+export const listContinueReadingDb = (userId: string, limit: number): Array<{ album: AlbumRecord; progress: AlbumProgressDTO }> => {
   const rows = getDb().prepare(`SELECT al.*, p.asset_id, p.asset_index, p.total, p.updated_at AS progress_updated_at
     FROM album_progress p INNER JOIN albums al ON al.id=p.album_id
-    WHERE p.total > 0 AND p.asset_index < p.total - 1
-    ORDER BY p.updated_at DESC LIMIT ?`).all(Math.max(1, Math.min(100, limit))) as Record<string, unknown>[];
+    WHERE p.user_id = ? AND p.total > 0 AND p.asset_index < p.total - 1
+    ORDER BY p.updated_at DESC LIMIT ?`).all(userId, Math.max(1, Math.min(100, limit))) as Record<string, unknown>[];
   return rows.map((row) => ({ album: rowToAlbum(row), progress: toProgress(row) }));
 };
 
@@ -43,3 +43,10 @@ export const reconcileAlbumProgressDb = (albumId: string): void => {
   db.prepare(`DELETE FROM album_progress WHERE album_id=@albumId
     AND NOT EXISTS (SELECT 1 FROM assets a WHERE a.id=album_progress.asset_id AND a.album_id=album_progress.album_id)`).run({ albumId });
 };
+
+/** 把迁移时无主的旧进度认领给指定管理员（全新安装、迁移早于首个管理员创建时）。 */
+export const claimLegacyProgressDb = (userId: string, legacyOwner: string): number =>
+  getDb().prepare("UPDATE OR IGNORE album_progress SET user_id = ? WHERE user_id = ?").run(userId, legacyOwner).changes;
+
+export const deleteUserProgressDb = (userId: string): number =>
+  getDb().prepare("DELETE FROM album_progress WHERE user_id = ?").run(userId).changes;

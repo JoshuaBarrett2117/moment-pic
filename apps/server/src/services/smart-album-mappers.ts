@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import type {
   SmartAlbumAiConfigDTO,
   SmartAlbumRuleDTO,
@@ -52,7 +53,7 @@ export const toSmartAlbumAiConfigDto = (config: SmartAlbumAiConfigRecord): Smart
   provider: "openai",
   apiEndpoint: normalizeOpenAiEndpoint(config.apiEndpoint),
   apiModel: config.apiModel || DEFAULT_OPENAI_MODEL,
-  hasApiToken: Boolean(config.apiToken?.trim()),
+  hasApiToken: Boolean(env.aiApiToken.trim() || config.apiToken?.trim()),
   apiTokenMasked: config.apiToken?.trim() ? `${config.apiToken.trim().slice(0, 6)}...${config.apiToken.trim().slice(-4)}` : null,
   minConfidenceAutoApply: config.minConfidenceAutoApply,
   minClusterAlbumCount: config.minClusterAlbumCount,

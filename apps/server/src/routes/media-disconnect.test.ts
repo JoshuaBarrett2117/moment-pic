@@ -10,7 +10,7 @@ import test from "node:test";
 import type { Worker } from "node:worker_threads";
 import { buildApp } from "../app.js";
 import { env } from "../config/env.js";
-import { createAuthToken } from "../lib/auth.js";
+import { testSessionCookie } from "../test-support/session.js";
 import { insertAlbumWithAssetsDb, deleteAlbumDb } from "../repositories/album-repository.js";
 import { upsertLibraryRootDb, deleteLibraryRootDb } from "../repositories/library-root-repository.js";
 import { authenticateAlbumShare, createAlbumShare } from "../services/album-service.js";
@@ -37,7 +37,7 @@ test("真实 HTTP 管理/分享原图断开，取消传播到提取子进程并�
     const auth = await authenticateAlbumShare(share.token, share.password, id);
     for (const url of [`/api/v1/assets/${id}/original`, `/api/v1/shares/${share.token}/assets/${id}/original?accessToken=${encodeURIComponent(auth.accessToken)}`]) {
       await new Promise<void>((resolve, reject) => {
-        const request = http.get(origin + url, { headers: { cookie: `moment_pic_auth=${createAuthToken(env.adminPassword, Date.now() + 60_000)}` } }, (response) => {
+        const request = http.get(origin + url, { headers: { cookie: testSessionCookie(60_000) } }, (response) => {
           assert.equal(response.statusCode, 200);
           response.once("data", () => { response.destroy(); request.destroy(); resolve(); });
           response.on("error", () => {});
@@ -74,7 +74,7 @@ test("真实 RAR4/RAR5 HTTP 管理/分享原图断开立即终止 WASM worker，
     const origin = await app.listen({ host: "127.0.0.1", port: 0 });
     const share = (await createAlbumShare(id, { password: "Rar-Http-Test!", expiresAt: new Date(Date.now() + 60_000).toISOString(), origin }))!;
     const auth = await authenticateAlbumShare(share.token, share.password, id);
-    const headers = { cookie: `moment_pic_auth=${createAuthToken(env.adminPassword, Date.now() + 60_000)}` };
+    const headers = { cookie: testSessionCookie(60_000) };
     for (const create of [createStoredRarArchive, createStoredRar5Archive]) {
       await fs.writeFile(archive, create([{ entryPath: "page.png", content: Buffer.concat([png, Buffer.alloc(16 * 1024 * 1024)]) }]));
       for (const url of [`/api/v1/assets/${id}/original`, `/api/v1/shares/${share.token}/assets/${id}/original?accessToken=${encodeURIComponent(auth.accessToken)}`]) {

@@ -1,3 +1,4 @@
+import { validateAiEndpoint } from "../lib/ai-endpoint.js";
 import path from "node:path";
 
 import type {
@@ -362,7 +363,7 @@ export const updateSmartAlbumAiConfig = async (input: SmartAlbumAiConfigInput): 
     enabled: input.enabled,
     mode: input.mode,
     provider: "openai",
-    apiEndpoint: normalizeOpenAiEndpoint(input.apiEndpoint),
+    apiEndpoint: validateAiEndpoint(normalizeOpenAiEndpoint(input.apiEndpoint)),
     apiToken: nextToken,
     apiModel: input.apiModel.trim() || DEFAULT_OPENAI_MODEL,
     minConfidenceAutoApply: input.minConfidenceAutoApply,

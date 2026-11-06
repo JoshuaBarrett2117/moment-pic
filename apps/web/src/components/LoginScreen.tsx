@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { AlertCircle, ArrowRight, Camera, Info, Lock, PersonStanding } from 'lucide-react';
 import { useAuth, useWideMobile } from '../hooks';
 import { Polaroid } from './Polaroid';
@@ -139,11 +139,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
         </div>
 
         <div className="relative flex h-full w-full items-center justify-center p-20">
-          <Polaroid src="https://picsum.photos/seed/home/400/400" rotation={-6} className="absolute left-[20%] top-[15%] w-64" />
-          <Polaroid src="https://picsum.photos/seed/flowers/400/400" rotation={12} className="absolute bottom-[20%] left-[15%] w-56" />
-          <Polaroid src="https://picsum.photos/seed/camera/400/400" rotation={3} className="absolute right-[15%] top-[25%] w-72" />
+          <Polaroid src="/login/home.svg" rotation={-6} className="absolute left-[20%] top-[15%] w-64" />
+          <Polaroid src="/login/flowers.svg" rotation={12} className="absolute bottom-[20%] left-[15%] w-56" />
+          <Polaroid src="/login/camera.svg" rotation={3} className="absolute right-[15%] top-[25%] w-72" />
           <Polaroid
-            src="https://picsum.photos/seed/lake/600/600"
+            src="/login/lake.svg"
             rotation={-1}
             caption="The Best Moment"
             date="Captured 2024.08.15"

@@ -5,7 +5,9 @@ import { buildApp } from "../app.js";
 import { env } from "../config/env.js";
 import { validateAdminPassword } from "../config/security.js";
 import { authRoutes } from "./auth.js";
-import { createAuthToken, isAuthenticated, buildAuthCookie } from "../lib/auth.js";
+import { isAuthenticated, buildAuthCookie } from "../lib/auth.js";
+import { ensureInitialAdmin } from "../services/auth-service.js";
+import { testSessionCookie } from "../test-support/session.js";
 
 const password = "Explicit-Test-Password-2026!";
 
@@ -33,7 +35,9 @@ test("真实启动入口在缺失或空配置时退出，不创建数据库也�
 });
 
 const authApp = async (trustProxy: false | string[] = false, adminPassword = password) => {
+  ensureInitialAdmin(password, { reset: true });
   const app = Fastify({ trustProxy });
+  app.decorateRequest("authSession", null);
   app.decorate("config", { ...env, adminPassword });
   await app.register(authRoutes);
   return app;
@@ -79,14 +83,16 @@ test("非空的 1-128 字符密码无需复杂度限制，启动和直接校验�
   } finally { env.adminPassword = previous; }
 });
 
-test("Cookie 异常编码与重复 cookie 不抛异常，过期及额外 token 字段无效", () => {
-  const valid = createAuthToken(password, Date.now() + 60_000);
-  const check = (cookie: string) => isAuthenticated({ headers: { cookie } }, password);
-  assert.equal(check(buildAuthCookie(valid, 60)), true);
-  assert.equal(check(`other=%ZZ; moment_pic_auth=${valid}`), false);
-  assert.equal(check(`moment_pic_auth=${valid}; moment_pic_auth=${valid}`), false);
-  assert.equal(check(`moment_pic_auth=${valid}.extra`), false);
-  assert.equal(check(`moment_pic_auth=${createAuthToken(password, Date.now() - 1)}`), false);
+test("Cookie 异常编码与重复 cookie 不抛异常，过期、伪造及额外 token 字段无效", () => {
+  const valid = testSessionCookie();
+  const token = valid.split("=")[1];
+  const check = (cookie: string) => isAuthenticated({ headers: { cookie } });
+  assert.equal(check(buildAuthCookie(token, 60)), true);
+  assert.equal(check(`other=%ZZ; ${valid}`), false);
+  assert.equal(check(`${valid}; ${valid}`), false);
+  assert.equal(check(`${valid}.extra`), false);
+  assert.equal(check(testSessionCookie(-1)), false);
+  assert.equal(check("moment_pic_auth=forged-token-value"), false);
 });
 
 test("实际 HTTP CORS 只允许同源或显式来源，不信任伪造转发 Host", async () => {

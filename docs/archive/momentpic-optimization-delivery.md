@@ -118,7 +118,7 @@
 实际 SIGTERM 验收（日志保留原始进程输出）：
 
 ```text
-PORT=3211 ADMIN_PASSWORD=test1234 node /opt/data/projects/momentpic/apps/server/dist/index.js
+PORT=3211 ADMIN_PASSWORD=<本地测试口令> node apps/server/dist/index.js
 # cwd、SQLITE_PATH、CACHE_DIR、INDEX_FILE_PATH、LIBRARY_ROOTS、DOTENV_CONFIG_PATH 全部设为 TMPDIR 下临时目录；预置一个空图库根以启动真实监听。
 HEALTH: 200 {"code":0,"message":"ok","data":{"status":"ok","db":"ok","dbLatencyMs":0.08638,"uptime":0.412086363,"version":"0.1.0"}}
 kill -TERM 1049040

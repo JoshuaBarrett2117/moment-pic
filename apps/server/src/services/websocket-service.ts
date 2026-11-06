@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { WebSocketServer, WebSocket } from "ws";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
-import { AUTH_COOKIE_NAME, isAuthenticated, parseCookies } from "../lib/auth.js";
+import { getSession } from "../lib/auth.js";
+import { findSessionDb } from "../repositories/user-repository.js";
 import { isAllowedOrigin } from "../lib/origin.js";
 
 type FileChangeMessage = {
@@ -14,7 +15,7 @@ type ScanCompleteMessage = {
   event: { libraryRootId: string; albumsDiscovered: number; assetsDiscovered: number; timestamp: string; failureCount?: number; message?: string | null };
 };
 type Message = FileChangeMessage | ScanCompleteMessage;
-type Client = { socket: WebSocket; ip: string; expiresAt: number; expiry: NodeJS.Timeout };
+type Client = { socket: WebSocket; ip: string; expiresAt: number; expiry: NodeJS.Timeout; tokenHash: string };
 type SocketLimits = { global: number; perClient: number; bufferedBytes: number };
 const DEFAULT_LIMITS: SocketLimits = { global: 64, perClient: 4, bufferedBytes: 1024 * 1024 };
 
@@ -35,12 +36,12 @@ export class WebSocketService {
         socket.end(`HTTP/1.1 ${status} Rejected\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`, () => socket.destroy());
       };
       if (request.url !== "/ws" || request.method !== "GET") { deny(400); return; }
-      if (!isAuthenticated(request, fastify.config.adminPassword)) { deny(401); return; }
+      const session = getSession(request);
+      if (!session) { deny(401); return; }
       if (!isAllowedOrigin(request, fastify.config.wsAllowedOrigins)) { deny(403); return; }
       const ip = request.socket.remoteAddress ?? "unknown";
       if (this.clients.size >= this.limits.global || [...this.clients].filter((client) => client.ip === ip).length >= this.limits.perClient) { deny(429); return; }
-      const token = parseCookies(request.headers.cookie)[AUTH_COOKIE_NAME];
-      const expiresAt = (JSON.parse(Buffer.from(token.split(".")[0], "base64url").toString()) as { exp: number }).exp;
+      const { expiresAt, tokenHash } = session;
       try {
         this.server?.handleUpgrade(request, socket, head, (ws) => {
           const expiry = setTimeout(() => {
@@ -49,7 +50,7 @@ export class WebSocketService {
             terminate.unref();
           }, Math.min(expiresAt - Date.now(), 2_147_483_647));
           expiry.unref();
-          const client: Client = { socket: ws, ip, expiresAt, expiry };
+          const client: Client = { socket: ws, ip, expiresAt, expiry, tokenHash };
           this.clients.add(client);
           ws.on("error", () => ws.terminate());
           ws.once("close", () => { clearTimeout(expiry); this.clients.delete(client); });
@@ -63,7 +64,8 @@ export class WebSocketService {
   broadcast(message: Message): void {
     const data = JSON.stringify(message);
     for (const client of this.clients) {
-      if (client.expiresAt <= Date.now()) { client.socket.close(4001, "会话已过期"); continue; }
+      // 会话过期或已被吊销（登出、改密、禁用）时断开推送
+      if (client.expiresAt <= Date.now() || !findSessionDb(client.tokenHash)) { client.socket.close(4001, "会话已过期"); continue; }
       if (client.socket.bufferedAmount + Buffer.byteLength(data) > this.limits.bufferedBytes) { client.socket.terminate(); continue; }
       if (client.socket.readyState === WebSocket.OPEN) client.socket.send(data, (error) => { if (error) client.socket.terminate(); });
     }

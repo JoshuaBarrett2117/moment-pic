@@ -13,7 +13,7 @@ test('首页继续阅读无数据时隐藏，有进度显示页码并点击进�
   await act(async () => { renderer = create(createElement(ContinueReading, { onOpen: () => {} })); });
   assert.equal(renderer.toJSON(), null);
   await act(async () => renderer.unmount());
-  fetch.mock.mockImplementation(async () => ({ items: [{ album: { id: 'album', name: '测试图集', sourceType: 'folder', assetCount: 40, coverUrl: null, isFavorite: false, updatedAt: '' }, progress: { assetId: 'page', assetIndex: 25, total: 40, updatedAt: '', finished: false } }] }));
+  fetch.mock.mockImplementation(async () => ({ items: [{ album: { id: 'album', name: '测试图集', sourceType: 'folder' as const, assetCount: 40, coverUrl: null, isFavorite: false, updatedAt: '' }, progress: { assetId: 'page', assetIndex: 25, total: 40, updatedAt: '', finished: false } }] }));
   let opened = '';
   await act(async () => { renderer = create(createElement(ContinueReading, { onOpen: (id: string) => { opened = id; } })); });
   try {

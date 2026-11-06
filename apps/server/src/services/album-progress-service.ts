@@ -9,20 +9,20 @@ const requireAlbum = (albumId: string) => {
   return album;
 };
 
-export const getAlbumProgress = (albumId: string): AlbumProgressDTO | null => {
+export const getAlbumProgress = (userId: string, albumId: string): AlbumProgressDTO | null => {
   requireAlbum(albumId);
-  return findAlbumProgressDb(albumId);
+  return findAlbumProgressDb(userId, albumId);
 };
 
-export const saveAlbumProgress = (albumId: string, input: { assetId: string; assetIndex: number }): AlbumProgressDTO => {
+export const saveAlbumProgress = (userId: string, albumId: string, input: { assetId: string; assetIndex: number }): AlbumProgressDTO => {
   const album = requireAlbum(albumId);
   const index = findAlbumAssetIndexDb(albumId, input.assetId);
   if (index === null || !Number.isInteger(input.assetIndex) || input.assetIndex !== index || index < 0 || index >= album.assetCount) {
     throw Object.assign(new Error("图片归属或阅读页序无效"), { statusCode: 400 });
   }
   const progress: AlbumProgressDTO = { ...input, total: album.assetCount, updatedAt: new Date().toISOString(), finished: index === album.assetCount - 1 };
-  upsertAlbumProgressDb(albumId, progress);
+  upsertAlbumProgressDb(userId, albumId, progress);
   return progress;
 };
 
-export const getContinueReading = (limit = 20): ContinueReadingDTO[] => listContinueReadingDb(limit).map(({ album, progress }) => ({ album: toAlbumListItem(album), progress }));
+export const getContinueReading = (userId: string, limit = 20): ContinueReadingDTO[] => listContinueReadingDb(userId, limit).map(({ album, progress }) => ({ album: toAlbumListItem(album), progress }));

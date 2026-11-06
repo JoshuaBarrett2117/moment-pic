@@ -44,7 +44,7 @@ export function useWebSocket(
   const reconnectTimeoutRef = useRef<number | null>(null);
   const onFileChangeRef = useRef(onFileChange);
   const onScanCompleteRef = useRef(onScanComplete);
-  const connectRef = useRef<() => void>();
+  const connectRef = useRef<(() => void) | undefined>(undefined);
   const activeRef = useRef(false);
   const lifecycleRef = useRef(0);
 

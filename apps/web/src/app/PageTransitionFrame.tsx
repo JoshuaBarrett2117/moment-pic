@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, type Transition, type Variants } from 'motion/react';
 import type { PageTransitionModeDTO } from '../types/api';
 
 type PageTransitionFrameProps = {
@@ -9,7 +9,7 @@ type PageTransitionFrameProps = {
   children: ReactNode;
 };
 
-const pageVariants = {
+const pageVariants: Variants = {
   enter: (slideDirection: number) => ({
     x: slideDirection > 0 ? '100%' : '-100%',
     opacity: 0,
@@ -24,7 +24,7 @@ const pageVariants = {
   }),
 };
 
-const normalVariants = {
+const normalVariants: Variants = {
   enter: {
     opacity: 0,
   },
@@ -36,12 +36,12 @@ const normalVariants = {
   },
 };
 
-const pageTransition = {
+const pageTransition: Transition = {
   x: { type: 'spring', stiffness: 200, damping: 35, mass: 1 },
   opacity: { duration: 0.15 },
 };
 
-const normalTransition = {
+const normalTransition: Transition = {
   opacity: { duration: 0.18, ease: 'easeOut' },
 };
 

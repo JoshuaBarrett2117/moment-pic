@@ -1,6 +1,9 @@
 import type Database from "better-sqlite3";
 
 import { baselineMigration } from "./0001-baseline.js";
+import { albumSearchIndexesMigration } from "./0002-album-search-indexes.js";
+import { usersAndSessionsMigration } from "./0003-users-and-sessions.js";
+import { perUserProgressMigration } from "./0004-per-user-progress.js";
 
 export type Migration = {
   version: number;
@@ -15,7 +18,10 @@ export type Migration = {
  * - 每个迁移在独立事务中执行，失败整体回滚并拒绝启动。
  */
 export const MIGRATIONS: readonly Migration[] = [
-  { version: 1, name: "baseline", up: baselineMigration }
+  { version: 1, name: "baseline", up: baselineMigration },
+  { version: 2, name: "album-search-indexes", up: albumSearchIndexesMigration },
+  { version: 3, name: "users-and-sessions", up: usersAndSessionsMigration },
+  { version: 4, name: "per-user-progress", up: perUserProgressMigration }
 ];
 
 export const getSchemaVersion = (db: Database.Database): number => Number(db.pragma("user_version", { simple: true }));

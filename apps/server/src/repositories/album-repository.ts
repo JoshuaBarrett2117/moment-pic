@@ -98,6 +98,13 @@ export const updateAlbumScanStatusBatchDb = (updates: AlbumScanStatusUpdate[]): 
   return changed;
 };
 
+const FTS_TRIGRAM_MIN_CHARS = 3;
+
+/** 作为 FTS5 短语查询：整体加双引号，内部双引号按 FTS 语法转义，避免用户输入被解析为查询运算符。 */
+export const toFtsPhrase = (keyword: string): string => `"${keyword.replaceAll('"', '""')}"`;
+
+const escapeLike = (keyword: string): string => keyword.replace(/[\\%_]/g, (char) => `\\${char}`);
+
 export const listAlbumsDb = (
   page: number,
   pageSize: number,
@@ -127,9 +134,16 @@ export const listAlbumsDb = (
     params.sourceType = input.sourceType;
   }
 
-  if (input?.keyword?.trim()) {
-    conditions.push("name LIKE @keyword");
-    params.keyword = `%${input.keyword.trim()}%`;
+  const keyword = input?.keyword?.trim();
+  if (keyword) {
+    if ([...keyword].length >= FTS_TRIGRAM_MIN_CHARS) {
+      // trigram 全文索引：任意子串匹配，含中文
+      conditions.push("rowid IN (SELECT rowid FROM albums_fts WHERE albums_fts MATCH @keywordMatch)");
+      params.keywordMatch = toFtsPhrase(keyword);
+    } else {
+      conditions.push("name LIKE @keyword ESCAPE '\\'");
+      params.keyword = `%${escapeLike(keyword)}%`;
+    }
   }
 
   if (input?.favoriteOnly) {
@@ -146,7 +160,8 @@ export const listAlbumsDb = (
   const sortOrder = input?.sortOrder ?? "desc";
   const orderBy = `${orderByMap[sortBy]} ${sortOrder.toUpperCase()}, name ASC`;
 
-  const items = db.prepare(`SELECT * FROM albums ${where} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset`).all(params).map((row: unknown) => rowToAlbum(row as Record<string, unknown>));
+  // 延迟关联：先在索引上定位当前页的 id，再回表取整行，深分页不再为跳过的行读取整行数据
+  const items = db.prepare(`SELECT albums.* FROM albums JOIN (SELECT id FROM albums ${where} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset) AS page USING (id) ORDER BY ${orderBy}`).all(params).map((row: unknown) => rowToAlbum(row as Record<string, unknown>));
   const totalRow = db.prepare(`SELECT COUNT(*) AS total FROM albums ${where}`).get(params) as { total: number };
   return { items, total: totalRow.total };
 };

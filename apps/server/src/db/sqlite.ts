@@ -16,6 +16,8 @@ const bootstrap = (db: Database.Database) => {
   db.pragma("journal_mode = WAL");
   db.pragma("busy_timeout = 2000");
   runMigrations(db);
+  // albums_fts 以 rowid 关联 albums；手动 VACUUM 可能改变 rowid，启动时重建（仅索引相册名，代价很小）
+  db.exec("INSERT INTO albums_fts (albums_fts) VALUES ('rebuild')");
 };
 
 export const getDb = () => {

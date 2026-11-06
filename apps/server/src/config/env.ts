@@ -57,7 +57,7 @@ const resolvePublicDir = (): string => {
 export const env = {
   logLevel: resolveLogLevel(process.env.LOG_LEVEL),
   host: process.env.HOST ?? "0.0.0.0",
-  port: readNumber("PORT", process.env.PORT, DEFAULT_PORT, { min: 1, max: 65535, integer: true }),
+  port: readNumber("PORT", process.env.PORT, DEFAULT_PORT, { min: 0, max: 65535, integer: true }), // 0 = 随机端口（测试用）
   adminPassword: process.env.ADMIN_PASSWORD ?? "",
   sessionSecret: process.env.SESSION_SECRET ?? "",
   aiApiToken: process.env.AI_API_TOKEN ?? "",

@@ -123,8 +123,21 @@ export type RecentAlbumsDTO = {
   items: AlbumListItemDTO[];
 };
 
+export type UserRoleDTO = 'admin' | 'viewer';
+
+export type UserDTO = {
+  id: string;
+  username: string;
+  role: UserRoleDTO;
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type LoginResponseDTO = {
   username: string;
+  role: UserRoleDTO;
+  user: UserDTO;
   expiresAt: string;
 };
 

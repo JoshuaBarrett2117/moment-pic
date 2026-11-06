@@ -9,7 +9,7 @@ import chokidar from "chokidar";
 import Fastify from "fastify";
 import { WebSocket } from "ws";
 import { env } from "../config/env.js";
-import { createAuthToken } from "../lib/auth.js";
+import { testSessionCookie } from "../test-support/session.js";
 import { deleteLibraryRootDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
 import { updateSystemConfigDb } from "../repositories/system-config-repository.js";
 import { directoryWatcher } from "./directory-watcher.js";
@@ -25,7 +25,7 @@ test("真实目录监听事件经认证 WS 广播只包含图库相对路径", a
   app.decorate("config", { ...env, wsAllowedOrigins: ["https://photos.example"] });
   wsService.initialize(app);
   const address = await app.listen({ port: 0, host: "127.0.0.1" });
-  const client = new WebSocket(address.replace("http", "ws") + "/ws", { headers: { origin: "https://photos.example", cookie: `moment_pic_auth=${createAuthToken(env.adminPassword, Date.now() + 60_000)}` } });
+  const client = new WebSocket(address.replace("http", "ws") + "/ws", { headers: { origin: "https://photos.example", cookie: testSessionCookie(60_000) } });
   const originalWatch = chokidar.watch.bind(chokidar);
   let ready: Promise<unknown> = Promise.resolve();
   context.mock.method(chokidar, "watch", (...args: Parameters<typeof chokidar.watch>) => {

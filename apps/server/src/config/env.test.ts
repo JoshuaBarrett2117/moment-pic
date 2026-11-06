@@ -6,8 +6,8 @@ test("数字型环境变量：未设置用默认值，非法值拒绝启动", ()
   assert.equal(DEFAULT_PORT, 3210);
   assert.equal(readNumber("PORT", undefined, 3210, { min: 1, max: 65535, integer: true }), 3210);
   assert.equal(readNumber("PORT", "3211", 3210, { min: 1, max: 65535, integer: true }), 3211);
-  for (const bad of ["abc", "0", "70000", "32.5"]) {
-    assert.throws(() => readNumber("PORT", bad, 3210, { min: 1, max: 65535, integer: true }), EnvConfigError);
+  for (const bad of ["abc", "-1", "70000", "32.5"]) {
+    assert.throws(() => readNumber("PORT", bad, 3210, { min: 0, max: 65535, integer: true }), EnvConfigError);
   }
   assert.throws(() => readNumber("CACHE_MAX_BYTES", "-1", 0), EnvConfigError);
 });

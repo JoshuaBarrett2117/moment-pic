@@ -1,4 +1,6 @@
-export const galleryGridContainerVariants = {
+import type { Variants } from 'motion/react';
+
+export const galleryGridContainerVariants: Variants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
@@ -6,7 +8,7 @@ export const galleryGridContainerVariants = {
   },
 };
 
-export const galleryCardItemVariants = {
+export const galleryCardItemVariants: Variants = {
   hidden: { opacity: 0, y: 30, scale: 0.95 },
   show: {
     opacity: 1,

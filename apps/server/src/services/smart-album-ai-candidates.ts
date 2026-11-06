@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import path from "node:path";
 
 import { createLogger } from "../lib/logger.js";
@@ -36,7 +37,7 @@ export const buildAiRuntimeConfig = (
   const endpoint = normalizeOpenAiEndpoint(overrides?.apiEndpoint ?? config.apiEndpoint);
   const model = (overrides?.apiModel ?? config.apiModel ?? DEFAULT_OPENAI_MODEL).trim() || DEFAULT_OPENAI_MODEL;
   const apiToken = overrides?.apiToken === undefined
-    ? (config.apiToken?.trim() || "")
+    ? (env.aiApiToken.trim() || config.apiToken?.trim() || "")
     : (overrides.apiToken?.trim() || "");
 
   return {

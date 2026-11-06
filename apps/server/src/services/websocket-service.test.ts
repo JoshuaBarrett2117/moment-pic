@@ -7,7 +7,7 @@ import test from "node:test";
 import Fastify from "fastify";
 import { WebSocket } from "ws";
 import { env } from "../config/env.js";
-import { createAuthToken } from "../lib/auth.js";
+import { testSessionCookie } from "../test-support/session.js";
 import { WebSocketService } from "./websocket-service.js";
 
 const fixture = async (limits = { global: 3, perClient: 2, bufferedBytes: 4096 }) => {
@@ -16,7 +16,7 @@ const fixture = async (limits = { global: 3, perClient: 2, bufferedBytes: 4096 }
   const service = new WebSocketService(limits);
   service.initialize(app);
   const address = await app.listen({ port: 0, host: "127.0.0.1" });
-  const cookie = (ttl = 60_000) => `moment_pic_auth=${createAuthToken(env.adminPassword, Date.now() + ttl)}`;
+  const cookie = (ttl = 60_000) => testSessionCookie(ttl);
   const connect = async (ttl?: number) => {
     const client = new WebSocket(address.replace("http", "ws") + "/ws", { headers: { origin: "https://photos.example", cookie: cookie(ttl) } });
     await once(client, "open");

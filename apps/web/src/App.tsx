@@ -2,7 +2,7 @@ import { useCallback, useEffect, lazy, Suspense, useMemo } from 'react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
 import { PaperGrain } from './components/PaperGrain';
-import { useRecentAlbums, recordAlbumView, setAlbumFavorite, useSystemConfig } from './hooks';
+import { recordAlbumView, setAlbumFavorite, useSystemConfig } from './hooks';
 import { api } from './lib/api';
 import type { AlbumListItemDTO, DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
 import { clearAuthSession, markAuthSession } from './app/auth-session';
@@ -12,6 +12,7 @@ import { buildSmartAlbumMemberAlbums, resolveSmartAlbumMemberSortBy } from './ap
 import { useGalleryDataController } from './app/use-gallery-data-controller';
 import { useAppAuthBootstrap } from './app/useAppAuthBootstrap';
 import { useGalleryFilterActions } from './app/useGalleryFilterActions';
+import { CurrentUserProvider } from './app/current-user';
 import { PageTransitionFrame } from './app/PageTransitionFrame';
 
 const GalleryScreen = lazy(() =>
@@ -112,7 +113,6 @@ function AuthenticatedMomentPicApp() {
     recentAlbums,
     refreshCurrentGallery,
     scan,
-    scanningLibraryRootIds,
     scanError,
     smartAlbumDetail,
     smartAlbumMembers,
@@ -378,6 +378,7 @@ function AuthenticatedMomentPicApp() {
         : loadAlbums;
 
   return (
+    <CurrentUserProvider enabled={isAuthenticated}>
     <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
       <PaperGrain />
       {isAuthenticated && scanError && currentScreen !== Screen.SETTINGS && <div role="alert" className="fixed left-4 right-4 top-4 z-50 rounded-lg bg-error px-4 py-3 text-white">{scanError}</div>}
@@ -444,7 +445,7 @@ function AuthenticatedMomentPicApp() {
                 onFavoritesClick={handleFavoritesClick}
                 isFavoritesActive={galleryViewMode === 'favorites'}
                 onShareManagementClick={handleShareManagementClick}
-                isShareManagementActive={currentScreen === Screen.SHARE_MANAGEMENT}
+                isShareManagementActive={false}
                 onDirectoryNodeClick={handleDirectoryNodeClick}
                 directoryBreadcrumbs={directoryAlbums?.breadcrumbs || []}
                 onDirectoryBreadcrumbClick={handleDirectoryBreadcrumbClick}
@@ -562,7 +563,7 @@ function AuthenticatedMomentPicApp() {
                 onFavoritesClick={handleFavoritesClick}
                 isFavoritesActive={false}
                 onShareManagementClick={handleShareManagementClick}
-                isShareManagementActive={currentScreen === Screen.SHARE_MANAGEMENT}
+                isShareManagementActive={false}
                 headerTitle={smartAlbumDetail?.name || '分类图集'}
                 headerDescription={smartAlbumDetail
                   ? `当前自动整理共收纳 ${smartAlbumDetail.albumCount} 个分类图集，继续进入后才是图集内部图片。`
@@ -577,6 +578,7 @@ function AuthenticatedMomentPicApp() {
         </PageTransitionFrame>
       )}
     </div>
+    </CurrentUserProvider>
   );
 }
 

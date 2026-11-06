@@ -1,3 +1,4 @@
+import { openSecret } from "../lib/secret-box.js";
 import type {
   AlbumRecord,
   AlbumShareRecord,
@@ -183,7 +184,8 @@ export const rowToSmartAlbumAiConfig = (row: Record<string, unknown>): SmartAlbu
   mode: row.mode === "auto_low_risk" ? "auto_low_risk" : row.mode === "full_auto" ? "full_auto" : "assist",
   provider: "openai",
   apiEndpoint: row.api_endpoint ? String(row.api_endpoint) : "https://api.openai.com/v1",
-  apiToken: row.api_token ? String(row.api_token) : null,
+  // 数据库中为 AES-GCM 加密值（兼容历史明文）
+  apiToken: row.api_token ? openSecret(String(row.api_token)) : null,
   apiModel: row.api_model ? String(row.api_model) : "gpt-4.1-mini",
   minConfidenceAutoApply: Number(row.min_confidence_auto_apply),
   minClusterAlbumCount: Number(row.min_cluster_album_count),

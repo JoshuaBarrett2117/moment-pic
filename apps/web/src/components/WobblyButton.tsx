@@ -1,18 +1,18 @@
-import React from 'react';
-import { motion } from 'motion/react';
+import type { ReactNode } from 'react';
+import { motion, type HTMLMotionProps } from 'motion/react';
 
-interface WobblyButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  children: React.ReactNode;
+interface WobblyButtonProps extends Omit<HTMLMotionProps<'button'>, 'ref' | 'children'> {
+  children: ReactNode;
   variant?: 'primary' | 'secondary' | 'tertiary';
 }
 
-export const WobblyButton: React.FC<WobblyButtonProps> = ({ 
+export const WobblyButton = ({ 
   children, 
   variant = 'primary', 
   className = '', 
   disabled,
   ...props 
-}) => {
+}: WobblyButtonProps) => {
   const variants = {
     primary: 'bg-primary-container text-on-primary-container shadow-lg shadow-[#6f4e37]/10',
     secondary: 'bg-secondary-container text-on-secondary-container',

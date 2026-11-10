@@ -34,7 +34,7 @@
 **图库与扫描**
 
 - 支持两种图集：图片文件夹，以及 ZIP / CBZ / RAR / CBR / 7z 压缩包（不解压到磁盘，按需读取）
-- 可添加多个图库目录；首次全量扫描，之后监听目录变化并增量重扫，也可对单个图集手动重扫
+- 可添加多个图库目录（环境变量 `LIBRARY_ROOTS` 自动登记，或在设置里添加）；首次全量扫描，之后监听目录变化并增量重扫，也可对单个图集手动重扫
 - 支持的图片格式：jpg、jpeg、png、webp、gif、bmp
 - 缩略图后台预热，缓存有容量上限，超出后按最旧优先自动回收
 
@@ -114,6 +114,7 @@ services:
     environment:
       ADMIN_PASSWORD: "换成你的强密码"     # 首次启动创建 admin 用
       TZ: Asia/Shanghai
+      LIBRARY_ROOTS: /photos                # 启动时自动登记为图库目录，多个用逗号分隔
     volumes:
       - ./config:/data                      # 数据库与缩略图缓存
       - /path/to/photos:/photos:ro          # 你的图片目录，只读挂载即可，可挂多个
@@ -126,7 +127,7 @@ docker compose up -d
 docker compose ps                                   # 等待状态变成 healthy
 ```
 
-浏览器打开 `http://<服务器IP>:3210`，然后按[首次使用](#首次使用)添加图库目录。
+浏览器打开 `http://<服务器IP>:3210`。首次启动会自动登记 `LIBRARY_ROOTS` 里的目录并完成第一次扫描。
 
 > `./config` 必须在本地文件系统上（ext4 / btrfs 等）。SQLite 不支持放在 NFS / SMB 网络共享上。
 
@@ -135,7 +136,7 @@ docker compose ps                                   # 等待状态变成 healthy
 和上面一样使用 Compose，在 NAS 的 Docker / Container Manager 里新建项目并粘贴配置即可。几个常见差异：
 
 - **媒体目录权限**：如果图片所在的父目录对普通用户不可遍历（例如权限为 000 的共享文件夹根目录），uid 1000 读不到文件。这时可以给服务加 `user: "0:0"` 以 root 运行，并保持图片目录 `:ro` 只读挂载。
-- **路径保持一致更省事**：可以把宿主路径原样挂进容器，例如 `/volume1/photos:/volume1/photos:ro`，之后在设置里填同样的路径。
+- **路径保持一致更省事**：可以把宿主路径原样挂进容器，例如 `/volume1/photos:/volume1/photos:ro`，`LIBRARY_ROOTS` 也填同样的路径。
 - **配置目录**：例如 `/volume1/docker/moment-pic/config:/data`。
 
 一个 NAS 上的实际示例：
@@ -152,6 +153,7 @@ services:
       ADMIN_PASSWORD: "换成你的强密码"
       TRUSTED_PROXIES: 192.168.1.10     # 反向代理所在 IP，没有就删掉
       WS_ALLOWED_ORIGINS: https://photos.example.com
+      LIBRARY_ROOTS: /volume1/photos,/volume2/comics
     volumes:
       - /volume1/photos:/volume1/photos:ro
       - /volume2/comics:/volume2/comics:ro
@@ -208,8 +210,8 @@ Lucky、Caddy、群晖自带反代同理：开启 WebSocket 支持，并把反�
 ### 首次使用
 
 1. 用 `admin` 和 `ADMIN_PASSWORD` 登录。
-2. 打开「设置 → 基础设置 → 添加库目录」，填写**容器内**的图片路径（例如上面挂载的 `/photos` 或 `/volume1/photos`），点「添加目录」。可以添加多个。
-3. 点「扫描全部」，首页会陆续出现图集，缩略图在后台生成。
+2. 设置了 `LIBRARY_ROOTS` 时，目录已自动登记并开始首次扫描，首页会陆续出现图集，缩略图在后台生成。也可以在「设置 → 基础设置 → 添加库目录」手动添加，填写**容器内**路径，然后点「扫描全部」。
+3. 想隐藏某个 `LIBRARY_ROOTS` 里的目录，请在设置里「禁用」而不是删除：删除后只要它还在环境变量里，下次重启会重新登记。
 4. 建议到「设置 → 账号」改成你自己的用户名和密码；需要给家人看时，在「设置 → 用户管理」添加只读用户。
 
 数据库里已有用户后，`ADMIN_PASSWORD` 不再生效，以页面上设置的密码为准。
@@ -230,7 +232,7 @@ Lucky、Caddy、群晖自带反代同理：开启 WebSocket 支持，并把反�
 | `WS_ALLOWED_ORIGINS` | 空 | 跨源访问时允许的网页 origin，逗号分隔 |
 | `AI_API_TOKEN` | 空 | 智能归纳的 AI Token，优先于页面中保存的值 |
 | `LOG_LEVEL` | `info` | `trace` / `debug` / `info` / `warn` / `error` / `fatal` |
-| `LIBRARY_ROOTS` | `/data/library` | 预留。当前版本图库目录以「设置」里添加的为准，不会根据此变量自动登记 |
+| `LIBRARY_ROOTS` | `/data/library` | 容器内的图库目录，多个用逗号、分号或换行分隔。启动时自动登记其中存在的目录（只新增，不改动已登记或已禁用的目录）；也可以在「设置」里手动添加 |
 
 旧变量 `LIBRARY_ROOT_PATH` 已废弃，启动时会提示改用新变量。
 
@@ -262,7 +264,7 @@ docker compose start
 ## 常见问题
 
 **扫描后首页是空的？**
-确认已在「设置 → 基础设置」添加了库目录，且填写的是容器内路径。用 `docker exec moment-pic ls <路径>` 检查容器能否读到文件。
+看启动日志里是否有「LIBRARY_ROOTS 中的目录未登记」的警告，并确认「设置 → 基础设置」里的库目录填的是容器内路径。用 `docker exec moment-pic ls <路径>` 检查容器能否读到文件。
 
 **缩略图大量失败或看不到图片？**
 多半是权限问题：容器以 uid 1000 运行，读不到媒体目录。给媒体目录加读权限，或参考上文改用 `user: "0:0"`。

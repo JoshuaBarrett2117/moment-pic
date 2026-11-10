@@ -65,6 +65,8 @@ export const env = {
   wsAllowedOrigins: splitList(process.env.WS_ALLOWED_ORIGINS, /,/),
   libraryRootPath: libraryRootPaths[0],
   libraryRootPaths,
+  /** 是否显式配置了 LIBRARY_ROOTS / LIBRARY_ROOT_PATH；只有显式配置时才在启动时自动登记图库目录 */
+  libraryRootsConfigured: splitList(process.env.LIBRARY_ROOTS, /[\r\n;,]+/).length > 0 || Boolean(process.env.LIBRARY_ROOT_PATH?.trim()),
   cacheMaxBytes: readNumber("CACHE_MAX_BYTES", process.env.CACHE_MAX_BYTES, 5 * 1024 ** 3),
   cacheGcMinAgeHours: readNumber("CACHE_GC_MIN_AGE_HOURS", process.env.CACHE_GC_MIN_AGE_HOURS, 24),
   cacheGcIntervalHours: readNumber("CACHE_GC_INTERVAL_HOURS", process.env.CACHE_GC_INTERVAL_HOURS, 6),

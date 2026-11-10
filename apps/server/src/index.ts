@@ -7,6 +7,7 @@ import { collectEnvWarnings, env } from "./config/env.js";
 import { startCoverThumbnailWarmup } from "./services/cover-thumbnail-warmup.js";
 import { ensureScannedLibrary } from "./services/library-scanner.js";
 import { directoryWatcher } from "./services/directory-watcher.js";
+import { seedLibraryRootsFromEnv } from "./services/library-root-seed.js";
 
 const start = async () => {
   const app = buildApp();
@@ -16,6 +17,11 @@ const start = async () => {
   installGracefulShutdown({ stopWatching: () => directoryWatcher.stopWatching(), close: () => app.close() });
 
   try {
+    if (env.libraryRootsConfigured) {
+      const seeded = seedLibraryRootsFromEnv(env.libraryRootPaths);
+      for (const root of seeded.added) app.log.info({ path: root.path }, "已从 LIBRARY_ROOTS 登记图库目录");
+      for (const item of seeded.skipped) app.log.warn({ path: item.path }, `LIBRARY_ROOTS 中的目录未登记：${item.reason}`);
+    }
     await ensureScannedLibrary();
     await directoryWatcher.startWatching();
     await app.listen({

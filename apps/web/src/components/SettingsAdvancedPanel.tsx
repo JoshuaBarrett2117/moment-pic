@@ -35,8 +35,8 @@ export const SettingsAdvancedPanel: FC<SettingsAdvancedPanelProps> = ({
   systemConfig,
 }) => (
   <>
-    <header className="mb-6 md:mb-12">
-      <h2 className="text-2xl md:text-4xl font-headline font-bold text-on-surface">高级设置</h2>
+    <header className="mb-6 md:mb-8">
+      <h2 className="mp-title text-xl md:text-2xl">高级设置</h2>
       <p className="text-outline mt-2 text-sm md:text-base">配置目录监控和轮询相关的系统级参数</p>
       <p className="mt-3 text-sm text-outline/80">
         {saveStatus === 'saving' && '正在保存设置...'}

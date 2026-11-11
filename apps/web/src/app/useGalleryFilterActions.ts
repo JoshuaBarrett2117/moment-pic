@@ -25,12 +25,17 @@ export function useGalleryFilterActions({
     updateFilters((prev) => ({ ...prev, page }));
   }, [updateFilters]);
 
+  /** 无限滚动加载下一页：不重置滚动位置，只在当前页之后追加。 */
+  const handleLoadMore = useCallback((nextPage: number) => {
+    setFilters((prev) => (nextPage === prev.page + 1 ? { ...prev, page: nextPage } : prev));
+  }, [setFilters]);
+
   const handleSortByChange = useCallback((sortBy: GallerySortBy) => {
     updateFilters((prev) => ({ ...prev, sortBy, page: 1 }));
   }, [updateFilters]);
 
   const handleSortOrderChange = useCallback((sortOrder: 'asc' | 'desc') => {
-    updateFilters((prev) => ({ ...prev, sortOrder }));
+    updateFilters((prev) => ({ ...prev, sortOrder, page: 1 }));
   }, [updateFilters]);
 
   const handlePageSizeChange = useCallback((pageSize: number) => {
@@ -89,6 +94,7 @@ export function useGalleryFilterActions({
     handleKeywordChange,
     handleLibraryRootChangeFilters,
     handlePageChange,
+    handleLoadMore,
     handlePageSizeChange,
     handleSortByChange,
     handleSortOrderChange,

@@ -1,9 +1,8 @@
 import { motion } from 'motion/react';
-import { ArrowRight, FolderOpen, Images } from 'lucide-react';
-import { ThrottledImage } from '../ThrottledImage';
+import { ChevronRight, FolderOpen, Images } from 'lucide-react';
 import type { DirectoryAlbumNodeDTO } from '../../types/api';
-import { galleryAlbumTagColors } from './gallery-album-types';
-import { galleryCardItemVariants, getGalleryCardHover, getGalleryCardTagPlacement } from './gallery-card-motion';
+import { CoverCard } from './CoverCard';
+import { galleryCardItemVariants } from './gallery-card-motion';
 
 type DirectoryNodeCardProps = {
   album: DirectoryAlbumNodeDTO;
@@ -12,56 +11,40 @@ type DirectoryNodeCardProps = {
   onDirectoryNodeClick?: (node: DirectoryAlbumNodeDTO) => void;
 };
 
-export function DirectoryNodeCard({
-  album,
-  index,
-  isMobile,
-  onDirectoryNodeClick,
-}: DirectoryNodeCardProps) {
-  const isAlbumNode = album.kind === 'album';
-  const colorScheme = album.sourceType ? (galleryAlbumTagColors[album.sourceType] || galleryAlbumTagColors.folder) : galleryAlbumTagColors.folder;
-
+/** 目录里的图集节点：与相册卡片同样式。 */
+export function DirectoryNodeCard({ album, onDirectoryNodeClick }: DirectoryNodeCardProps) {
+  if (album.kind !== 'album') {
+    return <DirectoryFolderRow node={album} onClick={onDirectoryNodeClick} />;
+  }
   return (
-    <motion.div
+    <CoverCard
+      title={album.name}
+      meta={`${album.assetCount} 张`}
+      coverUrl={album.coverUrl}
+      placeholderIcon={<Images className="h-12 w-12" />}
+      tag={album.sourceType === 'zip' ? '压缩包' : '图集'}
+      onOpen={() => onDirectoryNodeClick?.(album)}
+    />
+  );
+}
+
+/** 子文件夹：紧凑横条，与图集网格分开展示。 */
+export function DirectoryFolderRow({ node, onClick }: { node: DirectoryAlbumNodeDTO; onClick?: (node: DirectoryAlbumNodeDTO) => void }) {
+  return (
+    <motion.button
       variants={galleryCardItemVariants}
-      whileHover={getGalleryCardHover({ index, isMobile })}
-      className="group cursor-pointer"
+      type="button"
+      onClick={() => onClick?.(node)}
+      className="group flex w-full items-center gap-3 mp-glass-panel rounded-xl px-3 py-2.5 text-left transition-colors hover:border-outline"
     >
-      <button
-        onClick={() => onDirectoryNodeClick?.(album)}
-        className="relative w-full mp-card p-3 text-left"
-      >
-        <div className={`absolute -top-3 z-10 rounded-full border border-outline-variant px-3 py-0.5 text-xs font-semibold backdrop-blur-md ${
-          getGalleryCardTagPlacement()
-        } ${isAlbumNode ? `${colorScheme.bg} ${colorScheme.text}` : 'bg-secondary-container text-on-secondary-container'}`}>
-          {isAlbumNode ? (album.sourceType === 'zip' ? '压缩包' : '图集') : '目录'}
-        </div>
-        <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-[12px] bg-surface-container-high">
-          {album.coverUrl ? (
-            <ThrottledImage
-              key="cover"
-              className="col-span-3 h-full w-full object-cover"
-              src={album.coverUrl}
-              alt={album.name}
-            />
-          ) : (
-            <div className="col-span-3 flex h-full items-center justify-center">
-              {isAlbumNode ? <Images className="h-14 w-14 text-outline/20" /> : <FolderOpen className="h-14 w-14 text-outline/25" />}
-            </div>
-          )}
-        </div>
-        <div className="mt-3 px-1 pb-1">
-          <h3 className="mb-1 truncate font-headline text-base font-semibold leading-tight text-on-surface" title={album.name}>
-            {album.name}
-          </h3>
-          <div className="flex items-center justify-between">
-            <span className="text-sm tabular-nums text-outline">
-              {isAlbumNode ? `${album.assetCount} 张` : `${album.childCount} 项`}
-            </span>
-            <ArrowRight className="h-4 w-4 text-outline/30 transition-all group-hover:translate-x-1 group-hover:text-primary" />
-          </div>
-        </div>
-      </button>
-    </motion.div>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-container text-primary">
+        <FolderOpen className="h-[18px] w-[18px]" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-on-surface" title={node.name}>{node.name}</span>
+        <span className="block text-xs tabular-nums text-outline">{node.childCount} 项</span>
+      </span>
+      <ChevronRight className="h-4 w-4 text-outline transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+    </motion.button>
   );
 }

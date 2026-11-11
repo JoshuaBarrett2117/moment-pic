@@ -93,8 +93,8 @@ test('gallery copy helpers respect overrides and mode defaults', () => {
   assert.deepEqual(resolveGalleryHeaderText({
     displayMode: 'directoryAlbums',
   }), {
-    title: '目录相册',
-    description: '按图库根目录逐层进入，直到抵达真正的图集。',
+    title: '目录',
+    description: '按图库文件夹逐层进入，直到抵达真正的图集',
   });
 
   assert.deepEqual(resolveGalleryEmptyText({

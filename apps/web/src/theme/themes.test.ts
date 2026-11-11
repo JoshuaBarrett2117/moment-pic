@@ -22,3 +22,13 @@ test('theme-init.js 与主题注册表保持一致', () => {
   for (const theme of THEMES) assert.ok(script.includes(`'${theme.id}'`), `theme-init.js 缺少 ${theme.id}`);
   assert.ok(script.includes('moment-pic:theme'));
 });
+
+test('玫瑰纸感是浅色主题，并已注册', () => {
+  const rose = getThemeDefinition('rose-paper');
+  assert.equal(rose.id, 'rose-paper');
+  assert.equal(rose.colorScheme, 'light');
+  assert.equal(resolveThemeId('rose-paper'), 'rose-paper');
+  const css = readFileSync(new URL('./rose-paper.css', import.meta.url), 'utf8');
+  assert.match(css, /:root\[data-theme="rose-paper"\]/);
+  assert.match(css, /--mp-accent: #77574f/);
+});

@@ -6,6 +6,8 @@ export interface AlbumPathTrailProps {
   relativePath?: string;
   albumName: string;
   className?: string;
+  /** inline：横幅里的单行面包屑样式 */
+  variant?: "box" | "inline";
 }
 
 const splitSegments = (relativePath?: string): string[] =>
@@ -22,11 +24,21 @@ export const AlbumPathTrail: FC<AlbumPathTrailProps> = ({
   rootName,
   relativePath,
   albumName,
-  className = ""
+  className = "",
+  variant = "box"
 }) => {
   const segments = splitSegments(relativePath);
   const crumbs = [rootName?.trim() || "图库", ...segments, albumName].filter(Boolean);
   const fullPath = crumbs.join(" / ");
+
+  if (variant === "inline") {
+    return (
+      <p className={`flex min-w-0 items-center gap-1.5 truncate text-xs text-on-surface-variant ${className}`} title={fullPath} aria-label={`所在路径：${fullPath}`}>
+        <FolderTree className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" />
+        <span className="truncate">{crumbs.slice(0, -1).join(" / ")}</span>
+      </p>
+    );
+  }
 
   return (
     <div

@@ -306,7 +306,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const preloadHint = getPreloadHint(qualityPreset);
   return (
     <div
-      className="viewer-gallery fixed inset-0 z-[99999] flex items-center justify-center bg-[#050608] touch-none"
+      className="viewer-gallery mp-theme-dark fixed inset-0 z-[99999] flex items-center justify-center bg-[#050608] touch-none"
       {...rootTouchHandlers}
       onMouseEnter={() => !useTouchInteractions && !showEndPrompt && setShowControls(true)}
       onMouseLeave={() => !useTouchInteractions && !showEndPrompt && setShowControls(false)}

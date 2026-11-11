@@ -7,6 +7,7 @@ import {
   SESSION_TTL_SECONDS, authenticate, createSession, createUser, deleteUser, listUsers, revokeSession, toPublicUser,
   updateOwnAccount, updateUser
 } from "../services/auth-service.js";
+import { removeUserBackground } from "../services/user-background-service.js";
 
 const unauthorized = (reply: FastifyReply) => reply.status(401).send({ code: 4010, message: "会话已过期，请重新登录" });
 
@@ -74,6 +75,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const session = sessionOf(request);
     if (!session) return unauthorized(reply);
     deleteUser(session.user, request.params.userId);
+    await removeUserBackground(request.params.userId).catch((error: unknown) => request.log.warn({ err: error }, "删除用户背景图失败"));
     return ok({ success: true });
   });
 };

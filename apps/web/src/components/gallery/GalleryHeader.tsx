@@ -1,52 +1,35 @@
-import { ArrowLeft, LogOut } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { ArrowLeft } from 'lucide-react';
 
 type GalleryHeaderProps = {
+  eyebrow: string;
   title: string;
-  description: string;
-  isMobile: boolean;
-  isWideMobile: boolean;
-  headerClass: string;
+  description?: string;
   onBack?: () => void;
-  onProfileClick: () => void;
+  aside?: ReactNode;
 };
 
-export function GalleryHeader({
-  title,
-  description,
-  isMobile,
-  isWideMobile,
-  headerClass,
-  onBack,
-  onProfileClick,
-}: GalleryHeaderProps) {
+/** 页面标题：英文眉题 + 标题 + 渐变细线（参考 momentpt.top）。 */
+export function GalleryHeader({ eyebrow, title, description, onBack, aside }: GalleryHeaderProps) {
   return (
-    <header className={headerClass}>
-      <div className="flex flex-col gap-2">
+    <header className="relative z-10 mb-5 flex items-end justify-between gap-4 md:mb-7">
+      <div className="min-w-0">
         {onBack && (
           <button
+            type="button"
             onClick={onBack}
-            className="flex w-fit items-center gap-1 rounded-full bg-surface-container-high px-3 py-1.5 text-sm text-outline transition-colors hover:text-on-surface"
+            className="mb-3 flex w-fit items-center gap-1 rounded-full mp-glass-panel px-3 py-1.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface"
           >
             <ArrowLeft className="h-4 w-4" />
             返回
           </button>
         )}
-        <h1 className={`font-script font-bold leading-tight tracking-tight text-on-surface ${isWideMobile ? 'text-3xl' : 'text-2xl md:text-5xl'}`}>
-          {title}
-        </h1>
-        <p className={`font-body text-base text-outline/70 ${isMobile ? 'block text-sm' : 'hidden md:block md:text-xl'}`}>
-          {description}
-        </p>
+        <p className="mp-eyebrow">{eyebrow}</p>
+        <h1 className="mp-title mt-2 truncate text-2xl leading-tight md:text-[30px]">{title}</h1>
+        <hr className="mp-rule mt-3" />
+        {description && <p className="mt-3 text-sm tracking-[0.03em] text-on-surface-variant">{description}</p>}
       </div>
-      <button
-        onClick={onProfileClick}
-        title="退出登录"
-        className={`cursor-pointer overflow-hidden mp-glass-overlay rounded-full transition-transform hover:scale-105 ${isWideMobile ? 'h-12 w-12' : 'h-11 w-11 md:h-14 md:w-14'}`}
-      >
-        <span aria-label="退出登录" className="flex h-full w-full items-center justify-center text-on-surface-variant hover:text-on-surface">
-          <LogOut className="h-1/2 w-1/2" />
-        </span>
-      </button>
+      {aside}
     </header>
   );
 }

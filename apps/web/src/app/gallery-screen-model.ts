@@ -30,6 +30,17 @@ export const buildGalleryScreenModel = (input: {
   isSmartAlbumsLoading: boolean;
   isDirectoryAlbumsLoading: boolean;
 }): GalleryScreenModel => {
+  if (input.galleryViewMode === 'home') {
+    return {
+      albums: [],
+      isLoading: false,
+      pagination: null,
+      isRecentActive: false,
+      currentLibraryRootId: '',
+      canChangeSourceType: false,
+    };
+  }
+
   if (input.galleryViewMode === 'smartAlbums') {
     return {
       albums: input.smartAlbums?.items || [],

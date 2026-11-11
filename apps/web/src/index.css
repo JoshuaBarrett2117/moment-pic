@@ -1,5 +1,21 @@
 @import "tailwindcss";
 @import "./theme/glass-dark.css";
+@import "./theme/rose-paper.css";
+
+/* 背景图：默认照片墙，可被「外观 → 背景」中的自定义图片或纯色覆盖（theme/background.ts） */
+:root {
+  --mp-bg-image: url("/backgrounds/photo-wall.webp");
+}
+
+@media (max-width: 767px) {
+  :root {
+    --mp-bg-image: url("/backgrounds/photo-wall-960.webp");
+  }
+}
+
+:root[data-bg="none"] {
+  --mp-bg-image: none;
+}
 
 /*
  * 语义 token → 主题变量。
@@ -107,20 +123,137 @@
     background-color: var(--mp-bg);
   }
 
+  /* 全局背景：底色 → 照片（模糊/压暗由主题决定）→ 渐变遮罩 → 纸纹（仅纸感主题） */
+  .mp-backdrop {
+    overflow: hidden;
+  }
+  .mp-backdrop::before {
+    content: "";
+    position: absolute;
+    inset: -16px;
+    background-image: var(--mp-bg-image);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: var(--mp-bg-image-filter);
+    animation: mp-backdrop-in 600ms ease-out both;
+  }
+  .mp-backdrop::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--mp-bg-overlay);
+  }
+  .mp-backdrop-grain {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background-image: var(--mp-bg-grain);
+    background-size: 24px 24px, 18px 18px;
+  }
+
+  @keyframes mp-scan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+  }
+
+  /* 内容区让出侧栏：桌面完整侧栏 248px，640–1279px 图标栏 72px，手机（含触屏平板）为底部标签栏 */
+  .mp-with-sidebar {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 6.5rem);
+  }
+  @media (min-width: 640px) and (hover: hover), (min-width: 640px) and (pointer: fine) {
+    .mp-with-sidebar {
+      margin-left: 5.75rem;
+      padding-bottom: 4rem;
+    }
+  }
+  @media (min-width: 1280px) and (hover: hover), (min-width: 1280px) and (pointer: fine) {
+    .mp-with-sidebar {
+      margin-left: 17.25rem;
+    }
+  }
+
+  @keyframes mp-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* 英文眉题 + 渐变细线（参考 momentpt.top） */
+  .mp-eyebrow {
+    font-size: 11px;
+    line-height: 1.4;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--mp-eyebrow);
+  }
+  .mp-title {
+    color: var(--mp-heading);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+  .mp-rule {
+    width: 46px;
+    height: 1px;
+    border: 0;
+    background: linear-gradient(90deg, transparent, var(--mp-accent), transparent);
+  }
+
+  /* 封面卡片：照片铺满，信息叠在底部渐变上；纸感主题外加奶油相框 */
+  .mp-cover-card {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    border-radius: var(--mp-radius-card);
+    border: var(--mp-photo-frame) solid var(--mp-photo-frame-color);
+    outline: 1px solid var(--mp-border);
+    outline-offset: -1px;
+    background-color: var(--mp-surface-1);
+    box-shadow: var(--mp-shadow-2);
+    transition: transform 180ms ease, box-shadow 180ms ease, outline-color 180ms ease;
+  }
+  .mp-cover-card:hover {
+    transform: translateY(-3px);
+    outline-color: var(--mp-border-strong);
+    box-shadow: var(--mp-shadow-1);
+  }
+  .mp-cover-card img {
+    border-radius: var(--mp-radius-photo);
+  }
+  .mp-cover-caption {
+    background: var(--mp-photo-caption);
+    color: var(--mp-on-photo);
+  }
+  .mp-on-photo-2 {
+    color: var(--mp-on-photo-2);
+  }
+  .mp-photo-chip {
+    background-color: color-mix(in srgb, var(--mp-bg) 62%, transparent);
+    color: var(--mp-text);
+    border: 1px solid var(--mp-border);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  .text-favorite {
+    color: var(--mp-favorite);
+  }
+  .bg-progress {
+    background-color: var(--mp-progress);
+  }
+
   .mp-glass-panel {
     background-color: var(--mp-surface-1);
     border: 1px solid var(--mp-border);
     box-shadow: inset 0 1px 0 var(--mp-highlight), var(--mp-shadow-1);
-    -webkit-backdrop-filter: blur(var(--mp-blur-panel)) saturate(140%);
-    backdrop-filter: blur(var(--mp-blur-panel)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--mp-blur-panel)) saturate(var(--mp-glass-saturate));
+    backdrop-filter: blur(var(--mp-blur-panel)) saturate(var(--mp-glass-saturate));
   }
 
   .mp-glass-overlay {
     background-color: var(--mp-surface-3);
     border: 1px solid var(--mp-border-strong);
     box-shadow: inset 0 1px 0 var(--mp-highlight), var(--mp-shadow-3);
-    -webkit-backdrop-filter: blur(var(--mp-blur-overlay)) saturate(160%);
-    backdrop-filter: blur(var(--mp-blur-overlay)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--mp-blur-overlay)) saturate(var(--mp-glass-saturate));
+    backdrop-filter: blur(var(--mp-blur-overlay)) saturate(var(--mp-glass-saturate));
   }
 
   /* 弹层需要更实的底，避免背后内容透出太多 */
@@ -128,8 +261,8 @@
     background-color: color-mix(in srgb, var(--mp-bg-solid-1) 82%, transparent);
     border: 1px solid var(--mp-border-strong);
     box-shadow: inset 0 1px 0 var(--mp-highlight), var(--mp-shadow-3);
-    -webkit-backdrop-filter: blur(var(--mp-blur-overlay)) saturate(160%);
-    backdrop-filter: blur(var(--mp-blur-overlay)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--mp-blur-overlay)) saturate(var(--mp-glass-saturate));
+    backdrop-filter: blur(var(--mp-blur-overlay)) saturate(var(--mp-glass-saturate));
   }
 
   .mp-card {
@@ -230,11 +363,11 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--mp-scrollbar);
     border-radius: 9999px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--mp-border-strong);
   }
 }
 
@@ -262,5 +395,15 @@
 }
 
 html {
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--mp-scrollbar) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mp-backdrop::before {
+    animation: none;
+  }
+  .mp-cover-card,
+  .mp-cover-card:hover {
+    transform: none;
+  }
 }

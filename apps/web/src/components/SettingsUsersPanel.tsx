@@ -59,8 +59,8 @@ export function SettingsUsersPanel() {
 
   return (
     <>
-      <header className="mb-6 md:mb-12">
-        <h2 className="text-2xl md:text-4xl font-headline font-bold text-on-surface">用户管理</h2>
+      <header className="mb-6 md:mb-8">
+        <h2 className="mp-title text-xl md:text-2xl">用户管理</h2>
         <p className="text-outline mt-2 text-sm md:text-base">管理员可以管理图库和设置；只读用户只能浏览图集，阅读进度各自独立。</p>
       </header>
 

@@ -4,7 +4,7 @@ import { clearAuthSession, hasAuthSession } from './auth-session';
 
 const STORAGE_KEY = 'gallery_filters';
 
-export type GalleryViewMode = 'albums' | 'smartAlbums' | 'directoryAlbums' | 'favorites';
+export type GalleryViewMode = 'home' | 'albums' | 'smartAlbums' | 'directoryAlbums' | 'favorites';
 export type GallerySortBy = 'name' | 'updatedAt' | 'assetCount' | 'albumCount';
 
 export interface GalleryFilters {
@@ -69,6 +69,18 @@ const parseFiltersFromUrl = (): Partial<GalleryFilters> => {
   return result;
 };
 
+/** 没有 view 参数时默认进入首页；旧的「最近浏览」链接（recent=1）仍落在相册列表。 */
+export const parseGalleryViewParam = (viewParam: string | null, isRecent: boolean): GalleryViewMode => {
+  switch (viewParam) {
+    case 'smart': return 'smartAlbums';
+    case 'directory': return 'directoryAlbums';
+    case 'favorites': return 'favorites';
+    case 'albums': return 'albums';
+    case 'home': return 'home';
+    default: return isRecent ? 'albums' : 'home';
+  }
+};
+
 export const parseNavigationFromUrl = (): UrlNavigationState => {
   const params = new URLSearchParams(window.location.search);
   const screenParam = params.get('screen');
@@ -76,13 +88,7 @@ export const parseNavigationFromUrl = (): UrlNavigationState => {
   const smartAlbumId = params.get('smartAlbumId');
   const recent = params.get('recent');
   const viewParam = params.get('view');
-  const view = viewParam === 'smart'
-    ? 'smartAlbums'
-    : viewParam === 'directory'
-      ? 'directoryAlbums'
-      : viewParam === 'favorites'
-        ? 'favorites'
-      : 'albums';
+  const view = parseGalleryViewParam(viewParam, recent === '1');
 
   if (screenParam === 'album' && albumId) {
     return {
@@ -193,6 +199,9 @@ export const buildUrl = (
   if (navigation.galleryViewMode === 'favorites') {
     params.set('view', 'favorites');
   }
+  if (navigation.galleryViewMode === 'albums' && !navigation.isRecentActive) {
+    params.set('view', 'albums');
+  }
 
   if (navigation.isRecentActive) {
     params.set('recent', '1');
@@ -216,7 +225,8 @@ const getInitialFilters = (initialViewMode: GalleryViewMode): GalleryFilters => 
   const urlFilters = parseFiltersFromUrl();
   const defaultSortBy: GallerySortBy = initialViewMode === 'smartAlbums' ? 'albumCount' : 'updatedAt';
   return {
-    page: urlFilters.page || 1,
+    // 列表改为无限滚动：刷新或从网址进入时总是从第 1 页开始
+    page: 1,
     pageSize: urlFilters.pageSize || 24,
     keyword: urlFilters.keyword || '',
     sortBy: urlFilters.sortBy || defaultSortBy,

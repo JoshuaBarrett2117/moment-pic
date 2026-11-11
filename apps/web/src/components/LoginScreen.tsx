@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AlertCircle, ArrowRight, Camera, Info, Lock, PersonStanding } from 'lucide-react';
-import { useAuth, useWideMobile } from '../hooks';
+import { useAuth } from '../hooks';
 import { WobblyButton } from './WobblyButton';
 
 interface LoginScreenProps {
@@ -9,7 +9,6 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }) => {
-  const isWideMobile = useWideMobile();
   const { login } = useAuth();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
@@ -46,22 +45,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
 
   return (
     <div className="relative flex min-h-[100dvh] w-full items-center justify-center overflow-hidden px-4 py-10 sm:px-6">
-      {!isWideMobile && (
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden md:block">
-          <img src="/login/home.svg" alt="" className="absolute left-[10%] top-[14%] w-56 rounded-2xl border border-outline-variant opacity-60 blur-[2px] shadow-2xl" />
-          <img src="/login/flowers.svg" alt="" className="absolute bottom-[14%] left-[16%] w-48 rounded-2xl border border-outline-variant opacity-50 blur-[3px] shadow-2xl" />
-          <img src="/login/camera.svg" alt="" className="absolute right-[12%] top-[16%] w-60 rounded-2xl border border-outline-variant opacity-55 blur-[2px] shadow-2xl" />
-          <img src="/login/lake.svg" alt="" className="absolute bottom-[12%] right-[16%] w-64 rounded-2xl border border-outline-variant opacity-60 blur-[3px] shadow-2xl" />
-        </div>
-      )}
-
       <section className="mp-glass-overlay relative z-10 flex w-full max-w-[440px] flex-col gap-8 rounded-[24px] p-7 sm:p-10">
         <div className="flex flex-col items-center gap-2 text-center">
-          <div className="flex items-center gap-3">
-            <Camera className="h-8 w-8 text-primary" />
-            <h1 className="font-headline text-3xl font-bold tracking-tight text-on-primary-container">Moment Pic</h1>
+          <p className="mp-eyebrow">Moment · 瞬间图库</p>
+          <div className="mt-1 flex items-center gap-3">
+            <Camera className="h-7 w-7 text-primary" />
+            <h1 className="mp-title text-[28px]">Moment Pic</h1>
           </div>
-          <p className="text-sm text-outline">欢迎回来，进入你的瞬间图库</p>
+          <hr className="mp-rule my-2" />
+          <p className="text-sm text-on-surface-variant">欢迎回来，进入你的瞬间图库</p>
         </div>
 
         {error && (
@@ -119,7 +111,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onAuthError }
           </p>
         </div>
 
-        <div className="text-center text-xs text-outline/70">© 2024 Moment Pic · 为你的回忆而设计</div>
+        <div className="text-center text-xs text-outline/70">Moment Pic · 为你的回忆而设计</div>
       </section>
     </div>
   );

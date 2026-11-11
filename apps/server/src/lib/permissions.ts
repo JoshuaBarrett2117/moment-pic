@@ -2,8 +2,8 @@ import type { UserRole } from "../repositories/user-repository.js";
 
 /** viewer 也可以调用的写接口（只影响自己的账号/会话）。 */
 const VIEWER_WRITABLE = new Set(["/api/v1/account", "/api/v1/auth/logout"]);
-/** viewer 可写、且只影响自己数据的接口（阅读进度按用户隔离；浏览记录仅用于“最近浏览”）。 */
-const VIEWER_WRITABLE_PATTERNS = [/^\/api\/v1\/albums\/[^/]+\/progress$/, /^\/api\/v1\/albums\/[^/]+\/view$/];
+/** viewer 可写、且只影响自己数据的接口（阅读进度按用户隔离；浏览记录仅用于“最近浏览”；自定义背景按账号保存）。 */
+const VIEWER_WRITABLE_PATTERNS = [/^\/api\/v1\/albums\/[^/]+\/progress$/, /^\/api\/v1\/albums\/[^/]+\/view$/, /^\/api\/v1\/account\/background$/];
 /** 只有管理员可以读取的接口前缀。 */
 const ADMIN_ONLY_READ_PREFIXES = ["/api/v1/users", "/api/v1/album-shares", "/api/v1/smart-album-ai-config"];
 

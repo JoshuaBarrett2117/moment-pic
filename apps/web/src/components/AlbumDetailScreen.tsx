@@ -1,8 +1,7 @@
 import { type FC, useEffect, useState, useCallback, useRef } from 'react';
-import { motion } from 'motion/react';
 import { useCurrentUser } from '../app/current-user';
-import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, RefreshCw, Share2, Star } from 'lucide-react';
-import { Polaroid } from './Polaroid';
+import { ArrowLeft, Camera, ImageOff, LayoutGrid, Loader2, Play, RefreshCw, Rows3, Share2, Star } from 'lucide-react';
+import { ThrottledImage } from './ThrottledImage';
 import { getAssetThumbnailPresentation } from '../lib/asset-thumbnail';
 import { AlbumShareDialog } from './AlbumShareDialog';
 import { AlbumPathTrail } from './AlbumPathTrail';
@@ -43,6 +42,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   const [isUpdatingFavorite, setIsUpdatingFavorite] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [visibleRenderCount, setVisibleRenderCount] = useState(RENDER_CHUNK_SIZE);
+  const [layout, setLayout] = useDetailLayout();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null);
   const loadedItemsRef = useRef<AssetListItemDTO[]>([]);
@@ -157,12 +157,6 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
       ? (systemConfig?.albumDetailItemMinWidthDesktop ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP)
       : (systemConfig?.albumDetailItemMinWidthMobile ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE))
     : (systemConfig?.albumDetailItemMinWidthDesktop ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP);
-  const mobileHeaderClass = isWideMobile
-    ? 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-surface/92 px-6 pt-4 backdrop-blur-md'
-    : 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-surface/92 px-4 pt-4 backdrop-blur-md';
-  const mobileSectionClass = isWideMobile
-    ? 'custom-scrollbar flex-1 overflow-y-auto px-6 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth'
-    : 'custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth';
   const renderedItems = loadedItems.slice(0, visibleRenderCount);
   const hasMore = loadedItems.length < totalItems;
   const hasMoreToRender = visibleRenderCount < loadedItems.length;
@@ -207,197 +201,173 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     setIsUpdatingFavorite(false);
   }, [albumId, assets?.album?.isFavorite, isUpdatingFavorite, loadPage, toast]);
 
-  return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface">
-      {!isMobile && (
-        <aside className="relative z-10 flex h-full w-[280px] flex-col overflow-y-auto bg-surface-container-low px-6 pt-10 pb-8 custom-scrollbar">
-          <div className="mb-10 flex items-center gap-3">
-            <div className="-rotate-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-container shadow-sm">
-              <Camera className="h-5 w-5 text-on-primary-container" />
-            </div>
-            <h1 className="font-headline text-xl font-extrabold tracking-tight text-primary">Moment Pic</h1>
-          </div>
+  const album = assets?.album;
+  const bannerCover = loadedItems[0] ? getAssetThumbnailPresentation(loadedItems[0]).src : null;
+  const metaParts = [
+    album ? `${album.assetCount} 张照片` : null,
+    album?.updatedAt ? `更新于 ${new Date(album.updatedAt).toLocaleDateString('zh-CN')}` : null,
+    reader.progress ? `读到第 ${reader.progress.assetIndex + 1} 张` : null,
+  ].filter(Boolean);
+  const startReading = () => {
+    if (reader.progress) {
+      void reader.open(reader.progress.assetId, reader.progress.assetIndex);
+      return;
+    }
+    const first = loadedItems[0];
+    if (first) void reader.open(first.id, first.sortIndex - 1);
+  };
+  const thumbSize = isMobile && !isWideMobile ? Math.round(albumDetailItemMinWidth * 0.75) : Math.round(albumDetailItemMinWidth * 0.8);
+  const rowHeight = isMobile && !isWideMobile ? 150 : 210;
+  const iconButton = 'flex h-10 items-center justify-center gap-2 rounded-[10px] border border-outline-variant mp-glass-panel px-3 text-sm text-on-surface transition-colors hover:border-outline disabled:cursor-not-allowed disabled:opacity-60';
 
-          <div className="mb-8 flex">
+  return (
+    <div className="relative h-[100dvh] w-full overflow-hidden">
+      <section
+        ref={scrollContainerRef}
+        className="custom-scrollbar h-full overflow-y-auto px-3 pb-[calc(env(safe-area-inset-bottom)+2.5rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)] md:px-6 md:pt-5"
+      >
+        <header className="relative overflow-hidden rounded-[18px] border border-outline-variant">
+          <div
+            aria-hidden="true"
+            className="absolute -inset-8 bg-cover bg-center"
+            style={{ backgroundImage: bannerCover ? `url("${bannerCover}")` : undefined, filter: 'var(--mp-banner-filter, blur(28px) brightness(0.6) saturate(1.2))' }}
+          />
+          <div aria-hidden="true" className="absolute inset-0" style={{ background: 'var(--mp-banner-overlay, linear-gradient(180deg, rgba(7,7,8,0.15), rgba(7,7,8,0.78)))' }} />
+          <div className="relative flex flex-col gap-4 p-4 md:flex-row md:items-end md:gap-6 md:p-7">
             <button
+              type="button"
               onClick={onBack}
-              className="wobbly-mask flex items-center gap-1 rounded-sm bg-secondary-container px-4 py-1.5 text-xs font-medium text-on-secondary-container shadow-sm transition-all hover:brightness-95"
+              className="absolute left-3 top-3 flex items-center gap-1 rounded-full mp-glass-panel px-3 py-1.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface md:left-5 md:top-5"
             >
               <ArrowLeft className="h-4 w-4" />
-              返回首页
+              返回
             </button>
-          </div>
-
-          <div className="mb-8 flex flex-col gap-3">
-            {isAdmin && (
-            <>
-            <button
-              onClick={() => void handleFavoriteToggle()}
-              disabled={isUpdatingFavorite}
-              className="wobbly-mask flex items-center gap-1 rounded-sm bg-secondary-container px-4 py-1.5 text-xs font-medium text-on-secondary-container shadow-sm transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isUpdatingFavorite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className={`h-4 w-4 ${assets?.album?.isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />}
-              {assets?.album?.isFavorite ? '取消收藏' : '收藏图集'}
-            </button>
-            <button
-              onClick={() => setIsShareDialogOpen(true)}
-              className="wobbly-mask flex items-center gap-1 rounded-sm bg-tertiary-container px-4 py-1.5 text-xs font-medium text-on-tertiary-container shadow-sm transition-all hover:brightness-95"
-            >
-              <Share2 className="h-4 w-4" />
-              分享图集
-            </button>
-            </>
-            )}
-          </div>
-
-          <div className="mb-8 flex">
-            <button
-              onClick={() => void handleRescanAlbum()}
-              disabled={isRescanningAlbum}
-              className="wobbly-mask flex items-center gap-1 rounded-sm bg-primary-container px-4 py-1.5 text-xs font-medium text-on-primary-container shadow-sm transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {isRescanningAlbum ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              重扫当前图集
-            </button>
-          </div>
-
-          <div className="mt-4 flex flex-col items-center gap-16">
-            <Heart className="h-10 w-10 rotate-12 fill-primary text-primary opacity-40" />
-            <Sparkles className="ml-8 h-8 w-8 -rotate-8 self-start text-primary opacity-30" />
-            <Leaf className="mr-8 h-6 w-6 rotate-6 self-end text-primary opacity-40" />
-          </div>
-
-          <div className="mt-auto self-center text-primary opacity-20">
-            <PenTool className="-rotate-12 h-12 w-12" />
-          </div>
-
-          <div className="wobbly-mask relative mt-auto -rotate-2 rounded-2xl bg-tertiary-container p-6 shadow-sm">
-            <Paperclip className="absolute -top-3 right-4 h-5 w-5 rotate-12 text-outline" />
-            {assets?.album ? (
-              <>
-                <p className="text-sm font-medium leading-relaxed text-on-tertiary-container">共 {assets.album.assetCount} 张图片</p>
-                <p className="mt-2 text-[10px] text-on-tertiary-container/60">已加载 {loadedItems.length} 张</p>
-                <p className="mt-1 text-[10px] text-on-tertiary-container/60">
-                  更新于 {new Date(assets.album.updatedAt || Date.now()).toLocaleDateString('zh-CN')}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm font-medium leading-relaxed text-on-tertiary-container">加载中...</p>
-            )}
-          </div>
-        </aside>
-      )}
-
-      <main className={`relative flex h-full flex-1 flex-col bg-surface ${isMobile ? 'w-full' : ''}`}>
-        {isMobile && (
-          <header className={mobileHeaderClass}>
-            <button onClick={onBack} className="flex min-h-11 items-center gap-1.5 text-outline transition-colors hover:text-on-surface">
-              <ArrowLeft className="h-5 w-5" />
-              <span className="text-sm">返回</span>
-            </button>
-            <h2 className={`truncate font-headline font-bold tracking-tight text-on-surface ${isWideMobile ? 'max-w-[280px] text-xl' : 'max-w-[200px] text-lg'}`}>
-              {assets?.album?.name || albumId}
-            </h2>
-            <div className="flex items-center gap-1">
+            <div className="mt-11 flex items-end gap-4 md:mt-10 md:gap-6">
+              <div className="mp-cover-card h-28 w-[5.6rem] shrink-0 md:h-44 md:w-36">
+                {bannerCover ? (
+                  <img src={bannerCover} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-surface-container-high text-outline">
+                    <Camera className="h-8 w-8" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 pb-1">
+                {mode === 'album' && album?.libraryRootId && (
+                  <AlbumPathTrail
+                    variant="inline"
+                    className="mb-2"
+                    rootName={album.libraryRootName}
+                    relativePath={album.parentRelativePath ?? ''}
+                    albumName={album.name}
+                  />
+                )}
+                <p className="mp-eyebrow">Album</p>
+                <h1 className="mp-title mt-1.5 line-clamp-2 text-[22px] leading-tight md:text-[32px]">{album?.name || '正在加载…'}</h1>
+                {metaParts.length > 0 && <p className="mt-2 text-[13px] tabular-nums text-on-surface-variant">{metaParts.join(' · ')}</p>}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 md:ml-auto md:justify-end">
+              <button
+                type="button"
+                onClick={startReading}
+                disabled={!loadedItems.length && !reader.progress}
+                className="flex h-10 items-center gap-2 rounded-[10px] bg-primary px-4 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                <Play className="h-4 w-4 fill-current" />
+                {reader.progress ? '继续阅读' : '开始浏览'}
+              </button>
               {isAdmin && (
-              <>
-              <button
-                onClick={() => void handleFavoriteToggle()}
-                disabled={isUpdatingFavorite}
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60"
-                title={assets?.album?.isFavorite ? '取消收藏' : '收藏图集'}
-              >
-                {isUpdatingFavorite ? <Loader2 className="h-5 w-5 animate-spin" /> : <Star className={`h-5 w-5 ${assets?.album?.isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />}
-              </button>
-              <button
-                onClick={() => setIsShareDialogOpen(true)}
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface"
-                title="分享图集"
-              >
-                <Share2 className="h-5 w-5" />
-              </button>
-              <button
-                onClick={() => void handleRescanAlbum()}
-                disabled={isRescanningAlbum}
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60"
-                title="重扫当前图集"
-              >
-                {isRescanningAlbum ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
-              </button>
-              </>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleFavoriteToggle()}
+                    disabled={isUpdatingFavorite}
+                    className={iconButton}
+                    aria-pressed={album?.isFavorite ?? false}
+                    title={album?.isFavorite ? '取消收藏' : '收藏图集'}
+                  >
+                    {isUpdatingFavorite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className={`h-4 w-4 ${album?.isFavorite ? 'fill-current text-favorite' : ''}`} />}
+                    <span className={album?.isFavorite ? 'text-favorite' : ''}>{album?.isFavorite ? '已收藏' : '收藏'}</span>
+                  </button>
+                  <button type="button" onClick={() => setIsShareDialogOpen(true)} className={iconButton} title="分享图集">
+                    <Share2 className="h-4 w-4" />
+                    <span className="hidden sm:inline">分享</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRescanAlbum()}
+                    disabled={isRescanningAlbum}
+                    className={iconButton}
+                    title="重新扫描当前图集"
+                    aria-label="重新扫描当前图集"
+                  >
+                    {isRescanningAlbum ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  </button>
+                </>
               )}
             </div>
-          </header>
-        )}
+          </div>
+        </header>
 
-        {!isMobile && (
-          <header className="flex h-32 flex-col justify-center px-12 pt-8">
-            <h2 className="font-headline text-4xl font-extrabold tracking-tight text-on-surface">
-              {assets?.album?.name || albumId} · 相册详情
-            </h2>
-          </header>
-        )}
+        <div className="sticky top-0 z-20 -mx-1 mt-4 px-1 pt-1">
+          <div className="mp-glass-panel flex items-center gap-2 rounded-[14px] p-1.5">
+            <div role="radiogroup" aria-label="排列方式" className="flex items-center gap-1">
+              {(['grid', 'justified'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={layout === value}
+                  onClick={() => setLayout(value)}
+                  className={`flex h-8 items-center gap-1.5 rounded-[10px] px-3 text-[13px] transition-colors ${layout === value ? 'bg-primary-container text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
+                >
+                  {value === 'grid' ? <LayoutGrid className="h-3.5 w-3.5" /> : <Rows3 className="h-3.5 w-3.5" />}
+                  {value === 'grid' ? '网格' : '等高拼图'}
+                </button>
+              ))}
+            </div>
+            <span className="flex-1" />
+            <span className="px-2 text-xs tabular-nums text-on-surface-variant">
+              {album ? `已加载 ${loadedItems.length} / ${album.assetCount}` : ''}
+            </span>
+          </div>
+        </div>
 
-        {mode === "album" && assets?.album?.libraryRootId && (
-          <AlbumPathTrail
-            className="mx-4 mt-2 md:mx-12 md:mt-1"
-            rootName={assets.album.libraryRootName}
-            relativePath={assets.album.parentRelativePath ?? ""}
-            albumName={assets.album.name}
-          />
-        )}
+        {reader.loading && !reader.session && <p role="status" className="mt-3 text-sm text-on-surface-variant">正在定位阅读位置…</p>}
+        {reader.error && <p role="status" className="mt-3 text-sm text-error">{reader.error}</p>}
 
-        {reader.progress && <button onClick={() => void reader.open(reader.progress!.assetId, reader.progress!.assetIndex)} className="px-4 py-2 text-left text-sm text-primary md:px-12">继续上次第 {reader.progress.assetIndex + 1} 页</button>}
-        {reader.loading && !reader.session && <p role="status" className="px-4 text-sm text-outline md:px-12">正在定位阅读位置…</p>}
-        {reader.error && <p role="status" className="px-4 text-sm text-error md:px-12">{reader.error}</p>}
-        <section
-          ref={scrollContainerRef}
-          className={isMobile ? mobileSectionClass : 'custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth md:px-12 md:py-8 md:pb-8'}
-        >
+        <div className="mt-4">
           {isLoading && loadedItems.length === 0 ? (
-            <div
-              className="grid gap-4"
-              style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${albumDetailItemMinWidth}px, 1fr))` }}
-            >
+            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${thumbSize}px), 1fr))` }}>
               {Array.from({ length: 12 }).map((_, i) => (
-                <div key={i} className="animate-pulse">
-                  <div className="polaroid">
-                    <div className="mb-4 aspect-square rounded-sm bg-outline/10" />
-                  </div>
+                <div key={i} className="mp-cover-card animate-pulse">
+                  <div className="aspect-square bg-surface-container-high" />
                 </div>
               ))}
             </div>
           ) : error && loadedItems.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center gap-4">
               <p className="text-error">{error}</p>
-              <button onClick={handleReloadFirstPage} className="rounded-lg bg-primary-container px-4 py-2 text-on-primary-container">
+              <button onClick={handleReloadFirstPage} className="rounded-[10px] bg-primary px-4 py-2 font-semibold text-on-primary">
                 重试
               </button>
             </div>
           ) : (
             <>
-              <motion.div
-                initial="hidden"
-                animate="show"
-                variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } }}
-                className="grid gap-4"
-                style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${albumDetailItemMinWidth}px, 1fr))` }}
-              >
-                {renderedItems.map((asset, index) => (
-                  <motion.div
-                    key={asset.id}
-                    variants={{
-                      hidden: { opacity: 0, y: 20 },
-                      show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } },
-                    }}
-                    className="group relative cursor-pointer"
-                  >
-                    <div onClick={() => void reader.open(asset.id, asset.sortIndex - 1)}>
-                      <Polaroid {...getAssetThumbnailPresentation(asset)} caption="" rotation={(index % 5 - 2) * 1} className="w-full" />
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
+              {layout === 'grid' ? (
+                <div className="grid gap-2.5 md:gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${thumbSize}px), 1fr))` }}>
+                  {renderedItems.map((asset) => (
+                    <AssetTile key={asset.id} asset={asset} onOpen={() => void reader.open(asset.id, asset.sortIndex - 1)} />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2 md:gap-2.5 after:block after:grow-[999]">
+                  {renderedItems.map((asset) => (
+                    <AssetTile key={asset.id} asset={asset} justifiedRowHeight={rowHeight} onOpen={() => void reader.open(asset.id, asset.sortIndex - 1)} />
+                  ))}
+                </div>
+              )}
 
               {(hasMore || hasMoreToRender) && <div ref={loadMoreTriggerRef} className="h-2 w-full" />}
               {isLoadingMore && (
@@ -407,15 +377,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
               )}
             </>
           )}
-        </section>
-
-        <footer className="z-10 hidden h-20 items-center justify-between border-t-2 border-outline/5 bg-surface/50 px-12 backdrop-blur-sm md:flex">
-          <div className="flex items-center gap-3 text-outline-variant/80">
-            <Paperclip className="h-4 w-4" />
-            <code className="text-xs font-medium tracking-tight">/Volume1/pb1/{albumId}/moments/</code>
-          </div>
-        </footer>
-      </main>
+        </div>
+      </section>
 
       {reader.session && (
         <ViewerGallery
@@ -446,16 +409,63 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
         />
       )}
 
-      <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between rounded-t-[2rem] border-t border-white/60 bg-white/85 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.1rem)] shadow-[0_-12px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl md:hidden">
-        <div className="text-left text-[11px] leading-4 text-outline/80">
-          <p>共 {assets?.album?.assetCount ?? loadedItems.length} 张图片</p>
-          <p>已加载 {loadedItems.length} 张</p>
-        </div>
-        <button onClick={onBack} className="flex min-h-12 min-w-16 flex-col items-center justify-center text-outline transition-opacity hover:opacity-80">
-          <ArrowLeft className="h-6 w-6" />
-          <span className="text-[10px] tracking-widest">返回相册</span>
-        </button>
-      </nav>
     </div>
   );
 };
+
+type DetailLayout = 'grid' | 'justified';
+const DETAIL_LAYOUT_KEY = 'moment-pic:detail-layout';
+
+/** 相册详情排列方式：网格（正方形裁切）/ 等高拼图（保留原图比例），保存在当前浏览器。 */
+function useDetailLayout(): [DetailLayout, (value: DetailLayout) => void] {
+  const [layout, setLayoutState] = useState<DetailLayout>(() => {
+    try {
+      return window.localStorage.getItem(DETAIL_LAYOUT_KEY) === 'justified' ? 'justified' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+  const setLayout = useCallback((value: DetailLayout) => {
+    setLayoutState(value);
+    try {
+      window.localStorage.setItem(DETAIL_LAYOUT_KEY, value);
+    } catch {
+      // ignore
+    }
+  }, []);
+  return [layout, setLayout];
+}
+
+function AssetTile({ asset, onOpen, justifiedRowHeight }: { asset: AssetListItemDTO; onOpen: () => void; justifiedRowHeight?: number }) {
+  const [failed, setFailed] = useState(false);
+  const presentation = getAssetThumbnailPresentation(asset);
+  const ratio = Math.min(3, Math.max(0.33, presentation.aspectRatio));
+  const style = justifiedRowHeight
+    ? { flexGrow: ratio, flexBasis: `${Math.round(justifiedRowHeight * ratio)}px`, aspectRatio: String(ratio) }
+    : undefined;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      style={style}
+      aria-label={`查看 ${asset.name}`}
+      className={`mp-cover-card group ${justifiedRowHeight ? 'max-h-[60vh]' : 'aspect-square'}`}
+    >
+      {failed ? (
+        <span className="flex h-full w-full flex-col items-center justify-center gap-2 bg-surface-container-high text-outline">
+          <ImageOff className="h-6 w-6" />
+          <span className="text-xs">预览不可用</span>
+        </span>
+      ) : (
+        <ThrottledImage
+          src={presentation.src}
+          alt={asset.name}
+          referrerPolicy="no-referrer"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </button>
+  );
+}

@@ -135,7 +135,7 @@ export const SharedAlbumScreen: FC<SharedAlbumScreenProps> = ({ token }) => {
 
   return (
     <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-surface">
-      <header className="border-b border-outline/10 bg-surface/92 px-5 py-4 backdrop-blur md:px-10">
+      <header className="border-b border-outline/10 bg-background/75 backdrop-blur-xl px-5 py-4 backdrop-blur md:px-10">
         <h1 className="truncate font-headline text-2xl font-bold text-on-surface">{auth.name}</h1>
         <p className="mt-1 text-xs text-outline">分享有效期至 {expiresLabel}</p>
       </header>

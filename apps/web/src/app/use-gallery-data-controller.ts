@@ -3,6 +3,7 @@ import { useAlbums, useLibraryRoots, useWebSocket, useLibraryScan, useRecentAlbu
 import { Screen } from '../types';
 import { SCAN_PARTIAL_FAILURE_MESSAGE } from '../lib/scan-status';
 import type { GalleryFilters, GalleryViewMode } from './gallery-navigation';
+import { useAccumulatedPages } from './infinite-pages';
 
 type UseGalleryDataControllerInput = {
   currentScreen: Screen;
@@ -23,9 +24,9 @@ export const useGalleryDataController = ({
   isRecentActive,
   selectedSmartAlbum,
 }: UseGalleryDataControllerInput) => {
-  const { albums, isLoading, error, fetchAlbums, cancelRequests: cancelAlbums } = useAlbums();
+  const { albums: albumPage, isLoading, error, fetchAlbums, cancelRequests: cancelAlbums } = useAlbums();
   const {
-    smartAlbums,
+    smartAlbums: smartAlbumPage,
     smartAlbumDetail,
     smartAlbumMembers,
     isLoading: isSmartAlbumsLoading,
@@ -41,6 +42,11 @@ export const useGalleryDataController = ({
     , cancelRequests: cancelDirectory
   } = useDirectoryAlbums();
   const { libraryRoots, fetchLibraryRoots, cancelRequests: cancelLibraryRoots } = useLibraryRoots();
+  // 列表改为无限滚动：同一查询的连续分页结果累积成一个列表（翻到下一页时追加）
+  const albumsQueryKey = JSON.stringify([galleryViewMode === 'favorites' ? 'favorites' : 'albums', debouncedKeyword, filters.sortBy, filters.sortOrder, filters.sourceType, filters.libraryRootId, filters.pageSize]);
+  const smartAlbumsQueryKey = JSON.stringify([debouncedKeyword, filters.sortBy, filters.sortOrder, filters.pageSize]);
+  const albums = useAccumulatedPages(albumPage, albumsQueryKey);
+  const smartAlbums = useAccumulatedPages(smartAlbumPage, smartAlbumsQueryKey);
   // 最近浏览不消费关键词或筛选条件，防抖落地不应使其请求失效。
   const queryKey = JSON.stringify([currentScreen, isRecentActive ? null : debouncedKeyword, isRecentActive ? null : filters, galleryViewMode, isAuthenticated, isRecentActive, selectedSmartAlbum]);
   const queryRef = useRef({ key: queryKey, generation: 0 });
@@ -128,6 +134,9 @@ export const useGalleryDataController = ({
       await loadFavoriteAlbums();
       return;
     }
+    if (galleryViewMode === 'home') {
+      return;
+    }
     if (isRecentActive) {
       await fetchRecentAlbums({ limit: 50 });
       return;
@@ -181,7 +190,7 @@ export const useGalleryDataController = ({
         void loadFavoriteAlbums();
         return;
       }
-      if (isRecentActive) return;
+      if (galleryViewMode === 'home' || isRecentActive) return;
       void loadAlbums();
     }
   }, [currentScreen, galleryViewMode, isAuthenticated, isRecentActive, loadAlbums, loadDirectoryAlbums, loadFavoriteAlbums, loadSmartAlbums]);
@@ -219,6 +228,7 @@ export const useGalleryDataController = ({
         void loadFavoriteAlbums();
         return;
       }
+      if (galleryViewMode === 'home') return;
       void loadAlbums();
     }, 3000);
 

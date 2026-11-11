@@ -30,7 +30,7 @@ export function SmartAlbumRuleEditor({
           <input
             value={draftRule.name}
             onChange={(event) => onDraftChange((prev) => ({ ...prev, name: event.target.value }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
             placeholder="例如：按作者名聚合"
           />
         </label>
@@ -40,7 +40,7 @@ export function SmartAlbumRuleEditor({
             type="number"
             value={draftRule.priority}
             onChange={(event) => onDraftChange((prev) => ({ ...prev, priority: Number(event.target.value) || 0 }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
           />
         </label>
         <label className="space-y-2">
@@ -48,7 +48,7 @@ export function SmartAlbumRuleEditor({
           <select
             value={draftRule.scope}
             onChange={(event) => onDraftChange((prev) => ({ ...prev, scope: event.target.value as SmartAlbumRuleDTO['scope'] }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
           >
             <option value="albumName">图集名称</option>
             <option value="sourcePath">完整路径</option>
@@ -61,7 +61,7 @@ export function SmartAlbumRuleEditor({
           <select
             value={draftRule.matchMode}
             onChange={(event) => onDraftChange((prev) => ({ ...prev, matchMode: event.target.value as SmartAlbumRuleDTO['matchMode'] }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
           >
             <option value="contains">包含</option>
             <option value="equals">完全等于</option>
@@ -75,7 +75,7 @@ export function SmartAlbumRuleEditor({
           <textarea
             value={draftRule.patterns.join('\n')}
             onChange={(event) => onDraftChange((prev) => ({ ...prev, patterns: event.target.value.split('\n') }))}
-            className="min-h-28 w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="min-h-28 w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
             placeholder={'每行一个关键词，例如：\n桜桃喵\nyuuhui\nXIUREN'}
           />
         </label>
@@ -84,7 +84,7 @@ export function SmartAlbumRuleEditor({
           <input
             value={draftRule.targetName ?? ''}
             onChange={(event) => onDraftChange((prev) => ({ ...prev, targetName: event.target.value.trim() ? event.target.value : null }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
             placeholder="留空时使用下方模板或命中词"
           />
         </label>
@@ -93,7 +93,7 @@ export function SmartAlbumRuleEditor({
           <input
             value={draftRule.targetNameTemplate ?? ''}
             onChange={(event) => onDraftChange((prev) => ({ ...prev, targetNameTemplate: event.target.value || null }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
             placeholder="{{token}}"
           />
         </label>
@@ -104,7 +104,7 @@ export function SmartAlbumRuleEditor({
             min="1"
             value={draftRule.minAlbumCount}
             onChange={(event) => onDraftChange((prev) => ({ ...prev, minAlbumCount: Math.max(1, Number(event.target.value) || 1) }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
           />
         </label>
       </div>

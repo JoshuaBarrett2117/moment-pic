@@ -1,7 +1,7 @@
 import { useCallback, useEffect, Suspense, useMemo } from 'react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
-import { PaperGrain } from './components/PaperGrain';
+import { ThemeBackdrop } from './components/ThemeBackdrop';
 import { recordAlbumView, setAlbumFavorite, useSystemConfig } from './hooks';
 import { api } from './lib/api';
 import type { AlbumListItemDTO, DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
@@ -14,12 +14,15 @@ import { useAppAuthBootstrap } from './app/useAppAuthBootstrap';
 import { useGalleryFilterActions } from './app/useGalleryFilterActions';
 import { CurrentUserProvider } from './app/current-user';
 import { PageTransitionFrame } from './app/PageTransitionFrame';
+import { AppNavigationProvider, resolveNavKey, type AppNavigation } from './app/app-navigation';
+import { GALLERY_SEARCH_EVENT, requestGallerySearch } from './app/gallery-search';
+import { setBackgroundSessionActive, setCustomBackgroundUrl } from './theme/background';
+import { userBackgroundApi } from './lib/user-background';
 import { AlbumDetailScreen, GalleryScreen, getShareTokenFromPath, SettingsScreen, ShareManagementScreen, SharedAlbumApp } from './app/screens';
 
 function AuthenticatedMomentPicApp() {
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
   const {
-    activeTab,
     currentScreen,
     debouncedKeyword,
     direction,
@@ -50,7 +53,6 @@ function AuthenticatedMomentPicApp() {
     albums,
     directoryAlbums,
     fetchRecentAlbums,
-    fetchSmartAlbumDetail,
     isAnyScanning,
     isLoading,
     isDirectoryAlbumsLoading,
@@ -59,9 +61,7 @@ function AuthenticatedMomentPicApp() {
     isSmartAlbumsLoading,
     libraryRoots,
     loadAlbums,
-    loadDirectoryAlbums,
     loadFavoriteAlbums,
-    loadSmartAlbums,
     recentAlbums,
     refreshCurrentGallery,
     scan,
@@ -103,8 +103,7 @@ function AuthenticatedMomentPicApp() {
     enterDirectoryNodeFilters,
     handleKeywordChange,
     handleLibraryRootChangeFilters,
-    handlePageChange,
-    handlePageSizeChange,
+    handleLoadMore,
     handleSortByChange,
     handleSortOrderChange,
     handleSourceTypeChange,
@@ -144,11 +143,10 @@ function AuthenticatedMomentPicApp() {
     const nextFilters = resetToAlbumFilters();
     markAuthSession();
     setIsAuthenticated(true);
-    setGalleryViewMode('albums');
+    setGalleryViewMode('home');
     void api.get('/albums', { page: nextFilters.page, pageSize: 1 });
-    void loadAlbums();
-    navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'albums' });
-  }, [loadAlbums, navigate, resetToAlbumFilters, setGalleryViewMode, setIsAuthenticated]);
+    navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'home' });
+  }, [navigate, resetToAlbumFilters, setGalleryViewMode, setIsAuthenticated]);
 
   const handleNavigateToAlbum = useCallback((albumId: string) => {
     const nextId = resolveNextAlbumId(albumNavigationSource, albumId);
@@ -208,6 +206,20 @@ function AuthenticatedMomentPicApp() {
       navigate(Screen.SETTINGS, 1);
     }
   }, [loadAlbums, navigate, resetToAlbumFilters, setActiveTab, setGalleryViewMode, setIsRecentActive]);
+
+  const handleHomeClick = useCallback(() => {
+    setActiveTab('gallery');
+    setIsRecentActive(false);
+    setGalleryViewMode('home');
+    navigate(Screen.GALLERY, 1, { replace: true, isRecentActive: false, galleryViewMode: 'home' });
+  }, [navigate, setActiveTab, setGalleryViewMode, setIsRecentActive]);
+
+  const handleResetFilters = useCallback(() => {
+    handleKeywordChange('');
+    handleSourceTypeChange('');
+    handleSortByChange(galleryViewMode === 'smartAlbums' ? 'albumCount' : 'updatedAt');
+    handleSortOrderChange('desc');
+  }, [galleryViewMode, handleKeywordChange, handleSortByChange, handleSortOrderChange, handleSourceTypeChange]);
 
   const handleRecentClick = useCallback(() => {
     setActiveTab('gallery');
@@ -319,24 +331,93 @@ function AuthenticatedMomentPicApp() {
     recentAlbums,
     smartAlbums,
   ]);
-  const galleryRefreshHandler = galleryViewMode === 'smartAlbums'
-    ? loadSmartAlbums
-    : galleryViewMode === 'directoryAlbums'
-      ? loadDirectoryAlbums
-      : galleryViewMode === 'favorites'
-        ? loadFavoriteAlbums
-      : isRecentActive
-        ? handleRecentClick
-        : loadAlbums;
+  // 侧栏「搜索相册」或快捷键 / ：先切到全部相册，再由工具栏聚焦搜索框
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const onSearch = () => {
+      const isListView = currentScreen === Screen.GALLERY && (galleryViewMode === 'albums' || galleryViewMode === 'favorites' || galleryViewMode === 'smartAlbums') && !isRecentActive;
+      if (!isListView) handleSidebarNavigate('gallery');
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      if (document.querySelector('.viewer-gallery')) return;
+      event.preventDefault();
+      requestGallerySearch();
+    };
+    window.addEventListener(GALLERY_SEARCH_EVENT, onSearch);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener(GALLERY_SEARCH_EVENT, onSearch);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [currentScreen, galleryViewMode, handleSidebarNavigate, isAuthenticated, isRecentActive]);
+
+  // 背景图：登录后才加载自定义图片；同步一次服务器上的版本（换设备上传过也能拿到）
+  useEffect(() => {
+    setBackgroundSessionActive(isAuthenticated);
+    if (!isAuthenticated) return;
+    const controller = new AbortController();
+    void userBackgroundApi.meta(controller.signal)
+      .then((meta) => {
+        if (!controller.signal.aborted) setCustomBackgroundUrl(meta?.url ?? null);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [isAuthenticated]);
+
+  const navScreen = currentScreen === Screen.SETTINGS
+    ? 'settings'
+    : currentScreen === Screen.SHARE_MANAGEMENT
+      ? 'share'
+      : currentScreen === Screen.SMART_ALBUM_DETAIL
+        ? 'smart-album'
+        : currentScreen === Screen.ALBUM_DETAIL
+          ? 'album'
+          : currentScreen === Screen.LOGIN
+            ? 'login'
+            : 'gallery';
+  const appNavigation = useMemo<AppNavigation>(() => ({
+    active: resolveNavKey({ screen: navScreen, galleryViewMode, isRecentActive, libraryRootId: filters.libraryRootId }),
+    libraryRoots,
+    albumCount: galleryViewMode === 'albums' && !isRecentActive && !filters.libraryRootId && !debouncedKeyword && !filters.sourceType
+      ? (albums?.pagination.total ?? null)
+      : null,
+    isAnyScanning,
+    isScanning,
+    onHome: handleHomeClick,
+    onAllAlbums: () => handleSidebarNavigate('gallery'),
+    onFavorites: handleFavoritesClick,
+    onRecent: handleRecentClick,
+    onDirectory: handleDirectoryAlbumsClick,
+    onSmart: handleSmartAlbumsClick,
+    onShareManagement: handleShareManagementClick,
+    onSettings: () => handleSidebarNavigate('settings'),
+    onLibrary: handleLibraryRootChange,
+    onScanAll: () => void handleRefreshAll(),
+    onScanOne: (id: string) => void handleRefreshOne(id),
+    onLogout: handleProfileClick,
+  }), [
+    albums?.pagination.total, debouncedKeyword, filters.libraryRootId, filters.sourceType, galleryViewMode, handleDirectoryAlbumsClick,
+    handleFavoritesClick, handleHomeClick, handleLibraryRootChange, handleProfileClick, handleRecentClick, handleRefreshAll,
+    handleRefreshOne, handleShareManagementClick, handleSidebarNavigate, handleSmartAlbumsClick, isAnyScanning, isRecentActive,
+    isScanning, libraryRoots, navScreen,
+  ]);
+
+  const loadingFallback = (label: string) => (
+    <div className="flex h-full w-full items-center justify-center text-on-surface-variant">{label}</div>
+  );
 
   return (
     <CurrentUserProvider enabled={isAuthenticated}>
-    <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
-      <PaperGrain />
-      {isAuthenticated && scanError && currentScreen !== Screen.SETTINGS && <div role="alert" className="fixed left-4 right-4 top-4 z-50 rounded-lg bg-error px-4 py-3 text-white">{scanError}</div>}
+    <AppNavigationProvider value={appNavigation}>
+    <div className="relative w-full h-[100dvh] overflow-hidden">
+      <ThemeBackdrop />
+      {isAuthenticated && scanError && currentScreen !== Screen.SETTINGS && <div role="alert" className="fixed left-4 right-4 top-4 z-50 rounded-xl bg-error px-4 py-3 text-on-error">{scanError}</div>}
 
       {isAuthBootstrapping ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-surface text-outline">
+        <div className="absolute inset-0 flex items-center justify-center text-on-surface-variant">
           正在进入图库...
         </div>
       ) : (
@@ -349,55 +430,33 @@ function AuthenticatedMomentPicApp() {
             <LoginScreen onLogin={handleLogin} />
           )}
           {currentScreen === Screen.GALLERY && isAuthenticated && (
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center text-outline">
-                  正在加载图库...
-                </div>
-              }
-            >
+            <Suspense fallback={loadingFallback('正在加载图库...')}>
               <GalleryScreen
-                showContinueReading={galleryViewMode === "albums" && !isRecentActive}
                 displayMode={galleryViewMode}
                 albums={galleryScreenModel.albums}
                 isLoading={galleryScreenModel.isLoading}
                 pagination={galleryScreenModel.pagination}
                 onNavigateToAlbum={galleryViewMode === 'smartAlbums' ? handleNavigateToSmartAlbum : handleNavigateToAlbum}
-                onProfileClick={handleProfileClick}
-                onRefresh={galleryRefreshHandler}
-                onPageChange={handlePageChange}
+                onNavigateToSmartAlbum={handleNavigateToSmartAlbum}
+                onLoadMore={handleLoadMore}
                 onSortByChange={handleSortByChange}
                 onSortOrderChange={handleSortOrderChange}
-                onPageSizeChange={handlePageSizeChange}
                 onSourceTypeChange={galleryScreenModel.canChangeSourceType ? handleSourceTypeChange : undefined}
+                onResetFilters={handleResetFilters}
                 currentSortBy={filters.sortBy}
                 currentSortOrder={filters.sortOrder}
-                currentPageSize={filters.pageSize}
                 currentSourceType={filters.sourceType}
                 currentKeyword={filters.keyword}
-                activeTab={activeTab}
-                onSidebarNavigate={handleSidebarNavigate}
-                libraryRoots={libraryRoots}
                 currentLibraryRootId={galleryScreenModel.currentLibraryRootId}
-                onLibraryRootChange={handleLibraryRootChange}
+                headerTitle={galleryViewMode === 'albums' && !isRecentActive && filters.libraryRootId
+                  ? libraryRoots.find((root) => root.id === filters.libraryRootId)?.name
+                  : undefined}
+                headerEyebrow={galleryViewMode === 'albums' && !isRecentActive && filters.libraryRootId ? 'Library' : undefined}
+                headerDescription={galleryViewMode === 'albums' && !isRecentActive && filters.libraryRootId ? '这个图库里的全部图集' : undefined}
                 onKeywordChange={handleKeywordChange}
-                onScanAll={handleRefreshAll}
-                onScanOne={handleRefreshOne}
-                isAnyScanning={isAnyScanning}
-                isScanning={isScanning}
-                onAlbumDeleted={loadAlbums}
-                onRecentClick={handleRecentClick}
                 isRecentActive={galleryScreenModel.isRecentActive}
                 scrollPosition={scrollPosition}
                 onScrollPositionChange={setScrollPosition}
-                onSmartAlbumsClick={handleSmartAlbumsClick}
-                isSmartAlbumsActive={galleryViewMode === 'smartAlbums'}
-                onDirectoryAlbumsClick={handleDirectoryAlbumsClick}
-                isDirectoryAlbumsActive={galleryViewMode === 'directoryAlbums'}
-                onFavoritesClick={handleFavoritesClick}
-                isFavoritesActive={galleryViewMode === 'favorites'}
-                onShareManagementClick={handleShareManagementClick}
-                isShareManagementActive={false}
                 onDirectoryNodeClick={handleDirectoryNodeClick}
                 directoryBreadcrumbs={directoryAlbums?.breadcrumbs || []}
                 onDirectoryBreadcrumbClick={handleDirectoryBreadcrumbClick}
@@ -406,13 +465,7 @@ function AuthenticatedMomentPicApp() {
             </Suspense>
           )}
           {currentScreen === Screen.ALBUM_DETAIL && (
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center text-outline">
-                  正在加载相册详情...
-                </div>
-              }
-            >
+            <Suspense fallback={loadingFallback('正在加载相册详情...')}>
               <AlbumDetailScreen
                 mode="album"
                 albumId={selectedAlbum || ''}
@@ -422,13 +475,7 @@ function AuthenticatedMomentPicApp() {
             </Suspense>
           )}
           {currentScreen === Screen.SETTINGS && (
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center text-outline">
-                  正在加载设置...
-                </div>
-              }
-            >
+            <Suspense fallback={loadingFallback('正在加载设置...')}>
               <SettingsScreen
                 scanError={scanError}
                 onBack={handleBackToGallery}
@@ -438,90 +485,37 @@ function AuthenticatedMomentPicApp() {
             </Suspense>
           )}
           {currentScreen === Screen.SHARE_MANAGEMENT && (
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center text-outline">
-                  正在加载分享管理...
-                </div>
-              }
-            >
-              <ShareManagementScreen
-                activeTab={activeTab}
-                albumCount={galleryScreenModel.pagination?.total || albums?.pagination.total || 0}
-                libraryRoots={libraryRoots}
-                currentLibraryRootId={galleryScreenModel.currentLibraryRootId}
-                isAnyScanning={isAnyScanning}
-                isScanning={isScanning}
-                onBack={handleBackToGallery}
-                onNavigate={handleSidebarNavigate}
-                onLibraryRootChange={handleLibraryRootChange}
-                onScanAll={handleRefreshAll}
-                onScanOne={handleRefreshOne}
-                onRecentClick={handleRecentClick}
-                onSmartAlbumsClick={handleSmartAlbumsClick}
-                onDirectoryAlbumsClick={handleDirectoryAlbumsClick}
-                onFavoritesClick={handleFavoritesClick}
-                onShareManagementClick={handleShareManagementClick}
-              />
+            <Suspense fallback={loadingFallback('正在加载分享管理...')}>
+              <ShareManagementScreen onBack={handleBackToGallery} />
             </Suspense>
           )}
           {currentScreen === Screen.SMART_ALBUM_DETAIL && selectedSmartAlbum && (
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center text-outline">
-                  正在加载自动整理...
-                </div>
-              }
-            >
+            <Suspense fallback={loadingFallback('正在加载智能相册...')}>
               <GalleryScreen
                 displayMode="albums"
                 albums={smartAlbumMemberAlbums}
                 isLoading={isSmartAlbumsLoading}
                 pagination={null}
                 onNavigateToAlbum={handleNavigateToAlbum}
-                onProfileClick={handleProfileClick}
-                onRefresh={() => {
-                  void fetchSmartAlbumDetail(selectedSmartAlbum);
-                }}
-                onPageChange={() => {}}
                 onSortByChange={handleSortByChange}
                 onSortOrderChange={handleSortOrderChange}
-                onPageSizeChange={handlePageSizeChange}
                 onSourceTypeChange={handleSourceTypeChange}
                 currentSortBy={smartAlbumMemberSortBy}
                 currentSortOrder={filters.sortOrder}
-                currentPageSize={filters.pageSize}
                 currentSourceType={filters.sourceType}
                 currentKeyword={filters.keyword}
-                activeTab={activeTab}
-                onSidebarNavigate={handleSidebarNavigate}
-                libraryRoots={libraryRoots}
                 currentLibraryRootId=""
-                onLibraryRootChange={handleLibraryRootChange}
                 onKeywordChange={handleKeywordChange}
-                onScanAll={handleRefreshAll}
-                onScanOne={handleRefreshOne}
-                isAnyScanning={isAnyScanning}
-                isScanning={isScanning}
-                onAlbumDeleted={loadAlbums}
-                onRecentClick={handleRecentClick}
                 isRecentActive={false}
                 scrollPosition={scrollPosition}
                 onScrollPositionChange={setScrollPosition}
-                onSmartAlbumsClick={handleSmartAlbumsClick}
-                isSmartAlbumsActive
-                onDirectoryAlbumsClick={handleDirectoryAlbumsClick}
-                isDirectoryAlbumsActive={false}
-                onFavoritesClick={handleFavoritesClick}
-                isFavoritesActive={false}
-                onShareManagementClick={handleShareManagementClick}
-                isShareManagementActive={false}
+                headerEyebrow="Smart album"
                 headerTitle={smartAlbumDetail?.name || '分类图集'}
                 headerDescription={smartAlbumDetail
-                  ? `当前自动整理共收纳 ${smartAlbumDetail.albumCount} 个分类图集，继续进入后才是图集内部图片。`
+                  ? `共收纳 ${smartAlbumDetail.albumCount} 个图集`
                   : '正在加载分类图集...'}
-                emptyTitle="这个自动整理下还没有分类图集"
-                emptyDescription="请先重建自动整理，或者调整当前筛选条件。"
+                emptyTitle="这个智能相册下还没有图集"
+                emptyDescription="请先重建智能相册，或者调整当前筛选条件。"
                 onBack={handleBackToGallery}
                 onAlbumFavoriteToggle={handleAlbumFavoriteToggle}
               />
@@ -530,6 +524,7 @@ function AuthenticatedMomentPicApp() {
         </PageTransitionFrame>
       )}
     </div>
+    </AppNavigationProvider>
     </CurrentUserProvider>
   );
 }

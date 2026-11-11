@@ -39,7 +39,7 @@ export function SmartAlbumAiConfigPanel({
           <select
             value={config.enabled ? 'on' : 'off'}
             onChange={(event) => onConfigChange((prev) => ({ ...prev, enabled: event.target.value === 'on' }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
           >
             <option value="off">关闭</option>
             <option value="on">开启</option>
@@ -50,7 +50,7 @@ export function SmartAlbumAiConfigPanel({
           <input
             value="OpenAI Compatible"
             disabled
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface-container-high px-4 py-3 text-outline"
+            className="w-full rounded-xl border border-outline/20 bg-surface-container-high px-4 py-3 text-outline"
           />
         </label>
         <label className="space-y-2">
@@ -58,7 +58,7 @@ export function SmartAlbumAiConfigPanel({
           <select
             value={config.mode}
             onChange={(event) => onConfigChange((prev) => ({ ...prev, mode: event.target.value as SmartAlbumAiConfigDTO['mode'] }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
           >
             <option value="assist">辅助建议</option>
             <option value="auto_low_risk">低风险自动应用</option>
@@ -70,7 +70,7 @@ export function SmartAlbumAiConfigPanel({
           <input
             value={config.apiEndpoint}
             onChange={(event) => onConfigChange((prev) => ({ ...prev, apiEndpoint: event.target.value }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
             placeholder="https://api.openai.com/v1"
           />
         </label>
@@ -79,7 +79,7 @@ export function SmartAlbumAiConfigPanel({
           <input
             value={config.apiModel}
             onChange={(event) => onConfigChange((prev) => ({ ...prev, apiModel: event.target.value }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
             placeholder="gpt-4.1-mini"
           />
         </label>
@@ -89,7 +89,7 @@ export function SmartAlbumAiConfigPanel({
             type="password"
             value={tokenInput}
             onChange={(event) => onTokenInputChange(event.target.value)}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
             placeholder={config.hasApiToken ? `已保存：${config.apiTokenMasked ?? '******'}` : '输入新的 OpenAI Token'}
           />
           <p className="text-xs text-outline/70">
@@ -105,7 +105,7 @@ export function SmartAlbumAiConfigPanel({
             step="0.05"
             value={config.minConfidenceAutoApply}
             onChange={(event) => onConfigChange((prev) => ({ ...prev, minConfidenceAutoApply: Number(event.target.value) }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
           />
         </label>
         <label className="space-y-2">
@@ -115,7 +115,7 @@ export function SmartAlbumAiConfigPanel({
             min="1"
             value={config.minClusterAlbumCount}
             onChange={(event) => onConfigChange((prev) => ({ ...prev, minClusterAlbumCount: Math.max(1, Number(event.target.value) || 1) }))}
-            className="w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
           />
         </label>
         <label className="space-y-2 md:col-span-2">
@@ -126,7 +126,7 @@ export function SmartAlbumAiConfigPanel({
               ...prev,
               excludedTokens: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean),
             }))}
-            className="min-h-24 w-full rounded-xl border-2 border-outline/20 bg-surface px-4 py-3"
+            className="min-h-24 w-full rounded-xl border border-outline/20 bg-surface px-4 py-3"
             placeholder={'每行一个排除词，例如：\n合集\n写真\nMoment'}
           />
         </label>

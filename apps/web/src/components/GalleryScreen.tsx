@@ -1,71 +1,57 @@
-import React, { useEffect, useState } from 'react';
-import { ContinueReading } from './ContinueReading';
+import React, { useEffect, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Sidebar } from './Sidebar';
-import { GalleryPagination } from './GalleryPagination';
 import { AlbumShareDialog } from './AlbumShareDialog';
+import { HomeView } from './HomeView';
 import { GalleryAlbumGrid } from './gallery/GalleryAlbumGrid';
 import { GalleryDirectoryBreadcrumbs } from './gallery/GalleryDirectoryBreadcrumbs';
-import { GalleryFilters } from './gallery/GalleryFilters';
 import { GalleryHeader } from './gallery/GalleryHeader';
+import { GalleryToolbar } from './gallery/GalleryToolbar';
+import { scaleCardWidth, useCardSize } from './gallery/card-size';
 import {
   getGallerySortOptions,
   hasGalleryActiveFilters,
   resolveGalleryEmptyText,
+  resolveGalleryEyebrow,
   resolveGalleryHeaderText,
   type GalleryDisplayMode,
   type GallerySourceType,
 } from './gallery/gallery-screen-state';
 import { useChunkedAlbumRendering } from './gallery/useChunkedAlbumRendering';
 import { useGalleryScrollRestoration } from './gallery/useGalleryScrollRestoration';
+import { hasMorePages } from '../app/infinite-pages';
 import { useMobile, useSystemConfig, useWideMobile } from '../hooks';
-import type { AlbumListItemDTO, PaginationDTO, LibraryRootDTO, SmartAlbumListItemDTO, DirectoryAlbumNodeDTO, DirectoryAlbumBreadcrumbDTO } from '../types/api';
+import type { AlbumListItemDTO, PaginationDTO, SmartAlbumListItemDTO, DirectoryAlbumNodeDTO, DirectoryAlbumBreadcrumbDTO } from '../types/api';
+
+type SortBy = 'name' | 'updatedAt' | 'assetCount' | 'albumCount';
 
 interface GalleryScreenProps {
-  showContinueReading?: boolean;
   displayMode?: GalleryDisplayMode;
   albums: Array<AlbumListItemDTO | SmartAlbumListItemDTO | DirectoryAlbumNodeDTO>;
   isLoading: boolean;
   pagination: PaginationDTO | null;
   onNavigateToAlbum: (albumId: string) => void;
-  onProfileClick: () => void;
-  onRefresh: () => void;
-  onPageChange: (page: number) => void;
-  onSortByChange: (sortBy: 'name' | 'updatedAt' | 'assetCount' | 'albumCount') => void;
+  /** 首页里点开智能相册 */
+  onNavigateToSmartAlbum?: (smartAlbumId: string) => void;
+  onLoadMore?: (nextPage: number) => void;
+  onSortByChange: (sortBy: SortBy) => void;
   onSortOrderChange: (sortOrder: 'asc' | 'desc') => void;
-  onPageSizeChange: (pageSize: number) => void;
   onSourceTypeChange?: (sourceType: 'folder' | 'zip' | '') => void;
-  currentSortBy: 'name' | 'updatedAt' | 'assetCount' | 'albumCount';
+  onKeywordChange: (keyword: string) => void;
+  onResetFilters?: () => void;
+  currentSortBy: SortBy;
   currentSortOrder: 'asc' | 'desc';
-  currentPageSize: number;
   currentSourceType?: 'folder' | 'zip' | '';
   currentKeyword: string;
-  activeTab: 'gallery' | 'settings';
-  onSidebarNavigate: (tab: 'gallery' | 'settings') => void;
-  libraryRoots: LibraryRootDTO[];
   currentLibraryRootId: string;
-  onLibraryRootChange: (id: string) => void;
-  onKeywordChange: (keyword: string) => void;
-  onScanAll: () => void;
-  onScanOne: (libraryRootId: string) => void;
-  isAnyScanning: boolean;
-  isScanning: (libraryRootId: string) => boolean;
-  onAlbumDeleted?: () => void;
-  onRecentClick: () => void;
   isRecentActive: boolean;
   scrollPosition?: number;
   onScrollPositionChange?: (position: number) => void;
-  onSmartAlbumsClick: () => void;
-  isSmartAlbumsActive: boolean;
-  onDirectoryAlbumsClick: () => void;
-  isDirectoryAlbumsActive: boolean;
-  onFavoritesClick: () => void;
-  isFavoritesActive: boolean;
-  onShareManagementClick: () => void;
-  isShareManagementActive: boolean;
   onDirectoryNodeClick?: (node: DirectoryAlbumNodeDTO) => void;
   directoryBreadcrumbs?: DirectoryAlbumBreadcrumbDTO[];
   onDirectoryBreadcrumbClick?: (crumb: DirectoryAlbumBreadcrumbDTO) => void;
-  onAlbumFavoriteToggle?: (album: AlbumListItemDTO) => void;
+  onAlbumFavoriteToggle?: (album: AlbumListItemDTO) => Promise<void> | void;
+  headerEyebrow?: string;
   headerTitle?: string;
   headerDescription?: string;
   emptyTitle?: string;
@@ -78,51 +64,33 @@ const DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP = 300;
 const DEFAULT_GALLERY_DISPLAY_MODE: GalleryDisplayMode = 'albums';
 const DEFAULT_GALLERY_SOURCE_TYPE: GallerySourceType = '';
 
+/** 图库主框架：全局导航 + 首页或相册列表（吸顶工具栏、封面卡片、无限滚动）。 */
 export const GalleryScreen: React.FC<GalleryScreenProps> = ({
-  showContinueReading = false,
   displayMode,
   albums,
   isLoading,
   pagination,
   onNavigateToAlbum,
-  onProfileClick,
-  onRefresh,
-  onPageChange,
+  onNavigateToSmartAlbum,
+  onLoadMore,
   onSortByChange,
   onSortOrderChange,
-  onPageSizeChange,
   onSourceTypeChange,
+  onKeywordChange,
+  onResetFilters,
   currentSortBy,
   currentSortOrder,
-  currentPageSize,
   currentSourceType,
   currentKeyword,
-  activeTab,
-  onSidebarNavigate,
-  libraryRoots,
   currentLibraryRootId,
-  onLibraryRootChange,
-  onKeywordChange,
-  onScanAll,
-  onScanOne,
-  isAnyScanning,
-  isScanning,
-  onRecentClick,
   isRecentActive,
   scrollPosition,
   onScrollPositionChange,
-  onSmartAlbumsClick,
-  isSmartAlbumsActive,
-  onDirectoryAlbumsClick,
-  isDirectoryAlbumsActive,
-  onFavoritesClick,
-  isFavoritesActive,
-  onShareManagementClick,
-  isShareManagementActive,
   onDirectoryNodeClick,
   directoryBreadcrumbs = [],
   onDirectoryBreadcrumbClick,
   onAlbumFavoriteToggle,
+  headerEyebrow,
   headerTitle,
   headerDescription,
   emptyTitle,
@@ -134,164 +102,150 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const { size: cardSize, setSize: setCardSize } = useCardSize();
   const [sharingAlbum, setSharingAlbum] = useState<AlbumListItemDTO | null>(null);
+  const isHome = resolvedDisplayMode === 'home';
   const isSmartAlbumsMode = resolvedDisplayMode === 'smartAlbums';
   const isDirectoryAlbumsMode = resolvedDisplayMode === 'directoryAlbums';
-  const currentPage = pagination?.page || 1;
-  const { loadMoreRef, renderedItems: renderedAlbums, hasMoreItems } = useChunkedAlbumRendering(albums, currentPage);
-  const { mainRef, rememberScrollPosition } = useGalleryScrollRestoration({
-    scrollPosition,
-    onScrollPositionChange,
-  });
+  const { loadMoreRef, renderedItems: renderedAlbums, hasMoreItems } = useChunkedAlbumRendering(albums);
+  const { mainRef, rememberScrollPosition } = useGalleryScrollRestoration({ scrollPosition, onScrollPositionChange });
+  const pageSentinelRef = useRef<HTMLDivElement | null>(null);
+  const canLoadMorePages = Boolean(onLoadMore) && hasMorePages(pagination) && !hasMoreItems;
 
   const hasActiveFilters = hasGalleryActiveFilters({
     isRecentActive,
     currentKeyword,
     currentSortBy,
     currentSortOrder,
-    currentPageSize,
     currentSourceType: resolvedSourceType,
     currentLibraryRootId,
     displayMode: resolvedDisplayMode,
   });
-  const albumListItemMinWidth = isMobile
-    ? (isWideMobile
-      ? (systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP)
-      : (systemConfig?.albumListItemMinWidthMobile ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE))
-    : (systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
-  const mainPaddingClass = isMobile ? (isWideMobile ? 'px-6 pt-14 pb-[calc(env(safe-area-inset-bottom)+7rem)]' : 'px-4 pt-12 pb-[calc(env(safe-area-inset-bottom)+6.5rem)]') : 'md:ml-80 md:px-12 md:pt-16 md:pb-24';
-  const headerClass = isMobile
-    ? `relative z-10 mb-4 flex w-auto items-center justify-between bg-surface/92 py-3 ${isWideMobile ? '-mx-6 px-6' : '-mx-4 px-4'}`
-    : 'relative z-10 -mx-4 mb-4 flex w-auto items-center justify-between bg-surface/92 px-4 py-3 md:mx-0 md:mb-8 md:bg-transparent md:px-0 md:py-0';
-  const gridGapClass = isWideMobile ? 'gap-5' : 'gap-4 md:gap-6';
+  const baseMinWidth = isMobile && !isWideMobile
+    ? (systemConfig?.albumListItemMinWidthMobile ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE)
+    // 系统设置里的最小宽度是为旧的方形卡片定的；封面卡片是 4:5 竖图，按 0.66 折算
+    : Math.round((systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP) * 0.66);
+  const albumListItemMinWidth = scaleCardWidth(baseMinWidth, cardSize, isMobile ? 104 : 140);
   const sortOptions = getGallerySortOptions(resolvedDisplayMode);
-  const headerText = resolveGalleryHeaderText({ displayMode: resolvedDisplayMode, headerTitle, headerDescription });
+  const headerText = resolveGalleryHeaderText({
+    displayMode: resolvedDisplayMode,
+    headerTitle: headerTitle ?? (isRecentActive ? '最近浏览' : undefined),
+    headerDescription: headerDescription ?? (isRecentActive ? '最近打开过的图集' : undefined),
+  });
   const emptyText = resolveGalleryEmptyText({ displayMode: resolvedDisplayMode, isRecentActive, hasActiveFilters, emptyTitle, emptyDescription });
-  useEffect(() => {
-    if (isMobile) {
-      setIsFilterExpanded(false);
-    }
-  }, [isMobile]);
 
   useEffect(() => {
     void fetchSystemConfig();
   }, [fetchSystemConfig]);
+
+  // 无限滚动：哨兵进入视口（提前 600px）时请求下一页
+  useEffect(() => {
+    const node = pageSentinelRef.current;
+    if (!node || !canLoadMorePages || isLoading || !pagination) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) onLoadMore?.(pagination.page + 1);
+    }, { root: mainRef.current, rootMargin: '600px 0px', threshold: 0 });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [canLoadMorePages, isLoading, mainRef, onLoadMore, pagination]);
 
   const handleNavigateToAlbum = (albumId: string) => {
     rememberScrollPosition();
     onNavigateToAlbum(albumId);
   };
 
+  const showToolbar = !isHome && !isDirectoryAlbumsMode && !isRecentActive && !onBack;
+  const loadedAll = !isHome && Boolean(pagination) && !hasMorePages(pagination) && albums.length > 12;
+
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden">
-      <Sidebar
-        activeTab={activeTab}
-        onNavigate={onSidebarNavigate}
-        libraryRoots={libraryRoots}
-        currentLibraryRootId={isSmartAlbumsMode ? '' : currentLibraryRootId}
-        onLibraryRootChange={onLibraryRootChange}
-        onScanAll={onScanAll}
-        onScanOne={onScanOne}
-        isAnyScanning={isAnyScanning}
-        isScanning={isScanning}
-        albumCount={pagination?.total || 0}
-        onRecentClick={onRecentClick}
-        isRecentActive={isRecentActive}
-        onSmartAlbumsClick={onSmartAlbumsClick}
-        isSmartAlbumsActive={isSmartAlbumsActive}
-        onDirectoryAlbumsClick={onDirectoryAlbumsClick}
-        isDirectoryAlbumsActive={isDirectoryAlbumsActive}
-        onFavoritesClick={onFavoritesClick}
-        isFavoritesActive={isFavoritesActive}
-        onShareManagementClick={onShareManagementClick}
-        isShareManagementActive={isShareManagementActive}
-      />
+      <Sidebar />
 
       <main
         ref={mainRef}
-        className={`relative h-full flex-1 overflow-y-auto bg-surface custom-scrollbar ${mainPaddingClass}`}
+        className="mp-with-sidebar custom-scrollbar relative h-full flex-1 overflow-y-auto px-4 pt-[calc(env(safe-area-inset-top)+1.5rem)] md:px-10 md:pt-9 xl:px-12"
       >
-        <GalleryHeader
-          title={headerText.title}
-          description={headerText.description}
-          isMobile={isMobile}
-          isWideMobile={isWideMobile}
-          headerClass={headerClass}
-          onBack={onBack}
-          onProfileClick={onProfileClick}
-        />
-
-        {isDirectoryAlbumsMode && directoryBreadcrumbs.length > 0 && (
-          <GalleryDirectoryBreadcrumbs
-            breadcrumbs={directoryBreadcrumbs}
-            onBreadcrumbClick={onDirectoryBreadcrumbClick}
+        {isHome ? (
+          <HomeView
+            isMobile={isMobile}
+            onOpenAlbum={handleNavigateToAlbum}
+            onOpenSmartAlbum={(id) => {
+              rememberScrollPosition();
+              onNavigateToSmartAlbum?.(id);
+            }}
+            onAlbumFavoriteToggle={onAlbumFavoriteToggle}
+            onShareAlbum={setSharingAlbum}
           />
+        ) : (
+          <>
+            <GalleryHeader
+              eyebrow={headerEyebrow ?? resolveGalleryEyebrow(resolvedDisplayMode, isRecentActive)}
+              title={headerText.title}
+              description={headerText.description}
+              onBack={onBack}
+            />
+
+            {isDirectoryAlbumsMode && directoryBreadcrumbs.length > 0 && (
+              <GalleryDirectoryBreadcrumbs breadcrumbs={directoryBreadcrumbs} onBreadcrumbClick={onDirectoryBreadcrumbClick} />
+            )}
+
+            {showToolbar && (
+              <GalleryToolbar
+                isSmartAlbumsMode={isSmartAlbumsMode}
+                isCompact={isMobile && !isWideMobile}
+                sortOptions={sortOptions}
+                currentKeyword={currentKeyword}
+                currentSortBy={currentSortBy}
+                currentSortOrder={currentSortOrder}
+                currentSourceType={resolvedSourceType}
+                total={pagination?.total ?? null}
+                hasActiveFilters={hasActiveFilters}
+                cardSize={cardSize}
+                onCardSizeChange={setCardSize}
+                onKeywordChange={onKeywordChange}
+                onSourceTypeChange={onSourceTypeChange}
+                onSortByChange={onSortByChange}
+                onSortOrderChange={onSortOrderChange}
+                onReset={() => onResetFilters?.()}
+              />
+            )}
+
+            <GalleryAlbumGrid
+              albums={albums}
+              renderedAlbums={renderedAlbums}
+              isLoading={isLoading}
+              isMobile={isMobile}
+              isSmartAlbumsMode={isSmartAlbumsMode}
+              gridGapClass={isMobile ? 'gap-3' : 'gap-4 xl:gap-5'}
+              albumListItemMinWidth={albumListItemMinWidth}
+              emptyTitle={emptyText.title}
+              emptyDescription={emptyText.description}
+              onNavigateToAlbum={handleNavigateToAlbum}
+              onDirectoryNodeClick={onDirectoryNodeClick}
+              onAlbumFavoriteToggle={onAlbumFavoriteToggle}
+              onAlbumShare={setSharingAlbum}
+            />
+
+            {hasMoreItems && <div ref={loadMoreRef} className="h-10" aria-hidden="true" />}
+            {canLoadMorePages && (
+              <div ref={pageSentinelRef} className="flex items-center justify-center gap-2 py-8 text-sm text-on-surface-variant">
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isLoading ? '正在加载更多…' : ''}
+              </div>
+            )}
+            {loadedAll && (
+              <div className="flex items-center justify-center gap-3 py-10 text-xs tracking-[0.2em] text-outline">
+                <span className="h-px w-10 bg-outline-variant" />
+                已经到底了 · 共 {pagination?.total} 个
+                <span className="h-px w-10 bg-outline-variant" />
+              </div>
+            )}
+          </>
         )}
-
-        {!isDirectoryAlbumsMode && (
-          <GalleryFilters
-            isSmartAlbumsMode={isSmartAlbumsMode}
-            isWideMobile={isWideMobile}
-            isFilterExpanded={isFilterExpanded}
-            sortOptions={sortOptions}
-            currentKeyword={currentKeyword}
-            currentSortBy={currentSortBy}
-            currentSortOrder={currentSortOrder}
-            currentPageSize={currentPageSize}
-            currentSourceType={resolvedSourceType}
-            onToggleExpanded={() => setIsFilterExpanded(!isFilterExpanded)}
-            onKeywordChange={onKeywordChange}
-            onSourceTypeChange={onSourceTypeChange}
-            onSortByChange={onSortByChange}
-            onSortOrderChange={onSortOrderChange}
-            onPageSizeChange={onPageSizeChange}
-            onRefresh={onRefresh}
-          />
-        )}
-
-        {isLoading && albums.length > 0 && (
-          <div className="mb-4 flex items-center justify-between rounded-2xl border border-outline/10 bg-surface-container-high px-4 py-3 text-sm text-outline shadow-sm md:mb-6">
-            <span>正在更新筛选结果...</span>
-            <span className="inline-flex items-center gap-2">
-              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary" />
-              请稍候
-            </span>
-          </div>
-        )}
-
-        {showContinueReading && <ContinueReading onOpen={onNavigateToAlbum} />}
-        <GalleryAlbumGrid
-          albums={albums}
-          renderedAlbums={renderedAlbums}
-          isLoading={isLoading}
-          isMobile={isMobile}
-          isSmartAlbumsMode={isSmartAlbumsMode}
-          gridGapClass={gridGapClass}
-          albumListItemMinWidth={albumListItemMinWidth}
-          emptyTitle={emptyText.title}
-          emptyDescription={emptyText.description}
-          onNavigateToAlbum={handleNavigateToAlbum}
-          onDirectoryNodeClick={onDirectoryNodeClick}
-          onAlbumFavoriteToggle={onAlbumFavoriteToggle}
-          onAlbumShare={setSharingAlbum}
-        />
-
-        {hasMoreItems && (
-          <div ref={loadMoreRef} className="w-full py-6 text-center text-sm text-outline/70">
-            正在加载更多相册...
-          </div>
-        )}
-
-        <GalleryPagination pagination={pagination} isLoading={isLoading} onPageChange={onPageChange} />
       </main>
 
       {sharingAlbum && (
-        <AlbumShareDialog
-          albumId={sharingAlbum.id}
-          albumName={sharingAlbum.name}
-          onClose={() => setSharingAlbum(null)}
-        />
+        <AlbumShareDialog albumId={sharingAlbum.id} albumName={sharingAlbum.name} onClose={() => setSharingAlbum(null)} />
       )}
     </div>
   );

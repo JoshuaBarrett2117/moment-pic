@@ -1,0 +1,85 @@
+/*
+ * 主题：暗夜玻璃（glass-dark，默认）
+ * 视觉参考 momentpt.top：近黑底 + 压暗照片墙 + 深色毛玻璃 + 沉稳蓝。
+ * 只定义 --mp-* 原始变量与主题专属装饰。组件通过 index.css 中的语义 token 使用它们。
+ * 新增主题：复制本文件改变量，并在 themes.ts 与 public/theme-init.js 注册。
+ */
+:root,
+.mp-theme-dark,
+:root[data-theme="glass-dark"] {
+  color-scheme: dark;
+
+  --mp-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", Arial, sans-serif;
+
+  --mp-bg: #070708;
+  --mp-bg-solid-1: #121214;
+  --mp-bg-solid-2: #1a1a1d;
+  --mp-bg-image-filter: blur(1.5px) brightness(0.88) saturate(1.04);
+  --mp-bg-overlay: linear-gradient(180deg, rgba(6, 6, 7, 0.46) 0%, rgba(6, 6, 7, 0.62) 45%, rgba(6, 6, 7, 0.82) 100%);
+  --mp-banner-filter: blur(28px) brightness(0.6) saturate(1.2);
+  --mp-banner-overlay: linear-gradient(180deg, rgba(7, 7, 8, 0.15), rgba(7, 7, 8, 0.78));
+  --mp-bg-grain: none;
+
+  --mp-surface-0: rgba(16, 16, 18, 0.28);
+  --mp-surface-1: rgba(16, 16, 18, 0.55);
+  --mp-surface-2: rgba(28, 28, 32, 0.62);
+  --mp-surface-3: rgba(22, 22, 25, 0.72);
+  --mp-field: rgba(0, 0, 0, 0.3);
+  /* 页面内容层（可嵌套）用更轻的填充，避免叠加后发灰 */
+  --mp-content-1: rgba(255, 255, 255, 0.04);
+  --mp-content-2: rgba(255, 255, 255, 0.07);
+
+  --mp-border: rgba(255, 255, 255, 0.12);
+  --mp-border-soft: rgba(255, 255, 255, 0.07);
+  --mp-border-strong: rgba(255, 255, 255, 0.2);
+  --mp-highlight: rgba(255, 255, 255, 0.08);
+
+  --mp-text: #dcdde0;
+  --mp-text-2: #a4a9b1;
+  --mp-text-3: #7d838c;
+  --mp-heading: #f7f7f8;
+  --mp-eyebrow: #9aa0a8;
+  --mp-on-photo: #f7f7f8;
+  --mp-on-photo-2: rgba(247, 247, 248, 0.78);
+  --mp-photo-caption: linear-gradient(180deg, transparent, rgba(5, 5, 6, 0.86));
+
+  --mp-accent: #5e9be0;
+  --mp-on-accent: #070708;
+  --mp-accent-soft: rgba(94, 155, 224, 0.16);
+  --mp-accent-strong: #8ab8ec;
+  --mp-progress: #5e9be0;
+  --mp-favorite: #e8b57a;
+
+  --mp-success: #5ee6a8;
+  --mp-success-soft: rgba(94, 230, 168, 0.14);
+  --mp-on-success-soft: #bdf5da;
+  --mp-warning: #ffc56b;
+  --mp-warning-soft: rgba(255, 197, 107, 0.14);
+  --mp-on-warning-soft: #ffe2b3;
+  --mp-danger: #ff8a80;
+  --mp-danger-soft: rgba(255, 138, 128, 0.16);
+  --mp-on-danger-soft: #ffc9c3;
+
+  --mp-blur-panel: 24px;
+  --mp-blur-overlay: 32px;
+  --mp-glass-saturate: 150%;
+  --mp-shadow-1: 0 30px 90px rgba(0, 0, 0, 0.45);
+  --mp-shadow-2: 0 18px 40px rgba(0, 0, 0, 0.4);
+  --mp-shadow-3: 0 30px 90px rgba(0, 0, 0, 0.6);
+  --mp-scrim: rgba(0, 0, 0, 0.55);
+  --mp-scrollbar: rgba(255, 255, 255, 0.18);
+
+  --mp-radius-panel: 18px;
+  --mp-radius-card: 14px;
+  --mp-radius-photo: 14px;
+  /* 封面卡片相框：玻璃主题无相框 */
+  --mp-photo-frame: 0px;
+  --mp-photo-frame-color: transparent;
+}
+
+@media (max-width: 767px) {
+  :root[data-theme="glass-dark"] {
+    --mp-blur-panel: 14px;
+    --mp-blur-overlay: 20px;
+  }
+}

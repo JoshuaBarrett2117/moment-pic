@@ -65,9 +65,9 @@ const iconMap: Record<ToastType, FC<{ className?: string }>> = {
 };
 
 const styleMap: Record<ToastType, string> = {
-  success: 'bg-[#d4e8cf] text-[#1e3a1a] border-[#a3c89e]',
-  error: 'bg-[#ffdad6] text-[#93000a] border-[#f5b0ab]',
-  info: 'bg-[#edc3b9] text-[#6e4f47] border-[#d4a89c]',
+  success: 'border-l-secondary [&>svg:first-child]:text-secondary',
+  error: 'border-l-error [&>svg:first-child]:text-error',
+  info: 'border-l-primary [&>svg:first-child]:text-primary',
 };
 
 /**
@@ -91,13 +91,13 @@ const ToastCard: FC<{ item: ToastItem; onDismiss: (id: number) => void }> = ({
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: 80, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-      className={`pointer-events-auto flex items-center gap-3 px-5 py-3.5 rounded-2xl border shadow-lg backdrop-blur-sm ${styleMap[item.type]}`}
+      className={`pointer-events-auto flex items-center gap-3 mp-glass-solid border-l-4 px-5 py-3.5 rounded-2xl text-on-surface ${styleMap[item.type]}`}
     >
       <Icon className="w-5 h-5 shrink-0" />
       <span className="text-sm font-medium flex-1 leading-snug">{item.message}</span>
       <button
         onClick={() => onDismiss(item.id)}
-        className="shrink-0 p-1 rounded-full hover:bg-black/10 transition-colors"
+        className="shrink-0 p-1 rounded-full hover:bg-surface-container-highest transition-colors"
       >
         <X className="w-4 h-4" />
       </button>

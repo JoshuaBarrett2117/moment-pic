@@ -22,6 +22,7 @@ import { libraryRootRoutes } from "./routes/library-roots.js";
 import { scanRoutes } from "./routes/scan.js";
 import { smartAlbumRoutes } from "./routes/smart-albums.js";
 import { systemConfigRoutes } from "./routes/system-config.js";
+import { userBackgroundRoutes } from "./routes/user-background.js";
 import { wsService } from "./services/websocket-service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -133,6 +134,7 @@ export const buildApp = () => {
   app.register(smartAlbumRoutes);
   app.register(libraryRootRoutes);
   app.register(systemConfigRoutes);
+  app.register(userBackgroundRoutes);
   app.register(fastifyStatic, {
     root: PUBLIC_DIR,
     prefix: "/",

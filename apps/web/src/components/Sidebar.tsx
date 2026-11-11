@@ -71,9 +71,9 @@ export const Sidebar: FC<SidebarProps> = ({
       </div>
 
       <div className="mb-8 hidden w-full md:block">
-        <div className="sticky-note-mask flex flex-col items-center justify-center rounded-2xl border border-on-tertiary-container/10 bg-tertiary-container p-5 shadow-lg">
-          <span className="font-headline text-3xl font-extrabold text-on-tertiary-container">{albumCount}</span>
-          <span className="font-label text-sm tracking-wide text-on-tertiary-container/70">当前已收录相册</span>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-outline-variant bg-primary-container p-5">
+          <span className="font-headline text-3xl font-bold tabular-nums text-primary">{albumCount}</span>
+          <span className="font-label text-sm tracking-wide text-outline">当前已收录相册</span>
         </div>
       </div>
 
@@ -85,10 +85,10 @@ export const Sidebar: FC<SidebarProps> = ({
               setIsOpen(false);
             }
           }}
-          className={`flex items-center gap-4 rounded-full px-6 py-4 font-headline tracking-tight transition-all duration-300 hover:scale-[1.02] ${
+          className={`flex items-center gap-4 rounded-xl px-5 py-3 font-headline tracking-tight transition-all duration-200 ${
             activeTab === 'gallery'
-              ? 'bg-primary-container font-bold text-on-primary-container shadow-md'
-              : 'font-semibold text-outline hover:bg-primary-container/20'
+              ? 'bg-primary-container font-semibold text-primary'
+              : 'font-medium text-outline hover:bg-surface-container-high hover:text-on-surface'
           }`}
         >
           <Images className="h-6 w-6" />
@@ -101,10 +101,10 @@ export const Sidebar: FC<SidebarProps> = ({
               setIsOpen(false);
             }
           }}
-          className={`flex items-center gap-4 rounded-full px-6 py-4 font-headline tracking-tight transition-all duration-300 hover:scale-[1.02] ${
+          className={`flex items-center gap-4 rounded-xl px-5 py-3 font-headline tracking-tight transition-all duration-200 ${
             activeTab === 'settings'
-              ? 'bg-primary-container font-bold text-on-primary-container shadow-md'
-              : 'font-semibold text-outline hover:bg-primary-container/20'
+              ? 'bg-primary-container font-semibold text-primary'
+              : 'font-medium text-outline hover:bg-surface-container-high hover:text-on-surface'
           }`}
         >
           <Settings className="h-6 w-6" />
@@ -122,8 +122,8 @@ export const Sidebar: FC<SidebarProps> = ({
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             currentLibraryRootId === '' && !isRecentActive && !isSmartAlbumsActive && !isDirectoryAlbumsActive && !isFavoritesActive && !isShareManagementActive
-              ? 'bg-primary-container font-bold text-on-primary-container'
-              : 'hover:bg-primary-container/10'
+              ? 'bg-primary-container font-semibold text-primary'
+              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
           }`}
         >
           <Images className="h-5 w-5" />
@@ -139,8 +139,8 @@ export const Sidebar: FC<SidebarProps> = ({
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             isRecentActive
-              ? 'bg-primary-container font-bold text-on-primary-container'
-              : 'hover:bg-primary-container/10'
+              ? 'bg-primary-container font-semibold text-primary'
+              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
           }`}
         >
           <Clock className="h-5 w-5" />
@@ -156,8 +156,8 @@ export const Sidebar: FC<SidebarProps> = ({
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             isSmartAlbumsActive
-              ? 'bg-primary-container font-bold text-on-primary-container'
-              : 'hover:bg-primary-container/10'
+              ? 'bg-primary-container font-semibold text-primary'
+              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
           }`}
         >
           <Layers3 className="h-5 w-5" />
@@ -173,8 +173,8 @@ export const Sidebar: FC<SidebarProps> = ({
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             isFavoritesActive
-              ? 'bg-primary-container font-bold text-on-primary-container'
-              : 'hover:bg-primary-container/10'
+              ? 'bg-primary-container font-semibold text-primary'
+              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
           }`}
         >
           <Star className="h-5 w-5" />
@@ -190,8 +190,8 @@ export const Sidebar: FC<SidebarProps> = ({
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             isDirectoryAlbumsActive
-              ? 'bg-primary-container font-bold text-on-primary-container'
-              : 'hover:bg-primary-container/10'
+              ? 'bg-primary-container font-semibold text-primary'
+              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
           }`}
         >
           <FolderTree className="h-5 w-5" />
@@ -209,8 +209,8 @@ export const Sidebar: FC<SidebarProps> = ({
           }}
           className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 transition-all ${
             isShareManagementActive
-              ? 'bg-primary-container font-bold text-on-primary-container'
-              : 'hover:bg-primary-container/10'
+              ? 'bg-primary-container font-semibold text-primary'
+              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
           }`}
         >
           <Share2 className="h-5 w-5" />
@@ -224,8 +224,8 @@ export const Sidebar: FC<SidebarProps> = ({
             key={root.id}
             className={`flex min-h-11 items-center gap-2 rounded-xl px-4 py-3 transition-all ${
               currentLibraryRootId === root.id
-                ? 'bg-primary-container font-bold text-on-primary-container'
-                : 'hover:bg-primary-container/10'
+                ? 'bg-primary-container font-semibold text-primary'
+                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
             }`}
           >
             <button
@@ -247,7 +247,7 @@ export const Sidebar: FC<SidebarProps> = ({
                 onScanOne(root.id);
               }}
               disabled={isScanning(root.id)}
-              className="rounded-lg p-2 disabled:opacity-50 hover:bg-white/20"
+              className="rounded-lg p-2 disabled:opacity-50 hover:bg-surface-container-highest"
               title="扫描此图集"
             >
               {isScanning(root.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -263,13 +263,13 @@ export const Sidebar: FC<SidebarProps> = ({
             }
           }}
           disabled={isAnyScanning}
-          className="mt-2 flex items-center justify-center gap-2 rounded-2xl border border-outline/15 bg-white/50 px-4 py-3 text-sm font-semibold text-outline transition-all hover:bg-primary-container/15 hover:text-on-primary-container disabled:opacity-50"
+          className="mt-2 flex items-center justify-center gap-2 rounded-2xl border border-outline/15 bg-surface-container px-4 py-3 text-sm font-semibold text-outline transition-all hover:bg-primary-container/15 hover:text-on-primary-container disabled:opacity-50"
         >
           {isAnyScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           {isAnyScanning ? '正在扫描图库...' : '扫描全部图库'}
         </button>
 
-        <div className="flex items-center justify-center rounded-lg border border-outline/5 bg-white/40 p-3 text-[12px] font-medium text-outline/80">
+        <div className="flex items-center justify-center rounded-lg border border-outline/5 bg-surface-container p-3 text-[12px] font-medium text-outline/80">
           记录美好的瞬间
         </div>
       </div>
@@ -281,7 +281,7 @@ export const Sidebar: FC<SidebarProps> = ({
       <>
         <button
           onClick={() => setIsOpen(true)}
-          className="pointer-events-auto fixed left-4 top-4 z-50 rounded-full bg-surface-container-high/85 p-3 shadow-lg transition-colors hover:bg-surface-container-high md:left-6 md:top-6"
+          className="pointer-events-auto fixed left-4 top-4 z-50 mp-glass-overlay rounded-full p-3 transition-colors hover:bg-surface-container-highest md:left-6 md:top-6"
           title="打开侧边栏"
         >
           <Menu className="h-5 w-5 text-on-surface text-opacity-80 md:h-6 md:w-6" />
@@ -295,14 +295,14 @@ export const Sidebar: FC<SidebarProps> = ({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsOpen(false)}
-                className="fixed inset-0 z-40 bg-black/50"
+                className="fixed inset-0 z-40 mp-scrim"
               />
               <motion.div
                 initial={{ x: '-100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '-100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className={`fixed left-0 top-0 z-50 h-full bg-surface-container-low shadow-xl ${drawerWidthClass} ${drawerPaddingClass}`}
+                className={`fixed left-0 top-0 z-50 h-full mp-glass-solid rounded-r-[24px] border-l-0 ${drawerWidthClass} ${drawerPaddingClass}`}
               >
                 <button
                   onClick={() => setIsOpen(false)}
@@ -321,7 +321,7 @@ export const Sidebar: FC<SidebarProps> = ({
   }
 
   return (
-    <aside className={`fixed left-0 top-0 z-40 flex h-full flex-col rounded-r-[3rem] border-r border-outline/5 bg-surface-container-low p-8 shadow-[32px_0_48px_-4px_rgba(111,78,55,0.06)] ${isWideMobile ? 'w-[18rem]' : 'w-80'}`}>
+    <aside className={`fixed left-0 top-0 z-40 flex h-full flex-col mp-glass-panel rounded-r-[24px] border-l-0 border-y-0 p-8 ${isWideMobile ? 'w-[18rem]' : 'w-80'}`}>
       {sidebarContent}
     </aside>
   );

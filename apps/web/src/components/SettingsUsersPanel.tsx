@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import type { UserDTO, UserRoleDTO } from '../types/api';
 import { useToast } from './Toast';
 
-const inputClass = 'w-full rounded-xl border border-outline/20 bg-surface-container-high px-4 py-2.5 text-on-surface outline-none focus:border-primary';
+const inputClass = 'w-full rounded-xl border border-outline/20 bg-surface-container-lowest px-4 py-2.5 text-on-surface outline-none focus:border-primary';
 const roleLabel: Record<UserRoleDTO, string> = { admin: '管理员', viewer: '只读' };
 
 export function SettingsUsersPanel() {
@@ -60,7 +60,7 @@ export function SettingsUsersPanel() {
   return (
     <>
       <header className="mb-6 md:mb-12">
-        <h2 className="text-2xl md:text-4xl font-headline font-black text-on-surface">用户管理</h2>
+        <h2 className="text-2xl md:text-4xl font-headline font-bold text-on-surface">用户管理</h2>
         <p className="text-outline mt-2 text-sm md:text-base">管理员可以管理图库和设置；只读用户只能浏览图集，阅读进度各自独立。</p>
       </header>
 

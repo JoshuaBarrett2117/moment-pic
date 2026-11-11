@@ -11,8 +11,8 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(255, 255, 255, 0.2);
-      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 12px;
       color: white;
       cursor: pointer;
@@ -21,11 +21,11 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       user-select: none;
     }
     .viewer-btn:hover {
-      background: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.2);
     }
     .viewer-btn:active {
       transform: scale(0.95);
-      background: rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.26);
     }
     .viewer-counter {
       position: fixed;
@@ -33,12 +33,16 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       left: 50%;
       transform: translateX(-50%) translateY(${showControls ? '-10px' : '0'});
       padding: 10px 20px;
-      background: rgba(0, 0, 0, 0.7);
+      background: rgba(20, 22, 28, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.35);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      backdrop-filter: blur(20px) saturate(150%);
       border-radius: 24px;
       color: white;
       font-size: 15px;
       font-weight: 500;
-      backdrop-filter: blur(10px);
+      font-variant-numeric: tabular-nums;
       z-index: 20;
       opacity: ${showControls ? 1 : 0};
       transition: all 0.3s;
@@ -48,8 +52,11 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       top: calc(env(safe-area-inset-top) + 20px);
       right: 20px;
       transform: translateY(${showControls ? '-10px' : '0'});
-      background: rgba(255, 255, 255, 0.2);
-      border: none;
+      background: rgba(20, 22, 28, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.35);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      backdrop-filter: blur(20px) saturate(150%);
       border-radius: 50%;
       color: white;
       cursor: pointer;
@@ -61,7 +68,7 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       -webkit-tap-highlight-color: transparent;
     }
     .viewer-close:hover {
-      background: rgba(255, 255, 255, 0.3);
+      background: rgba(40, 44, 54, 0.7);
     }
     .viewer-close:active {
       transform: scale(0.95);
@@ -70,8 +77,11 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       position: fixed;
       top: 50%;
       transform: translateY(-50%);
-      background: rgba(255, 255, 255, 0.15);
-      border: none;
+      background: rgba(20, 22, 28, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.35);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      backdrop-filter: blur(20px) saturate(150%);
       border-radius: 50%;
       color: white;
       cursor: pointer;
@@ -90,11 +100,11 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       right: 12px;
     }
     .viewer-nav-btn:hover {
-      background: rgba(255, 255, 255, 0.25);
+      background: rgba(40, 44, 54, 0.7);
     }
     .viewer-nav-btn:active {
       transform: translateY(-50%) scale(0.95);
-      background: rgba(255, 255, 255, 0.35);
+      background: rgba(50, 54, 66, 0.75);
     }
     .viewer-toolbar {
       position: fixed;
@@ -104,9 +114,12 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       display: flex;
       gap: 12px;
       padding: 16px 24px;
-      background: rgba(0, 0, 0, 0.7);
+      background: rgba(20, 22, 28, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.35);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      backdrop-filter: blur(20px) saturate(150%);
       border-radius: 20px;
-      backdrop-filter: blur(12px);
       z-index: 20;
       opacity: ${showControls ? 1 : 0};
       transition: all 0.3s;
@@ -121,9 +134,12 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       gap: 8px;
       width: min(18rem, calc(100vw - 2rem));
       padding: 14px;
-      background: rgba(0, 0, 0, 0.82);
+      background: rgba(20, 22, 28, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.35);
+      -webkit-backdrop-filter: blur(20px) saturate(150%);
+      backdrop-filter: blur(20px) saturate(150%);
       border-radius: 20px;
-      backdrop-filter: blur(12px);
       z-index: 21;
       opacity: ${showControls && showQualityPanel ? 1 : 0};
       pointer-events: ${showControls && showQualityPanel ? 'auto' : 'none'};
@@ -148,7 +164,9 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       background: rgba(255, 255, 255, 0.16);
     }
     .viewer-quality-option[data-active='true'] {
-      background: rgba(255, 255, 255, 0.22);
+      background: var(--mp-accent-soft, rgba(138, 180, 255, 0.16));
+      color: var(--mp-accent, #8ab4ff);
+      box-shadow: inset 0 0 0 1px rgba(138, 180, 255, 0.35);
     }
     .viewer-image-container {
       position: absolute;
@@ -178,7 +196,7 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       width: 48px;
       height: 48px;
       border: 3px solid rgba(255, 255, 255, 0.3);
-      border-top-color: white;
+      border-top-color: var(--mp-accent, #8ab4ff);
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }

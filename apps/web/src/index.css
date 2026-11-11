@@ -1,116 +1,266 @@
 @import "tailwindcss";
+@import "./theme/glass-dark.css";
 
-@theme {
-  --font-headline: "Epilogue", sans-serif;
-  --font-body: "Plus Jakarta Sans", sans-serif;
-  --font-script: "Caveat Variable", "Caveat", cursive;
+/*
+ * 语义 token → 主题变量。
+ * 组件只用这些语义类名（bg-surface、text-outline …），换主题只需换 --mp-* 变量。
+ */
+@theme inline {
+  --font-headline: var(--mp-font-sans);
+  --font-body: var(--mp-font-sans);
+  --font-label: var(--mp-font-sans);
+  --font-script: var(--mp-font-sans);
 
-  --color-surface-variant: #e9e2d0;
-  --color-primary-fixed: #ffdad2;
-  --color-inverse-on-surface: #f7f0de;
-  --color-on-primary-fixed: #2c1510;
-  --color-surface-bright: #fff9eb;
-  --color-secondary-container: #d4e8cf;
-  --color-on-error-container: #93000a;
-  --color-surface-tint: #77574f;
-  --color-error: #ba1a1a;
-  --color-tertiary: #79573f;
-  --color-primary-fixed-dim: #e7bdb3;
-  --color-on-tertiary-container: #704f38;
-  --color-outline-variant: #d4c3bf;
-  --color-tertiary-fixed: #ffdcc6;
-  --color-on-tertiary: #ffffff;
-  --color-surface-container-low: #faf3e0;
-  --color-on-primary-fixed-variant: #5d4038;
-  --color-secondary-fixed: #d4e8cf;
-  --color-surface-container-high: #efe8d5;
-  --color-on-error: #ffffff;
-  --color-on-secondary-fixed: #101f10;
-  --color-surface-container-lowest: #ffffff;
-  --color-surface-container-highest: #e9e2d0;
-  --color-primary: #77574f;
-  --color-outline: #827471;
-  --color-inverse-surface: #333024;
-  --color-error-container: #ffdad6;
-  --color-on-primary: #ffffff;
-  --color-primary-container: #edc3b9;
-  --color-on-secondary-container: #576955;
-  --color-on-tertiary-fixed: #2d1604;
-  --color-surface-dim: #e0dac7;
-  --color-surface-container: #f4eedb;
-  --color-on-background: #1e1c10;
-  --color-tertiary-container: #f0c3a6;
-  --color-on-primary-container: #6e4f47;
-  --color-on-surface: #1e1c10;
-  --color-on-secondary: #ffffff;
-  --color-background: #fff9eb;
-  --color-surface: #fff9eb;
-  --color-on-surface-variant: #504441;
-  --color-secondary: #526350;
-  --color-on-secondary-fixed-variant: #3a4b39;
-  --color-on-tertiary-fixed-variant: #5f402a;
-  --color-tertiary-fixed-dim: #eabda0;
-  --color-secondary-fixed-dim: #b9ccb4;
-  --color-inverse-primary: #e7bdb3;
+  --color-background: var(--mp-bg);
+  --color-surface: var(--mp-surface-0);
+  --color-surface-bright: var(--mp-surface-1);
+  --color-surface-dim: var(--mp-surface-0);
+  --color-surface-variant: var(--mp-surface-2);
+  --color-surface-tint: var(--mp-accent);
+  --color-surface-container-lowest: var(--mp-field);
+  --color-surface-container-low: var(--mp-content-1);
+  --color-surface-container: var(--mp-content-1);
+  --color-surface-container-high: var(--mp-content-2);
+  --color-surface-container-highest: var(--mp-content-1);
+
+  --color-on-background: var(--mp-text);
+  --color-on-surface: var(--mp-text);
+  --color-on-surface-variant: var(--mp-text-2);
+  --color-outline: var(--mp-text-2);
+  --color-outline-variant: var(--mp-border);
+
+  --color-inverse-surface: var(--mp-text);
+  --color-inverse-on-surface: var(--mp-bg);
+  --color-inverse-primary: var(--mp-accent-strong);
+
+  --color-primary: var(--mp-accent);
+  --color-on-primary: var(--mp-on-accent);
+  --color-primary-container: var(--mp-accent-soft);
+  --color-on-primary-container: var(--mp-heading);
+  --color-primary-fixed: var(--mp-accent-soft);
+  --color-primary-fixed-dim: var(--mp-accent);
+  --color-on-primary-fixed: var(--mp-heading);
+  --color-on-primary-fixed-variant: var(--mp-heading);
+
+  --color-secondary: var(--mp-success);
+  --color-on-secondary: var(--mp-on-accent);
+  --color-secondary-container: var(--mp-success-soft);
+  --color-on-secondary-container: var(--mp-on-success-soft);
+  --color-secondary-fixed: var(--mp-success-soft);
+  --color-secondary-fixed-dim: var(--mp-success);
+  --color-on-secondary-fixed: var(--mp-on-success-soft);
+  --color-on-secondary-fixed-variant: var(--mp-on-success-soft);
+
+  --color-tertiary: var(--mp-warning);
+  --color-on-tertiary: var(--mp-on-accent);
+  --color-tertiary-container: var(--mp-warning-soft);
+  --color-on-tertiary-container: var(--mp-on-warning-soft);
+  --color-tertiary-fixed: var(--mp-warning-soft);
+  --color-tertiary-fixed-dim: var(--mp-warning);
+  --color-on-tertiary-fixed: var(--mp-on-warning-soft);
+  --color-on-tertiary-fixed-variant: var(--mp-on-warning-soft);
+
+  --color-error: var(--mp-danger);
+  --color-on-error: var(--mp-on-accent);
+  --color-error-container: var(--mp-danger-soft);
+  --color-on-error-container: var(--mp-on-danger-soft);
 }
 
 @layer base {
+  html {
+    background-color: var(--mp-bg);
+  }
+
   body {
-    @apply font-body bg-background text-on-surface antialiased;
+    @apply font-body text-on-surface antialiased;
+    background-color: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--mp-accent);
+    outline-offset: 2px;
+  }
+
+  ::placeholder {
+    color: var(--mp-text-3);
+  }
+
+  select option {
+    background-color: var(--mp-bg-solid-2);
+    color: var(--mp-text);
+  }
+
+  .tabular-nums,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
   }
 }
 
+/*
+ * 主题无关的语义类。具体观感全部来自 --mp-* 变量。
+ * 旧的纸张类名（polaroid、wobbly-*、sticky-note、washi-tape、paper-grain）保留为别名，
+ * 统一指向新的玻璃语义，避免一次性改动所有组件。
+ */
 @layer utilities {
+  .mp-backdrop,
   .paper-grain {
-    background-image:
-      radial-gradient(circle, rgba(111, 78, 55, 0.08) 0.7px, transparent 0.8px),
-      radial-gradient(circle, rgba(111, 78, 55, 0.05) 0.55px, transparent 0.7px);
-    background-size: 18px 18px, 31px 31px;
-    background-position: 0 0, 9px 13px;
-    background-repeat: repeat;
+    background-color: var(--mp-bg);
   }
 
-  .wobbly-mask {
-    clip-path: polygon(2% 0%, 98% 1%, 100% 4%, 99% 95%, 97% 100%, 3% 98%, 0% 95%, 1% 5%);
+  .mp-glass-panel {
+    background-color: var(--mp-surface-1);
+    border: 1px solid var(--mp-border);
+    box-shadow: inset 0 1px 0 var(--mp-highlight), var(--mp-shadow-1);
+    -webkit-backdrop-filter: blur(var(--mp-blur-panel)) saturate(140%);
+    backdrop-filter: blur(var(--mp-blur-panel)) saturate(140%);
   }
 
+  .mp-glass-overlay {
+    background-color: var(--mp-surface-3);
+    border: 1px solid var(--mp-border-strong);
+    box-shadow: inset 0 1px 0 var(--mp-highlight), var(--mp-shadow-3);
+    -webkit-backdrop-filter: blur(var(--mp-blur-overlay)) saturate(160%);
+    backdrop-filter: blur(var(--mp-blur-overlay)) saturate(160%);
+  }
+
+  /* 弹层需要更实的底，避免背后内容透出太多 */
+  .mp-glass-solid {
+    background-color: color-mix(in srgb, var(--mp-bg-solid-1) 82%, transparent);
+    border: 1px solid var(--mp-border-strong);
+    box-shadow: inset 0 1px 0 var(--mp-highlight), var(--mp-shadow-3);
+    -webkit-backdrop-filter: blur(var(--mp-blur-overlay)) saturate(160%);
+    backdrop-filter: blur(var(--mp-blur-overlay)) saturate(160%);
+  }
+
+  .mp-card {
+    background-color: var(--mp-surface-1);
+    border: 1px solid var(--mp-border);
+    border-radius: var(--mp-radius-card);
+    box-shadow: var(--mp-shadow-2);
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease, background-color 160ms ease;
+  }
+
+  .mp-card:hover {
+    border-color: var(--mp-border-strong);
+    background-color: var(--mp-surface-2);
+  }
+
+  .mp-scrim {
+    background-color: var(--mp-scrim);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+
+  .mp-field,
   .wobbly-border {
-    border: 2px solid #827471;
-    border-radius: 2.5rem;
-    clip-path: polygon(2% 0%, 98% 1%, 100% 4%, 99% 96%, 97% 100%, 3% 99%, 0% 97%, 1% 3%);
+    background-color: var(--mp-field);
+    border: 1px solid var(--mp-border);
+    border-radius: 12px;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
   }
 
+  .mp-field:focus-within,
+  .wobbly-border:focus-within {
+    border-color: var(--mp-accent);
+    box-shadow: 0 0 0 3px var(--mp-accent-soft);
+  }
+
+  .mp-chip,
+  .wobbly-mask {
+    border-radius: 9999px;
+  }
+
+  .mp-badge,
   .sticky-note {
-    background-color: #f0c3a6;
-    clip-path: polygon(0% 2%, 98% 0%, 100% 95%, 95% 100%, 5% 98%, 0% 90%);
-  }
-
-  .polaroid {
-    background: white;
-    padding: 1rem 1rem 3rem 1rem;
-    box-shadow: 0 10px 30px -10px rgba(111, 78, 55, 0.15);
+    background-color: var(--mp-accent-soft);
+    color: var(--mp-heading);
+    border: 1px solid var(--mp-border);
+    border-radius: 9999px;
   }
 
   .washi-tape {
-    background-color: #d4e8cf;
-    clip-path: polygon(5% 0%, 95% 2%, 100% 50%, 95% 98%, 5% 100%, 0% 50%);
-    opacity: 0.8;
+    background-color: var(--mp-surface-2);
+    border-radius: 9999px;
   }
 
-  .ambient-shadow {
-    box-shadow: 0 32px 48px -4px rgba(111, 78, 55, 0.08);
+  .sticky-note-mask {
+    border-radius: var(--mp-radius-card);
+  }
+
+  .mp-photo-frame,
+  .polaroid {
+    background-color: var(--mp-surface-1);
+    border: 1px solid var(--mp-border);
+    border-radius: var(--mp-radius-card);
+    padding: 0.5rem;
+    box-shadow: var(--mp-shadow-2);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  }
+
+  .mp-photo-frame:hover,
+  .polaroid:hover {
+    border-color: var(--mp-border-strong);
+    background-color: var(--mp-surface-2);
+    box-shadow: var(--mp-shadow-1);
+  }
+
+  .mp-photo-frame img,
+  .polaroid img {
+    border-radius: calc(var(--mp-radius-card) - 6px);
+  }
+
+  .ambient-shadow,
+  .mp-elevation-1 {
+    box-shadow: var(--mp-shadow-1);
+  }
+
+  .mp-elevation-2 {
+    box-shadow: var(--mp-shadow-2);
+  }
+
+  .mp-elevation-3 {
+    box-shadow: var(--mp-shadow-3);
   }
 
   .custom-scrollbar::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
+    height: 6px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #827471;
-    border-radius: 10px;
-    border: 2px solid #F7F2EE;
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 9999px;
   }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
 
+/* 不支持毛玻璃或用户要求降低透明度时，改用不透明底 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mp-glass-panel {
+    background-color: var(--mp-bg-solid-1);
+  }
+  .mp-glass-overlay,
+  .mp-glass-solid {
+    background-color: var(--mp-bg-solid-2);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .mp-glass-panel {
+    background-color: var(--mp-bg-solid-1);
+    backdrop-filter: none;
+  }
+  .mp-glass-overlay,
+  .mp-glass-solid {
+    background-color: var(--mp-bg-solid-2);
+    backdrop-filter: none;
+  }
+}
+
+html {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }

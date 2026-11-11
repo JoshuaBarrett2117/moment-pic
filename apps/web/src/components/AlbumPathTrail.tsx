@@ -30,7 +30,7 @@ export const AlbumPathTrail: FC<AlbumPathTrailProps> = ({
 
   return (
     <div
-      className={`rounded-lg border border-black/5 bg-surface-container-low/70 px-3 py-2 text-xs text-on-surface-variant ${className}`}
+      className={`rounded-lg border border-outline-variant bg-surface-container-low/70 px-3 py-2 text-xs text-on-surface-variant ${className}`}
       title={fullPath}
       aria-label={`所在路径：${fullPath}`}
     >

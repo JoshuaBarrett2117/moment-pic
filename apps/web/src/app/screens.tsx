@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 
-import { PaperGrain } from '../components/PaperGrain';
+import { ThemeBackdrop } from '../components/ThemeBackdrop';
 
 /** 按需加载的页面级组件（代码分割）与公开分享入口。 */
 
@@ -39,8 +39,8 @@ export const getShareTokenFromPath = (): string => {
 };
 
 export const SharedAlbumApp = ({ token }: { token: string }) => (
-  <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
-    <PaperGrain />
+  <div className="relative w-full h-[100dvh] overflow-hidden">
+    <ThemeBackdrop />
     <Suspense
       fallback={
         <div className="w-full h-full flex items-center justify-center text-outline">

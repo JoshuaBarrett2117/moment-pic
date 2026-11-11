@@ -95,8 +95,8 @@ export const AlbumShareDialog: FC<AlbumShareDialogProps> = ({ albumId, albumName
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/35 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-lg border border-outline/10 bg-surface p-5 shadow-2xl">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center mp-scrim px-4">
+      <div className="w-full max-w-md mp-glass-solid rounded-[20px] p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h3 className="truncate font-headline text-xl font-bold text-on-surface">分享图集</h3>

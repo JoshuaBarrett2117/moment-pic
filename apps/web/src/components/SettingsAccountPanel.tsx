@@ -6,7 +6,7 @@ import { api } from '../lib/api';
 import type { UserDTO } from '../types/api';
 import { useToast } from './Toast';
 
-const inputClass = 'w-full rounded-xl border border-outline/20 bg-surface-container-high px-4 py-3 text-on-surface outline-none focus:border-primary';
+const inputClass = 'w-full rounded-xl border border-outline/20 bg-surface-container-lowest px-4 py-3 text-on-surface outline-none focus:border-primary';
 
 export function SettingsAccountPanel() {
   const { user, setUser } = useCurrentUser();
@@ -49,7 +49,7 @@ export function SettingsAccountPanel() {
   return (
     <>
       <header className="mb-6 md:mb-12">
-        <h2 className="text-2xl md:text-4xl font-headline font-black text-on-surface">账号</h2>
+        <h2 className="text-2xl md:text-4xl font-headline font-bold text-on-surface">账号</h2>
         <p className="text-outline mt-2 text-sm md:text-base">
           修改登录用户名和密码。当前角色：{user?.role === 'viewer' ? '只读用户' : '管理员'}
         </p>

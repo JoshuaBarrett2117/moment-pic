@@ -29,14 +29,14 @@ export function DirectoryNodeCard({
     >
       <button
         onClick={() => onDirectoryNodeClick?.(album)}
-        className="relative w-full rounded-xl bg-surface-container-highest p-4 text-left shadow-lg transition-all duration-300 hover:shadow-xl"
+        className="relative w-full mp-card p-3 text-left"
       >
-        <div className={`absolute -top-3 z-10 rounded-full border border-black/5 px-4 py-1 text-xs font-bold shadow-sm ${
-          getGalleryCardTagPlacement(index)
+        <div className={`absolute -top-3 z-10 rounded-full border border-outline-variant px-3 py-0.5 text-xs font-semibold backdrop-blur-md ${
+          getGalleryCardTagPlacement()
         } ${isAlbumNode ? `${colorScheme.bg} ${colorScheme.text}` : 'bg-secondary-container text-on-secondary-container'}`}>
           {isAlbumNode ? (album.sourceType === 'zip' ? '压缩包' : '图集') : '目录'}
         </div>
-        <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-xl bg-surface-container-high">
+        <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-[12px] bg-surface-container-high">
           {album.coverUrl ? (
             <ThrottledImage
               key="cover"
@@ -50,12 +50,12 @@ export function DirectoryNodeCard({
             </div>
           )}
         </div>
-        <div className="mt-4 px-2 pb-2">
-          <h3 className="mb-1 truncate font-headline text-lg font-bold leading-tight text-on-surface" title={album.name}>
+        <div className="mt-3 px-1 pb-1">
+          <h3 className="mb-1 truncate font-headline text-base font-semibold leading-tight text-on-surface" title={album.name}>
             {album.name}
           </h3>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold uppercase tracking-wider text-outline">
+            <span className="text-sm tabular-nums text-outline">
               {isAlbumNode ? `${album.assetCount} 张` : `${album.childCount} 项`}
             </span>
             <ArrowRight className="h-4 w-4 text-outline/30 transition-all group-hover:translate-x-1 group-hover:text-primary" />

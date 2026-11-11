@@ -1,0 +1,76 @@
+/*
+ * 主题：黑色磨砂玻璃（glass-dark）
+ * 只定义 --mp-* 原始变量与主题专属装饰。组件通过 index.css 中的语义 token 使用它们。
+ * 新增主题：复制本文件改变量，并在 themes.ts 注册。
+ */
+:root,
+:root[data-theme="glass-dark"] {
+  color-scheme: dark;
+
+  --mp-font-sans: "Inter", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --mp-bg: #0b0d12;
+  --mp-bg-solid-1: #15181f;
+  --mp-bg-solid-2: #1c2029;
+  --mp-bg-glow-1: rgba(99, 102, 241, 0.22);
+  --mp-bg-glow-2: rgba(45, 212, 191, 0.14);
+
+  --mp-surface-0: rgba(255, 255, 255, 0.03);
+  --mp-surface-1: rgba(255, 255, 255, 0.06);
+  --mp-surface-2: rgba(255, 255, 255, 0.09);
+  --mp-surface-3: rgba(255, 255, 255, 0.14);
+  --mp-field: rgba(0, 0, 0, 0.28);
+  /* 页面内容层（可嵌套）用更轻的填充，避免叠加后发灰 */
+  --mp-content-1: rgba(255, 255, 255, 0.045);
+  --mp-content-2: rgba(255, 255, 255, 0.065);
+
+  --mp-border: rgba(255, 255, 255, 0.12);
+  --mp-border-strong: rgba(255, 255, 255, 0.2);
+  --mp-highlight: rgba(255, 255, 255, 0.18);
+
+  --mp-text: #edeff3;
+  --mp-text-2: rgba(237, 239, 243, 0.64);
+  --mp-text-3: rgba(237, 239, 243, 0.4);
+  --mp-heading: #e4ecff;
+
+  --mp-accent: #8ab4ff;
+  --mp-on-accent: #0b0d12;
+  --mp-accent-soft: rgba(138, 180, 255, 0.16);
+  --mp-accent-strong: #a9c7ff;
+
+  --mp-success: #5ee6a8;
+  --mp-success-soft: rgba(94, 230, 168, 0.14);
+  --mp-on-success-soft: #bdf5da;
+  --mp-warning: #ffc56b;
+  --mp-warning-soft: rgba(255, 197, 107, 0.14);
+  --mp-on-warning-soft: #ffe2b3;
+  --mp-danger: #ff7a85;
+  --mp-danger-soft: rgba(255, 122, 133, 0.16);
+  --mp-on-danger-soft: #ffc2c7;
+
+  --mp-blur-panel: 24px;
+  --mp-blur-overlay: 32px;
+  --mp-shadow-1: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --mp-shadow-2: 0 4px 16px rgba(0, 0, 0, 0.25);
+  --mp-shadow-3: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --mp-scrim: rgba(0, 0, 0, 0.55);
+
+  --mp-radius-panel: 20px;
+  --mp-radius-card: 16px;
+  --mp-radius-photo: 14px;
+}
+
+@media (max-width: 767px) {
+  :root[data-theme="glass-dark"] {
+    --mp-blur-panel: 12px;
+    --mp-blur-overlay: 20px;
+  }
+}
+
+/* 背景光晕：固定层，只用 transform 动画 */
+:root[data-theme="glass-dark"] .mp-backdrop {
+  background:
+    radial-gradient(40vw 40vw at 18% 22%, var(--mp-bg-glow-1), transparent 70%),
+    radial-gradient(36vw 36vw at 82% 70%, var(--mp-bg-glow-2), transparent 70%),
+    var(--mp-bg);
+}

@@ -32,17 +32,17 @@ export function AlbumCard({
       whileHover={getGalleryCardHover({ index, isMobile })}
       className="group cursor-pointer"
     >
-      <div className="relative rounded-xl bg-surface-container-highest p-4 shadow-lg transition-all duration-300 hover:shadow-xl">
+      <div className="relative mp-card p-3">
         {album.scanStatus === 'error' && <p role="status" className="mb-2 text-sm text-error">扫描部分失败，已保留原图片，请检查媒体目录后重试</p>}
         <div onClick={() => onNavigateToAlbum(album.id)} className="pointer-events-auto">
           <div
-            className={`absolute -top-3 z-10 rounded-full border border-black/5 px-4 py-1 text-xs font-bold shadow-sm ${
-              getGalleryCardTagPlacement(index)
+            className={`absolute -top-3 z-10 rounded-full border border-outline-variant px-3 py-0.5 text-xs font-semibold backdrop-blur-md ${
+              getGalleryCardTagPlacement()
             } ${colorScheme.bg} ${colorScheme.text}`}
           >
             {album.sourceType === 'folder' ? '文件夹' : '压缩包'}
           </div>
-          <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-xl">
+          <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-[12px]">
             {album.coverUrl ? (
               <ThrottledImage
                 key="cover"
@@ -66,7 +66,7 @@ export function AlbumCard({
                 event.stopPropagation();
                 onShare?.(album);
               }}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 text-outline shadow-md backdrop-blur transition-all hover:scale-105 hover:text-primary"
+              className="flex h-10 w-10 items-center justify-center mp-glass-overlay rounded-full text-on-surface-variant transition-all hover:scale-105 hover:text-primary"
               title="分享图集"
             >
               <Share2 className="h-5 w-5" />
@@ -77,21 +77,21 @@ export function AlbumCard({
                 event.stopPropagation();
                 onFavoriteToggle?.(album);
               }}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/90 shadow-md backdrop-blur transition-all hover:scale-105 ${
-                album.isFavorite ? 'text-amber-500' : 'text-outline'
+              className={`flex h-10 w-10 items-center justify-center mp-glass-overlay rounded-full transition-all hover:scale-105 ${
+                album.isFavorite ? 'text-tertiary' : 'text-outline'
               }`}
               title={album.isFavorite ? '取消收藏' : '收藏图集'}
             >
-              <Star className={`h-5 w-5 ${album.isFavorite ? 'fill-amber-400' : ''}`} />
+              <Star className={`h-5 w-5 ${album.isFavorite ? 'fill-tertiary' : ''}`} />
             </button>
           </div>
           )}
-          <div className="mt-4 px-2 pb-2">
-            <h3 className="mb-1 truncate font-headline text-lg font-bold leading-tight text-on-surface" title={album.name}>
+          <div className="mt-3 px-1 pb-1">
+            <h3 className="mb-1 truncate font-headline text-base font-semibold leading-tight text-on-surface" title={album.name}>
               {album.name}
             </h3>
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold uppercase tracking-wider text-outline">{album.assetCount} 张</span>
+              <span className="text-sm tabular-nums text-outline">{album.assetCount} 张</span>
               <ArrowRight className="h-4 w-4 text-outline/30 transition-all group-hover:translate-x-1 group-hover:text-primary" />
             </div>
           </div>

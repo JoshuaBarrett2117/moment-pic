@@ -1,7 +1,7 @@
 import { type FC, useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'motion/react';
 import { useCurrentUser } from '../app/current-user';
-import { ArrowLeft, Camera, Heart, Sparkles, Leaf, PenTool, Paperclip, Loader2, RefreshCw, Share2, Star } from 'lucide-react';
+import { ArrowLeft, Camera, FolderOpen, Loader2, RefreshCw, Share2, Star } from 'lucide-react';
 import { Polaroid } from './Polaroid';
 import { getAssetThumbnailPresentation } from '../lib/asset-thumbnail';
 import { AlbumShareDialog } from './AlbumShareDialog';
@@ -158,8 +158,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
       : (systemConfig?.albumDetailItemMinWidthMobile ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE))
     : (systemConfig?.albumDetailItemMinWidthDesktop ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP);
   const mobileHeaderClass = isWideMobile
-    ? 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-surface/92 px-6 pt-4 backdrop-blur-md'
-    : 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-surface/92 px-4 pt-4 backdrop-blur-md';
+    ? 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-background/75 backdrop-blur-xl px-6 pt-4'
+    : 'sticky top-0 z-20 flex h-16 items-center justify-between border-b border-outline/10 bg-background/75 backdrop-blur-xl px-4 pt-4';
   const mobileSectionClass = isWideMobile
     ? 'custom-scrollbar flex-1 overflow-y-auto px-6 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth'
     : 'custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)] scroll-smooth';
@@ -210,79 +210,65 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-surface">
       {!isMobile && (
-        <aside className="relative z-10 flex h-full w-[280px] flex-col overflow-y-auto bg-surface-container-low px-6 pt-10 pb-8 custom-scrollbar">
-          <div className="mb-10 flex items-center gap-3">
-            <div className="-rotate-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-container shadow-sm">
-              <Camera className="h-5 w-5 text-on-primary-container" />
+        <aside className="mp-glass-panel relative z-10 m-3 mr-0 flex w-[280px] shrink-0 flex-col overflow-y-auto rounded-[20px] px-6 pt-8 pb-6 custom-scrollbar">
+          <div className="mb-8 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-outline-variant bg-primary-container">
+              <Camera className="h-5 w-5 text-primary" />
             </div>
-            <h1 className="font-headline text-xl font-extrabold tracking-tight text-primary">Moment Pic</h1>
+            <h1 className="font-headline text-xl font-bold tracking-tight text-on-primary-container">Moment Pic</h1>
           </div>
 
-          <div className="mb-8 flex">
+          <div className="mb-6 flex">
             <button
               onClick={onBack}
-              className="wobbly-mask flex items-center gap-1 rounded-sm bg-secondary-container px-4 py-1.5 text-xs font-medium text-on-secondary-container shadow-sm transition-all hover:brightness-95"
+              className="flex items-center gap-1.5 rounded-full px-1 py-1.5 text-sm font-medium text-outline transition-colors hover:text-on-surface"
             >
               <ArrowLeft className="h-4 w-4" />
               返回首页
             </button>
           </div>
 
-          <div className="mb-8 flex flex-col gap-3">
+          <div className="mb-6 flex flex-col gap-2.5">
             {isAdmin && (
             <>
             <button
               onClick={() => void handleFavoriteToggle()}
               disabled={isUpdatingFavorite}
-              className="wobbly-mask flex items-center gap-1 rounded-sm bg-secondary-container px-4 py-1.5 text-xs font-medium text-on-secondary-container shadow-sm transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex w-full items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isUpdatingFavorite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className={`h-4 w-4 ${assets?.album?.isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />}
+              {isUpdatingFavorite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Star className={`h-4 w-4 ${assets?.album?.isFavorite ? 'fill-tertiary text-tertiary' : 'text-outline'}`} />}
               {assets?.album?.isFavorite ? '取消收藏' : '收藏图集'}
             </button>
             <button
               onClick={() => setIsShareDialogOpen(true)}
-              className="wobbly-mask flex items-center gap-1 rounded-sm bg-tertiary-container px-4 py-1.5 text-xs font-medium text-on-tertiary-container shadow-sm transition-all hover:brightness-95"
+              className="flex w-full items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Share2 className="h-4 w-4" />
+              <Share2 className="h-4 w-4 text-outline" />
               分享图集
             </button>
             </>
             )}
-          </div>
-
-          <div className="mb-8 flex">
             <button
               onClick={() => void handleRescanAlbum()}
               disabled={isRescanningAlbum}
-              className="wobbly-mask flex items-center gap-1 rounded-sm bg-primary-container px-4 py-1.5 text-xs font-medium text-on-primary-container shadow-sm transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex w-full items-center gap-2 rounded-xl border border-outline-variant bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isRescanningAlbum ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {isRescanningAlbum ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4 text-outline" />}
               重扫当前图集
             </button>
           </div>
 
-          <div className="mt-4 flex flex-col items-center gap-16">
-            <Heart className="h-10 w-10 rotate-12 fill-primary text-primary opacity-40" />
-            <Sparkles className="ml-8 h-8 w-8 -rotate-8 self-start text-primary opacity-30" />
-            <Leaf className="mr-8 h-6 w-6 rotate-6 self-end text-primary opacity-40" />
-          </div>
-
-          <div className="mt-auto self-center text-primary opacity-20">
-            <PenTool className="-rotate-12 h-12 w-12" />
-          </div>
-
-          <div className="wobbly-mask relative mt-auto -rotate-2 rounded-2xl bg-tertiary-container p-6 shadow-sm">
-            <Paperclip className="absolute -top-3 right-4 h-5 w-5 rotate-12 text-outline" />
+          <div className="mt-auto rounded-2xl border border-outline-variant bg-surface-container p-5">
             {assets?.album ? (
               <>
-                <p className="text-sm font-medium leading-relaxed text-on-tertiary-container">共 {assets.album.assetCount} 张图片</p>
-                <p className="mt-2 text-[10px] text-on-tertiary-container/60">已加载 {loadedItems.length} 张</p>
-                <p className="mt-1 text-[10px] text-on-tertiary-container/60">
+                <p className="text-sm font-medium leading-relaxed text-on-surface tabular-nums">共 {assets.album.assetCount} 张图片</p>
+                <p className="mt-2 text-xs text-outline tabular-nums">已加载 {loadedItems.length} 张</p>
+                <p className="mt-1 text-xs text-outline tabular-nums">
                   更新于 {new Date(assets.album.updatedAt || Date.now()).toLocaleDateString('zh-CN')}
                 </p>
               </>
             ) : (
-              <p className="text-sm font-medium leading-relaxed text-on-tertiary-container">加载中...</p>
+              <p className="text-sm font-medium leading-relaxed text-outline">加载中...</p>
             )}
           </div>
         </aside>
@@ -307,7 +293,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                 className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60"
                 title={assets?.album?.isFavorite ? '取消收藏' : '收藏图集'}
               >
-                {isUpdatingFavorite ? <Loader2 className="h-5 w-5 animate-spin" /> : <Star className={`h-5 w-5 ${assets?.album?.isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />}
+                {isUpdatingFavorite ? <Loader2 className="h-5 w-5 animate-spin" /> : <Star className={`h-5 w-5 ${assets?.album?.isFavorite ? 'fill-tertiary text-tertiary' : ''}`} />}
               </button>
               <button
                 onClick={() => setIsShareDialogOpen(true)}
@@ -332,7 +318,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
 
         {!isMobile && (
           <header className="flex h-32 flex-col justify-center px-12 pt-8">
-            <h2 className="font-headline text-4xl font-extrabold tracking-tight text-on-surface">
+            <h2 className="font-headline text-3xl font-bold tracking-tight text-on-surface md:text-4xl">
               {assets?.album?.name || albumId} · 相册详情
             </h2>
           </header>
@@ -362,7 +348,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
               {Array.from({ length: 12 }).map((_, i) => (
                 <div key={i} className="animate-pulse">
                   <div className="polaroid">
-                    <div className="mb-4 aspect-square rounded-sm bg-outline/10" />
+                    <div className="aspect-square rounded-[10px] bg-surface-container-high" />
                   </div>
                 </div>
               ))}
@@ -370,7 +356,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           ) : error && loadedItems.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center gap-4">
               <p className="text-error">{error}</p>
-              <button onClick={handleReloadFirstPage} className="rounded-lg bg-primary-container px-4 py-2 text-on-primary-container">
+              <button onClick={handleReloadFirstPage} className="rounded-xl bg-primary px-4 py-2 font-semibold text-on-primary">
                 重试
               </button>
             </div>
@@ -383,7 +369,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                 className="grid gap-4"
                 style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${albumDetailItemMinWidth}px, 1fr))` }}
               >
-                {renderedItems.map((asset, index) => (
+                {renderedItems.map((asset) => (
                   <motion.div
                     key={asset.id}
                     variants={{
@@ -393,7 +379,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
                     className="group relative cursor-pointer"
                   >
                     <div onClick={() => void reader.open(asset.id, asset.sortIndex - 1)}>
-                      <Polaroid {...getAssetThumbnailPresentation(asset)} caption="" rotation={(index % 5 - 2) * 1} className="w-full" />
+                      <Polaroid {...getAssetThumbnailPresentation(asset)} caption="" className="w-full" />
                     </div>
                   </motion.div>
                 ))}
@@ -409,9 +395,9 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           )}
         </section>
 
-        <footer className="z-10 hidden h-20 items-center justify-between border-t-2 border-outline/5 bg-surface/50 px-12 backdrop-blur-sm md:flex">
-          <div className="flex items-center gap-3 text-outline-variant/80">
-            <Paperclip className="h-4 w-4" />
+        <footer className="z-10 hidden h-20 items-center justify-between border-t border-outline-variant bg-background/40 px-12 backdrop-blur-md md:flex">
+          <div className="flex items-center gap-3 text-outline/70">
+            <FolderOpen className="h-4 w-4" />
             <code className="text-xs font-medium tracking-tight">/Volume1/pb1/{albumId}/moments/</code>
           </div>
         </footer>
@@ -446,7 +432,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
         />
       )}
 
-      <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between rounded-t-[2rem] border-t border-white/60 bg-white/85 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.1rem)] shadow-[0_-12px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl md:hidden">
+      <nav className="fixed bottom-0 z-50 flex w-full items-center justify-between mp-glass-solid rounded-t-[24px] border-x-0 border-b-0 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.1rem)] md:hidden">
         <div className="text-left text-[11px] leading-4 text-outline/80">
           <p>共 {assets?.album?.assetCount ?? loadedItems.length} 张图片</p>
           <p>已加载 {loadedItems.length} 张</p>

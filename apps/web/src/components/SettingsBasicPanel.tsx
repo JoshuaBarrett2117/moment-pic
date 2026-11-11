@@ -81,7 +81,7 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
 }) => (
   <>
     <header className="mb-6 md:mb-12">
-      <h2 className="text-2xl md:text-4xl font-headline font-black text-on-surface">基础设置</h2>
+      <h2 className="text-2xl md:text-4xl font-headline font-bold text-on-surface">基础设置</h2>
       <p className="text-outline mt-2">配置图片库目录，并管理查看器相关设置</p>
       <p className="mt-3 text-sm text-outline/80">
         {saveStatus === 'saving' && '正在保存设置...'}
@@ -120,7 +120,7 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
                   }
                 }}
                 disabled={isSavingConfig}
-                className="rounded-xl border-2 border-outline/20 bg-surface px-4 py-2 font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                className="rounded-xl border border-outline/20 bg-surface px-4 py-2 font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
               >
                 <option value="page">翻页滑动</option>
                 <option value="normal">常规淡入</option>
@@ -145,7 +145,7 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
                   await saveDefaultImageQualityPreset(event.target.value as ImageQualityPreset);
                 }}
                 disabled={isSavingConfig}
-                className="rounded-xl border-2 border-outline/20 bg-surface px-4 py-2 font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                className="rounded-xl border border-outline/20 bg-surface px-4 py-2 font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
               >
                 <option value="low">省流</option>
                 <option value="balanced">均衡</option>
@@ -182,7 +182,7 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
                       }
                     }}
                     disabled={isSavingConfig}
-                    className="w-20 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                    className="w-20 rounded-xl border border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
                   />
                   <span className="text-sm text-outline">张</span>
                 </div>
@@ -201,7 +201,7 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
                       }
                     }}
                     disabled={isSavingConfig}
-                    className="w-20 rounded-xl border-2 border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+                    className="w-20 rounded-xl border border-outline/20 bg-surface px-3 py-2 text-center font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
                   />
                   <span className="text-sm text-outline">张</span>
                 </div>
@@ -222,7 +222,7 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
             value={newPath}
             onChange={(event) => setNewPath(event.target.value)}
             placeholder="例如: /volume1/pb1/photos"
-            className="w-full px-4 py-3 bg-surface-container-high border-2 border-outline/20 rounded-xl focus:border-primary focus:outline-none"
+            className="w-full px-4 py-3 bg-surface-container-lowest border border-outline/20 rounded-xl focus:border-primary focus:outline-none"
           />
         </div>
         <div>
@@ -232,7 +232,7 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
             placeholder="例如: 我的照片"
-            className="w-full px-4 py-3 bg-surface-container-high border-2 border-outline/20 rounded-xl focus:border-primary focus:outline-none"
+            className="w-full px-4 py-3 bg-surface-container-lowest border border-outline/20 rounded-xl focus:border-primary focus:outline-none"
           />
         </div>
         <WobblyButton onClick={addLibraryRoot} disabled={!newPath.trim() || isAdding} className="self-start">

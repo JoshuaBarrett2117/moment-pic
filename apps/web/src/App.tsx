@@ -1,7 +1,7 @@
 import { useCallback, useEffect, Suspense, useMemo } from 'react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
-import { PaperGrain } from './components/PaperGrain';
+import { ThemeBackdrop } from './components/ThemeBackdrop';
 import { recordAlbumView, setAlbumFavorite, useSystemConfig } from './hooks';
 import { api } from './lib/api';
 import type { AlbumListItemDTO, DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
@@ -331,12 +331,12 @@ function AuthenticatedMomentPicApp() {
 
   return (
     <CurrentUserProvider enabled={isAuthenticated}>
-    <div className="relative w-full h-[100dvh] overflow-hidden bg-background">
-      <PaperGrain />
-      {isAuthenticated && scanError && currentScreen !== Screen.SETTINGS && <div role="alert" className="fixed left-4 right-4 top-4 z-50 rounded-lg bg-error px-4 py-3 text-white">{scanError}</div>}
+    <div className="relative w-full h-[100dvh] overflow-hidden">
+      <ThemeBackdrop />
+      {isAuthenticated && scanError && currentScreen !== Screen.SETTINGS && <div role="alert" className="fixed left-4 right-4 top-4 z-50 rounded-xl bg-error px-4 py-3 text-on-error">{scanError}</div>}
 
       {isAuthBootstrapping ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-surface text-outline">
+        <div className="absolute inset-0 flex items-center justify-center text-outline">
           正在进入图库...
         </div>
       ) : (

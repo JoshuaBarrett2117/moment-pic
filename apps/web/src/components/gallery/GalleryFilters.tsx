@@ -54,10 +54,10 @@ export function GalleryFilters({
       </button>
 
       <div className={`${isFilterExpanded ? 'block' : 'hidden'} md:block`}>
-        <div className={`mb-6 rounded-2xl bg-surface-container-highest p-3 shadow-sm ${isWideMobile ? 'md:mb-8 md:p-4' : 'md:mb-8 md:p-4'}`}>
+        <div className={`mb-6 mp-glass-panel rounded-[20px] p-3 ${isWideMobile ? 'md:mb-8 md:p-4' : 'md:mb-8 md:p-4'}`}>
           <div className="relative mb-3 w-full">
             <input
-              className="w-full rounded-full border-2 border-outline/30 bg-surface-container-high py-2 pl-10 pr-10 text-sm outline-none placeholder:text-outline/50 focus:border-transparent focus:ring-2 focus:ring-primary-container"
+              className="w-full rounded-full border border-outline-variant bg-surface-container-lowest py-2.5 pl-10 pr-10 text-sm outline-none placeholder:text-outline/50 focus:border-transparent focus:ring-2 focus:ring-primary-container"
               placeholder={isSmartAlbumsMode ? '搜索自动整理名称' : '搜索相册名称'}
               type="text"
               value={currentKeyword}
@@ -82,7 +82,7 @@ export function GalleryFilters({
                 <select
                   value={currentSourceType}
                   onChange={(event) => onSourceTypeChange(event.target.value as SourceType)}
-                  className="cursor-pointer rounded-lg bg-surface-container-high px-2 py-2 text-sm outline-none md:px-3"
+                  className="cursor-pointer rounded-lg border border-outline-variant bg-surface-container-lowest px-2 py-2 text-sm outline-none md:px-3"
                 >
                   <option value="">全部</option>
                   <option value="folder">文件夹</option>
@@ -96,7 +96,7 @@ export function GalleryFilters({
               <select
                 value={currentSortBy}
                 onChange={(event) => onSortByChange(event.target.value as SortBy)}
-                className="cursor-pointer rounded-lg bg-surface-container-high px-2 py-2 text-sm outline-none md:px-3"
+                className="cursor-pointer rounded-lg border border-outline-variant bg-surface-container-lowest px-2 py-2 text-sm outline-none md:px-3"
               >
                 {sortOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -108,7 +108,7 @@ export function GalleryFilters({
 
             <button
               onClick={() => onSortOrderChange(currentSortOrder === 'asc' ? 'desc' : 'asc')}
-              className="flex items-center gap-1 rounded-lg bg-surface-container-high px-3 py-2 text-sm transition-colors hover:bg-primary-container/20"
+              className="flex items-center gap-1 rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-sm transition-colors hover:bg-surface-container-high"
             >
               {currentSortOrder === 'asc' ? '正序' : '倒序'}
             </button>
@@ -118,7 +118,7 @@ export function GalleryFilters({
               <select
                 value={currentPageSize}
                 onChange={(event) => onPageSizeChange(Number(event.target.value))}
-                className="cursor-pointer rounded-lg bg-surface-container-high px-3 py-2 text-sm outline-none"
+                className="cursor-pointer rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm outline-none"
               >
                 {pageSizeOptions.map((size) => (
                   <option key={size} value={size}>

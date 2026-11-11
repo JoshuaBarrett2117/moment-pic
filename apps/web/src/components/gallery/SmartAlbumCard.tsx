@@ -25,12 +25,12 @@ export function SmartAlbumCard({
     >
       <button
         onClick={() => onNavigateToAlbum(album.id)}
-        className="relative w-full rounded-xl bg-surface-container-highest p-4 text-left shadow-lg transition-all duration-300 hover:shadow-xl"
+        className="relative w-full mp-card p-3 text-left"
       >
-        <div className="absolute -right-2 -top-3 z-10 rotate-12 rounded-full border border-black/5 bg-primary-container px-4 py-1 text-xs font-bold text-on-primary-container shadow-sm">
+        <div className="absolute right-3 -top-3 z-10 rounded-full border border-outline-variant bg-primary-container px-3 py-0.5 text-xs font-semibold text-primary backdrop-blur-md">
           {album.albumCount} 套图集
         </div>
-        <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-xl">
+        <div className="grid aspect-square grid-cols-3 gap-1.5 overflow-hidden rounded-[12px]">
           {album.coverUrl ? (
             <ThrottledImage
               key="cover"
@@ -44,12 +44,12 @@ export function SmartAlbumCard({
             </div>
           )}
         </div>
-        <div className="mt-4 px-2 pb-2">
-          <h3 className="mb-1 truncate font-headline text-lg font-bold leading-tight text-on-surface" title={album.name}>
+        <div className="mt-3 px-1 pb-1">
+          <h3 className="mb-1 truncate font-headline text-base font-semibold leading-tight text-on-surface" title={album.name}>
             {album.name}
           </h3>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold uppercase tracking-wider text-outline">{album.assetCount} 张</span>
+            <span className="text-sm tabular-nums text-outline">{album.assetCount} 张</span>
             <ArrowRight className="h-4 w-4 text-outline/30 transition-all group-hover:translate-x-1 group-hover:text-primary" />
           </div>
         </div>

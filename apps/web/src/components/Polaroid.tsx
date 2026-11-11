@@ -8,6 +8,7 @@ interface PolaroidProps {
   alt?: string;
   caption?: string;
   date?: string;
+  /** 已废弃：玻璃主题不再旋转卡片，保留仅为兼容旧调用。 */
   rotation?: number;
   className?: string;
   onClick?: () => void;
@@ -20,7 +21,6 @@ export const Polaroid: React.FC<PolaroidProps> = ({
   alt = '', 
   caption, 
   date, 
-  rotation = 0, 
   className = '',
   onClick,
   aspectRatio = 1,
@@ -30,12 +30,12 @@ export const Polaroid: React.FC<PolaroidProps> = ({
 
   return (
     <motion.div
-      whileHover={{ scale: 1.05, rotate: 0, zIndex: 30 }}
-      initial={{ rotate: rotation }}
-      className={`polaroid cursor-pointer transition-transform duration-500 ${className}`}
+      whileHover={{ y: -2, zIndex: 30 }}
+      transition={{ duration: 0.16 }}
+      className={`polaroid cursor-pointer ${className}`}
       onClick={onClick}
     >
-      <div className="relative overflow-hidden rounded-sm mb-4" style={{ aspectRatio }}>
+      <div className="relative overflow-hidden rounded-[10px]" style={{ aspectRatio }}>
         {hasError ? (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-surface-container text-outline">
             <ImageOff className="h-8 w-8" />
@@ -52,8 +52,8 @@ export const Polaroid: React.FC<PolaroidProps> = ({
         )}
       </div>
       {(caption || date) && (
-        <div className="text-center">
-          {caption && <span className="font-headline font-black text-xl text-on-primary-container block">{caption}</span>}
+        <div className="mt-3 text-center">
+          {caption && <span className="font-headline font-semibold text-base text-on-surface block">{caption}</span>}
           {date && <p className="text-xs text-outline font-label mt-1">{date}</p>}
         </div>
       )}

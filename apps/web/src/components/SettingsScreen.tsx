@@ -8,6 +8,7 @@ import { SettingsBasicPanel } from './SettingsBasicPanel';
 import { SettingsSidebar, type SettingsTab } from './SettingsSidebar';
 import { SettingsAccountPanel } from './SettingsAccountPanel';
 import { SettingsUsersPanel } from './SettingsUsersPanel';
+import { SettingsAppearancePanel } from './SettingsAppearancePanel';
 import { useCurrentUser } from '../app/current-user';
 
 interface SettingsScreenProps {
@@ -50,7 +51,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
   const { isAdmin } = useCurrentUser();
   const [selectedTab, setActiveTab] = useState<SettingsTab>('basic');
   // 只读用户只能看到“账号”页
-  const activeTab: SettingsTab = isAdmin ? selectedTab : 'account';
+  const activeTab: SettingsTab = isAdmin || selectedTab === 'appearance' ? selectedTab : 'account';
   const [newPath, setNewPath] = useState('');
   const [newName, setNewName] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -114,7 +115,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-[100dvh] w-full bg-background overflow-hidden">
+    <div className="flex flex-col md:flex-row h-[100dvh] w-full overflow-hidden">
       <SettingsSidebar activeTab={activeTab} onBack={onBack} onTabChange={setActiveTab} isAdmin={isAdmin} />
 
       <main className="flex-1 p-4 md:p-12 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] overflow-y-auto custom-scrollbar">
@@ -177,7 +178,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
         {activeTab === 'smart' && (
           <>
             <header className="mb-6 md:mb-12">
-              <h2 className="text-2xl md:text-4xl font-headline font-black text-on-surface">智能归纳</h2>
+              <h2 className="text-2xl md:text-4xl font-headline font-bold text-on-surface">智能归纳</h2>
               <p className="text-outline mt-2 text-sm md:text-base">配置自动整理归纳规则，并为后续 AI 自动归纳准备策略。</p>
             </header>
 
@@ -187,6 +188,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onBack, onScanComplete
 
         {activeTab === 'account' && <SettingsAccountPanel />}
         {activeTab === 'users' && isAdmin && <SettingsUsersPanel />}
+        {activeTab === 'appearance' && <SettingsAppearancePanel />}
       </main>
     </div>
   );

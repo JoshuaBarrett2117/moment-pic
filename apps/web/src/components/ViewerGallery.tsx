@@ -306,12 +306,21 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const preloadHint = getPreloadHint(qualityPreset);
   return (
     <div
-      className="viewer-gallery fixed inset-0 z-[99999] flex items-center justify-center bg-black touch-none"
+      className="viewer-gallery fixed inset-0 z-[99999] flex items-center justify-center bg-[#050608] touch-none"
       {...rootTouchHandlers}
       onMouseEnter={() => !useTouchInteractions && !showEndPrompt && setShowControls(true)}
       onMouseLeave={() => !useTouchInteractions && !showEndPrompt && setShowControls(false)}
     >
       <ViewerGalleryStyles showControls={showControls} showQualityPanel={showQualityPanel} />
+
+      {/* 氛围背景：当前图片的省流预览，强模糊 + 压暗 */}
+      <img
+        aria-hidden="true"
+        alt=""
+        src={resolveImageSrc(currentImage, 'low')}
+        className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-45 blur-[48px] saturate-150"
+      />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black/45" />
 
       <button className="viewer-close" onClick={handleClose} title="关闭" style={{ width: closeBtnSize, height: closeBtnSize }}>
         <X size={isMobile ? 28 : 24} />
@@ -342,13 +351,13 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       </div>
 
       {preloadHint && showControls && (
-        <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.8rem)] z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
+        <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+4.8rem)] z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/50 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
           {preloadHint}
         </div>
       )}
 
       {useTouchInteractions && showControls && (
-        <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+7.3rem)] z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
+        <div className="pointer-events-none fixed left-1/2 top-[calc(env(safe-area-inset-top)+7.3rem)] z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/50 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
           左右滑动切换，点按图片显示或隐藏工具栏
         </div>
       )}
@@ -379,7 +388,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       />
 
       {!useTouchInteractions && showControls && (
-        <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+7.5rem)] left-1/2 z-20 -translate-x-1/2 rounded-full bg-white/12 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
+        <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+7.5rem)] left-1/2 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/50 px-4 py-2 text-xs text-white/90 backdrop-blur-md">
           Esc 关闭 · ←→ 切换 · 滚轮缩放
         </div>
       )}

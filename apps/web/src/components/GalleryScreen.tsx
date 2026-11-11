@@ -162,8 +162,8 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
     : (systemConfig?.albumListItemMinWidthDesktop ?? DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
   const mainPaddingClass = isMobile ? (isWideMobile ? 'px-6 pt-14 pb-[calc(env(safe-area-inset-bottom)+7rem)]' : 'px-4 pt-12 pb-[calc(env(safe-area-inset-bottom)+6.5rem)]') : 'md:ml-80 md:px-12 md:pt-16 md:pb-24';
   const headerClass = isMobile
-    ? `relative z-10 mb-4 flex w-auto items-center justify-between bg-surface/92 py-3 ${isWideMobile ? '-mx-6 px-6' : '-mx-4 px-4'}`
-    : 'relative z-10 -mx-4 mb-4 flex w-auto items-center justify-between bg-surface/92 px-4 py-3 md:mx-0 md:mb-8 md:bg-transparent md:px-0 md:py-0';
+    ? `relative z-10 mb-4 flex w-auto items-center justify-between bg-background/75 backdrop-blur-xl py-3 ${isWideMobile ? '-mx-6 px-6' : '-mx-4 px-4'}`
+    : 'relative z-10 -mx-4 mb-4 flex w-auto items-center justify-between bg-background/75 backdrop-blur-xl px-4 py-3 md:mx-0 md:mb-8 md:bg-transparent md:px-0 md:py-0';
   const gridGapClass = isWideMobile ? 'gap-5' : 'gap-4 md:gap-6';
   const sortOptions = getGallerySortOptions(resolvedDisplayMode);
   const headerText = resolveGalleryHeaderText({ displayMode: resolvedDisplayMode, headerTitle, headerDescription });

@@ -63,3 +63,38 @@ test("实际扫描 API 与 WebSocket 暴露脱敏失败及部分成果，失败�
     assert.ok(!rescan.body.includes(directory));
   } finally { client.terminate(); await app.close(); deleteLibraryRootDb(id); await fs.rm(directory, { recursive: true, force: true }); }
 });
+
+test("POST /api/v1/scan：同范围扫描排队/执行中时合并为同一任务（alreadyRunning）", async () => {
+  const { scanCoordinator } = await import("../services/scan-coordinator.js");
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "scan-route-coalesce-"));
+  const id = randomUUID();
+  const timestamp = new Date().toISOString();
+  upsertLibraryRootDb({ id, name: id, path: directory, enabled: true, lastScannedAt: null, createdAt: timestamp, updatedAt: timestamp });
+  const app = buildApp();
+  const cookie = testSessionCookie(60_000);
+  let release: () => void = () => undefined;
+  // 先占住协调器，确保两次请求时扫描都还在排队
+  const blocker = scanCoordinator.runExclusive("test-blocker", () => new Promise<void>((resolve) => { release = resolve; }));
+  try {
+    const post = async () => (await app.inject({ method: "POST", url: "/api/v1/scan", headers: { cookie }, payload: { libraryRootId: id } })).json().data;
+    const first = await post();
+    const second = await post();
+    assert.equal(first.alreadyRunning, false);
+    assert.equal(first.status, "pending");
+    assert.equal(second.alreadyRunning, true);
+    assert.equal(second.taskId, first.taskId);
+    release();
+    await blocker;
+    await scanCoordinator.drain();
+    let task = (await app.inject({ url: `/api/v1/scan/${first.taskId}`, headers: { cookie } })).json().data;
+    for (let index = 0; index < 100 && ["pending", "running"].includes(task.status); index += 1) {
+      await delay(20);
+      task = (await app.inject({ url: `/api/v1/scan/${first.taskId}`, headers: { cookie } })).json().data;
+    }
+    assert.equal(task.status, "completed");
+    const third = await post();
+    assert.equal(third.alreadyRunning, false);
+    assert.notEqual(third.taskId, first.taskId);
+    await scanCoordinator.drain();
+  } finally { release(); await app.close(); deleteLibraryRootDb(id); await fs.rm(directory, { recursive: true, force: true }); }
+});

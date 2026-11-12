@@ -58,3 +58,26 @@ test("阅读进度迁移为按用户隔离：旧进度归属最早的管理员",
   db.prepare("INSERT INTO album_progress (user_id, album_id, asset_id, asset_index, total, updated_at) VALUES ('u-viewer', 'a1', 'x0', 0, 9, '2026-10-02')").run();
   assert.equal((db.prepare("SELECT COUNT(*) AS n FROM album_progress WHERE album_id = 'a1'").get() as { n: number }).n, 2);
 });
+
+test("0005 游标分页索引：在已有数据的旧库上执行，重复执行（含 user_version 回退重跑）均安全", () => {
+  const db = new Database(":memory:");
+  runMigrations(db, MIGRATIONS.slice(0, 4));
+  db.prepare("INSERT INTO albums (id, library_root_id, name, source_type, source_path, asset_count, scan_status, is_favorite, created_at, updated_at) VALUES ('a1', 'r1', '图集', 'folder', '/a1', 3, 'ready', 0, '2026-01-01', '2026-01-02')").run();
+  const indexNames = () => new Set((db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'albums'").all() as Array<{ name: string }>).map((row) => row.name));
+  assert.ok(indexNames().has("idx_albums_updated_at_name"));
+
+  assert.deepEqual(runMigrations(db), [5]);
+  const expected = ["idx_albums_updated_at_id", "idx_albums_name_id", "idx_albums_asset_count_id", "idx_albums_favorite_updated_at_id", "idx_albums_root_updated_at_id"];
+  for (const name of expected) assert.ok(indexNames().has(name), name);
+  for (const name of ["idx_albums_updated_at_name", "idx_albums_asset_count_name", "idx_albums_favorite_updated_at"]) assert.ok(!indexNames().has(name), name);
+
+  // 版本号未记录成功（例如上次中途退出）时重跑 0005 不报错
+  db.pragma("user_version = 4");
+  assert.deepEqual(runMigrations(db), [5]);
+  assert.deepEqual(runMigrations(db), []);
+  assert.equal(getSchemaVersion(db), 5);
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM albums").get() as { n: number }).n, 1);
+  // 键集查询能使用新索引
+  const plan = db.prepare("EXPLAIN QUERY PLAN SELECT id FROM albums WHERE (updated_at, id) < ('2026-02-01', 'z') ORDER BY updated_at DESC, id DESC LIMIT 3").all() as Array<{ detail: string }>;
+  assert.ok(plan.some((row) => row.detail.includes("idx_albums_updated_at_id")), JSON.stringify(plan));
+});

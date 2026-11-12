@@ -17,6 +17,7 @@ import { makeId } from "../repositories/ids.js";
 import { runPostLibraryScanTasks } from "./library-scanner/post-scan-tasks.js";
 import { iterateAlbumsForRoot, scanFolderAlbum, scanZipAlbum, type ScannedAlbum } from "./library-scanner/album-discovery.js";
 import { buildAssetsFingerprint, buildStableAssetId } from "./library-scanner-utils.js";
+import { scanCoordinator } from "./scan-coordinator.js";
 
 export { buildStableAssetId } from "./library-scanner-utils.js";
 
@@ -41,9 +42,11 @@ export class ScanAlbumSourceInvalidError extends Error {
   }
 }
 
-type ScanLibraryInput = {
+export type ScanLibraryInput = {
   libraryRootId?: string;
   batchSize?: number;
+  /** 扫描真正开始（拿到协调器执行权）时回调；排队期间不触发。 */
+  onStart?: () => void;
   onProgress?: (progress: {
     libraryRootId: string;
     albumsDiscovered: number;
@@ -124,7 +127,14 @@ const shouldReplaceAlbum = (
   return false;
 };
 
-export const scanLibrary = async (input?: ScanLibraryInput) => {
+/** 内容未变的图集：source_mtime / 指纹有差异才写，且不改 updated_at（“最近更新”只反映真实内容变化）。 */
+const syncUnchangedAlbumScanMetadata = (existingAlbum: AlbumRecord, sourceMtime: string, assetsFingerprint: string) => {
+  if (existingAlbum.sourceMtime === sourceMtime && existingAlbum.assetsFingerprint === assetsFingerprint) return;
+  updateAlbumScanMetadataDb(existingAlbum.id, { sourceMtime, assetsFingerprint });
+};
+
+const scanLibraryUnlocked = async (input?: ScanLibraryInput) => {
+  input?.onStart?.();
   const libraryRoots = await getScanRoots(input);
   if (input?.libraryRootId && libraryRoots.length === 0) {
     throw new ScanLibraryRootNotFoundError(input.libraryRootId);
@@ -193,22 +203,13 @@ export const scanLibrary = async (input?: ScanLibraryInput) => {
         existingAlbum.assetCount === assets.length &&
         existingAlbum.assetsFingerprint === assetsFingerprint
       ) {
-        if (existingAlbum.sourceMtime !== discoveredAlbum.sourceMtime) {
-          updateAlbumScanMetadataDb(existingAlbum.id, {
-            sourceMtime: discoveredAlbum.sourceMtime,
-            assetsFingerprint,
-            updatedAt: timestamp
-          });
-        }
+        syncUnchangedAlbumScanMetadata(existingAlbum, discoveredAlbum.sourceMtime, assetsFingerprint);
         continue;
       }
 
       if (existingAlbum && !shouldReplaceAlbum(existingAlbum, discoveredAlbum, assets)) {
-        updateAlbumScanMetadataDb(existingAlbum.id, {
-          sourceMtime: discoveredAlbum.sourceMtime,
-          assetsFingerprint,
-          updatedAt: timestamp
-        });
+        // 内容未变：只同步扫描元数据（且仅在确有差异时写库），不刷新 updated_at。
+        syncUnchangedAlbumScanMetadata(existingAlbum, discoveredAlbum.sourceMtime, assetsFingerprint);
         continue;
       }
 
@@ -309,6 +310,10 @@ const prepareAlbumRescan = async (existingAlbum: AlbumRecord) => {
   if (!discovered) return null;
   if (discovered.reuseExisting) return { album: existingAlbum, assets: [], reused: true };
   const assets = discovered.assets.map((asset) => toAssetRecord(existingAlbum.id, timestamp, asset));
+  if (!shouldReplaceAlbum(existingAlbum, discovered, assets)) {
+    syncUnchangedAlbumScanMetadata(existingAlbum, discovered.sourceMtime, buildAssetsFingerprint(discovered.assets));
+    return { album: existingAlbum, assets: [], reused: true };
+  }
   return {
     album: { ...existingAlbum, name: discovered.name, sourceMtime: discovered.sourceMtime,
       assetsFingerprint: buildAssetsFingerprint(discovered.assets),
@@ -318,7 +323,7 @@ const prepareAlbumRescan = async (existingAlbum: AlbumRecord) => {
   };
 };
 
-export const rescanAlbum = async (albumId: string) => {
+const rescanAlbumUnlocked = async (albumId: string) => {
   const existing = findAlbumByIdDb(albumId);
   if (!existing) throw new ScanAlbumNotFoundError(albumId);
   const prepared = await prepareAlbumRescan(existing);
@@ -345,7 +350,7 @@ const isSourceConfirmedRemoved = async (album: AlbumRecord): Promise<boolean> =>
   return false;
 };
 
-export const rescanAlbums = async (albumIds: string[]): Promise<{ rescanned: number; removed: number; failed: number }> => {
+const rescanAlbumsUnlocked = async (albumIds: string[]): Promise<{ rescanned: number; removed: number; failed: number }> => {
   const ids = [...new Set(albumIds)];
   const result = { rescanned: 0, removed: 0, failed: 0 };
   for (let offset = 0; offset < ids.length; offset += 200) {
@@ -378,13 +383,23 @@ export const rescanAlbums = async (albumIds: string[]): Promise<{ rescanned: num
   return result;
 };
 
+// 对外入口一律经扫描协调器串行执行：启动扫描、手动扫描、watcher 增量扫描、单图集重扫互斥。
+export const scanLibrary = (input?: ScanLibraryInput) =>
+  scanCoordinator.runExclusive(`library:${input?.libraryRootId ?? "*"}`, () => scanLibraryUnlocked(input));
+
+export const rescanAlbum = (albumId: string) =>
+  scanCoordinator.runExclusive(`album:${albumId}`, () => rescanAlbumUnlocked(albumId));
+
+export const rescanAlbums = (albumIds: string[]) =>
+  scanCoordinator.runExclusive(`albums:${albumIds.length}`, () => rescanAlbumsUnlocked(albumIds));
+
 export const ensureScannedLibrary = async () => {
   const existingRoots = listLibraryRootsDb();
   if (existingRoots.length === 0) {
     return;
   }
 
-  const existing = listAlbumsDb(1, 1);
+  const existing = listAlbumsDb({ page: 1, pageSize: 1 });
   if (existing.total > 0) {
     return;
   }

@@ -26,6 +26,7 @@ import {
   setAlbumFavorite
   , resetManagedAlbumSharePassword
 } from "../services/album-service.js";
+import { InvalidCursorError } from "../repositories/album-repository.js";
 import { DirectoryAlbumPathInvalidError, DirectoryAlbumRootNotFoundError, listDirectoryAlbums } from "../services/directory-album-service.js";
 import { rescanAlbum, ScanAlbumNotFoundError, ScanAlbumSourceInvalidError, ScanLibraryRootNotFoundError } from "../services/library-scanner.js";
 import {
@@ -264,9 +265,16 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  const sendInvalidCursor = (reply: FastifyReply) =>
+    reply.status(400).send({
+      code: 4012,
+      message: "invalid cursor"
+    });
+
   app.get("/api/v1/albums", async (request, reply) => {
     const query = request.query as {
       page?: string;
+      cursor?: string;
       pageSize?: string;
       libraryRootId?: string;
       sourceType?: "folder" | "zip";
@@ -277,14 +285,22 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     };
     const page = parseBoundedInteger(query.page, { defaultValue: 1, min: 1, max: 100000 });
     const pageSize = parseBoundedInteger(query.pageSize, { defaultValue: 24, min: 1, max: 100 });
-    const payload = await listAlbums(page, pageSize, {
-      libraryRootId: parseOptionalString(query.libraryRootId),
-      sourceType: parseEnumValue(query.sourceType, ["folder", "zip"] as const),
-      keyword: parseOptionalString(query.keyword),
-      sortBy: parseEnumValue(query.sortBy, ["name", "updatedAt", "assetCount"] as const),
-      sortOrder: parseEnumValue(query.sortOrder, ["asc", "desc"] as const),
-      favoriteOnly: query.favoriteOnly === "true"
-    });
+    // cursor 优先（键集分页）；仍可只传 page（OFFSET，向后兼容）。游标请求里的 page 仅回显，供前端累积。
+    const cursor = query.cursor === undefined ? undefined : String(query.cursor);
+    let payload: Awaited<ReturnType<typeof listAlbums>>;
+    try {
+      payload = await listAlbums({ page, cursor, pageSize }, {
+        libraryRootId: parseOptionalString(query.libraryRootId),
+        sourceType: parseEnumValue(query.sourceType, ["folder", "zip"] as const),
+        keyword: parseOptionalString(query.keyword),
+        sortBy: parseEnumValue(query.sortBy, ["name", "updatedAt", "assetCount"] as const),
+        sortOrder: parseEnumValue(query.sortOrder, ["asc", "desc"] as const),
+        favoriteOnly: query.favoriteOnly === "true"
+      });
+    } catch (error) {
+      if (error instanceof InvalidCursorError) return sendInvalidCursor(reply);
+      throw error;
+    }
     const etag = `"albums-${crypto.createHash("sha1").update(JSON.stringify(payload)).digest("hex")}"`;
     const ifNoneMatch = normalizeHeader(request.headers["if-none-match"]);
     if (ifNoneMatch === etag) {
@@ -322,10 +338,17 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/albums/:albumId/assets", async (request, reply) => {
     const { albumId } = request.params as { albumId: string };
-    const query = request.query as { page?: string; pageSize?: string };
+    const query = request.query as { page?: string; cursor?: string; pageSize?: string };
     const page = parseBoundedInteger(query.page, { defaultValue: 1, min: 1, max: 100000 });
     const pageSize = parseBoundedInteger(query.pageSize, { defaultValue: 120, min: 1, max: 300 });
-    const payload = await getAlbumAssets(albumId, page, pageSize);
+    const cursor = query.cursor === undefined ? undefined : String(query.cursor);
+    let payload: Awaited<ReturnType<typeof getAlbumAssets>>;
+    try {
+      payload = await getAlbumAssets(albumId, page, pageSize, cursor);
+    } catch (error) {
+      if (error instanceof InvalidCursorError) return sendInvalidCursor(reply);
+      throw error;
+    }
 
     if (!payload) {
       return reply.status(404).send({

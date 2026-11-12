@@ -2,9 +2,29 @@ import { reconcileAlbumProgressDb } from "./album-progress-repository.js";
 import { getDb } from "../db/sqlite.js";
 import type { AlbumRecord, AlbumShareRecord, AssetRecord, ThumbnailRecord } from "../types/store.js";
 import { rowToAlbum, rowToAlbumShare, rowToAsset, rowToThumbnail } from "./sqlite-mappers.js";
+import {
+  type AlbumSortBy,
+  type SortOrder,
+  decodeAlbumCursor,
+  decodeAssetCursor,
+  encodeAlbumCursor,
+  encodeAssetCursor
+} from "./pagination-cursor.js";
 
-export type AlbumSortBy = "name" | "updatedAt" | "assetCount";
-export type SortOrder = "asc" | "desc";
+export type { AlbumSortBy, SortOrder } from "./pagination-cursor.js";
+export { InvalidCursorError } from "./pagination-cursor.js";
+
+export type AlbumListFilters = {
+  libraryRootId?: string;
+  sourceType?: "folder" | "zip";
+  keyword?: string;
+  sortBy?: AlbumSortBy;
+  sortOrder?: SortOrder;
+  favoriteOnly?: boolean;
+};
+
+/** cursor 优先（键集分页）；无 cursor 时按 page 走 OFFSET（向后兼容）。 */
+export type AlbumListQuery = { page?: number; cursor?: string; pageSize: number };
 
 const toAlbumDbParams = (album: AlbumRecord) => ({
   ...album,
@@ -30,6 +50,24 @@ export const insertAlbumWithAssetsDb = (album: AlbumRecord, assets: AssetRecord[
   transaction();
 };
 
+type ReplacedAlbum = { existingAlbumId: string | null; album: AlbumRecord; assets: AssetRecord[] };
+
+/**
+ * 按 source_path 幂等写入（防御性兜底）：若同一路径已有另一条图集记录（例如来自协调器之外的并发写入），
+ * 沿用库里已有的 id、收藏与创建时间，替换其内容，而不是再插入一条触发 UNIQUE(source_path) 冲突。
+ */
+const adoptExistingAlbumBySourcePath = (item: ReplacedAlbum, row: Record<string, unknown> | undefined): ReplacedAlbum => {
+  if (!row) return item;
+  const existingId = String(row.id);
+  // existingAlbumId 本身就是按 source_path 匹配到的记录，只有“新图集”才可能撞路径。
+  if (existingId === item.album.id || item.existingAlbumId) return item;
+  return {
+    existingAlbumId: existingId,
+    album: { ...item.album, id: existingId, isFavorite: Number(row.is_favorite) === 1, createdAt: String(row.created_at) },
+    assets: item.assets.map((asset) => ({ ...asset, albumId: existingId }))
+  };
+};
+
 export const applyLibraryRootScanDiffDb = (input: {
   removedAlbumIds: string[];
   replacedAlbums: Array<{
@@ -53,6 +91,8 @@ export const applyLibraryRootScanDiffDb = (input: {
     VALUES (@id, @albumId, @name, @extension, @sourceType, @sourcePath, @relativePath, @zipEntryPath, @sortIndex, @width, @height, @sizeBytes, @sourceMtime, @thumbnailKey, @createdAt, @updatedAt)
   `);
 
+  const findAlbumBySourcePath = db.prepare("SELECT id, is_favorite, created_at FROM albums WHERE source_path = ? LIMIT 1");
+
   const transaction = db.transaction(() => {
     for (const albumId of input.removedAlbumIds) {
       deleteProgressByAlbumId.run(albumId);
@@ -62,7 +102,8 @@ export const applyLibraryRootScanDiffDb = (input: {
       deleteAlbumById.run(albumId);
     }
 
-    for (const item of input.replacedAlbums) {
+    for (const original of input.replacedAlbums) {
+      const item = adoptExistingAlbumBySourcePath(original, findAlbumBySourcePath.get(original.album.sourcePath) as Record<string, unknown> | undefined);
       if (item.existingAlbumId) {
         deleteThumbnailByAlbumId.run(item.existingAlbumId);
         deleteAssetsByAlbumId.run(item.existingAlbumId);
@@ -105,23 +146,26 @@ export const toFtsPhrase = (keyword: string): string => `"${keyword.replaceAll('
 
 const escapeLike = (keyword: string): string => keyword.replace(/[\\%_]/g, (char) => `\\${char}`);
 
-export const listAlbumsDb = (
-  page: number,
-  pageSize: number,
-  input?: {
-    libraryRootId?: string;
-    sourceType?: "folder" | "zip";
-    keyword?: string;
-    sortBy?: AlbumSortBy;
-    sortOrder?: SortOrder;
-    favoriteOnly?: boolean;
-  }
-) => {
+const ALBUM_SORT_COLUMNS: Record<AlbumSortBy, "name" | "updated_at" | "asset_count"> = {
+  name: "name",
+  updatedAt: "updated_at",
+  assetCount: "asset_count"
+};
+
+export const listAlbumsDb = (query: AlbumListQuery, input?: AlbumListFilters) => {
   const db = getDb();
   const conditions: string[] = [];
+  const pageSize = Math.max(1, Math.trunc(query.pageSize));
+  const sortBy = input?.sortBy ?? "updatedAt";
+  const sortOrder = input?.sortOrder ?? "desc";
+  const column = ALBUM_SORT_COLUMNS[sortBy];
+  const direction = sortOrder === "asc" ? "ASC" : "DESC";
+  // 先解析游标：格式错误/排序不一致直接抛 InvalidCursorError，不触库
+  const cursor = query.cursor ? decodeAlbumCursor(query.cursor, { sortBy, order: sortOrder }) : null;
   const params: Record<string, unknown> = {
-    limit: pageSize,
-    offset: (page - 1) * pageSize
+    // 多取一行判断是否还有下一页
+    limit: pageSize + 1,
+    offset: cursor ? 0 : (Math.max(1, Math.trunc(query.page ?? 1)) - 1) * pageSize
   };
 
   if (input?.libraryRootId) {
@@ -150,20 +194,32 @@ export const listAlbumsDb = (
     conditions.push("is_favorite = 1");
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-  const orderByMap: Record<AlbumSortBy, string> = {
-    name: "name",
-    updatedAt: "updated_at",
-    assetCount: "asset_count"
-  };
-  const sortBy = input?.sortBy ?? "updatedAt";
-  const sortOrder = input?.sortOrder ?? "desc";
-  const orderBy = `${orderByMap[sortBy]} ${sortOrder.toUpperCase()}, name ASC`;
+  const filterWhere = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  // 键集条件：(排序列, id) 行值比较，与 ORDER BY 列和方向严格一致，保证同值行不重不漏
+  const pageConditions = cursor
+    ? [...conditions, `(${column}, id) ${sortOrder === "asc" ? ">" : "<"} (@cursorValue, @cursorId)`]
+    : conditions;
+  if (cursor) {
+    params.cursorValue = cursor.value;
+    params.cursorId = cursor.id;
+  }
+  const pageWhere = pageConditions.length > 0 ? `WHERE ${pageConditions.join(" AND ")}` : "";
+  const orderBy = `${column} ${direction}, id ${direction}`;
 
   // 延迟关联：先在索引上定位当前页的 id，再回表取整行，深分页不再为跳过的行读取整行数据
-  const items = db.prepare(`SELECT albums.* FROM albums JOIN (SELECT id FROM albums ${where} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset) AS page USING (id) ORDER BY ${orderBy}`).all(params).map((row: unknown) => rowToAlbum(row as Record<string, unknown>));
-  const totalRow = db.prepare(`SELECT COUNT(*) AS total FROM albums ${where}`).get(params) as { total: number };
-  return { items, total: totalRow.total };
+  const rows = db
+    .prepare(`SELECT albums.* FROM albums JOIN (SELECT id FROM albums ${pageWhere} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset) AS page USING (id) ORDER BY ${orderBy}`)
+    .all(params)
+    .map((row: unknown) => rowToAlbum(row as Record<string, unknown>));
+  const hasMore = rows.length > pageSize;
+  const items = hasMore ? rows.slice(0, pageSize) : rows;
+  const last = items.at(-1);
+  const nextCursor = hasMore && last
+    ? encodeAlbumCursor({ sortBy, order: sortOrder, value: last[sortBy], id: last.id })
+    : null;
+  const countParams = Object.fromEntries(Object.entries(params).filter(([key]) => key !== "cursorValue" && key !== "cursorId" && key !== "limit" && key !== "offset"));
+  const totalRow = db.prepare(`SELECT COUNT(*) AS total FROM albums ${filterWhere}`).get(countParams) as { total: number };
+  return { items, total: totalRow.total, nextCursor };
 };
 
 export const listAlbumsByLibraryRootIdDb = (libraryRootId: string): AlbumRecord[] => {
@@ -189,10 +245,30 @@ export const updateAlbumFavoriteDb = (albumId: string, isFavorite: boolean, upda
 export const listAssetsByAlbumIdDb = (albumId: string, page?: number, pageSize?: number): AssetRecord[] => {
   const db = getDb();
   if (page && pageSize) {
-    return db.prepare("SELECT * FROM assets WHERE album_id = ? ORDER BY sort_index ASC LIMIT ? OFFSET ?").all(albumId, pageSize, (page - 1) * pageSize).map((row: unknown) => rowToAsset(row as Record<string, unknown>));
+    return db.prepare("SELECT * FROM assets WHERE album_id = ? ORDER BY sort_index ASC, id ASC LIMIT ? OFFSET ?").all(albumId, pageSize, (page - 1) * pageSize).map((row: unknown) => rowToAsset(row as Record<string, unknown>));
   }
 
-  return db.prepare("SELECT * FROM assets WHERE album_id = ? ORDER BY sort_index ASC").all(albumId).map((row: unknown) => rowToAsset(row as Record<string, unknown>));
+  return db.prepare("SELECT * FROM assets WHERE album_id = ? ORDER BY sort_index ASC, id ASC").all(albumId).map((row: unknown) => rowToAsset(row as Record<string, unknown>));
+};
+
+/** 图集内图片分页：cursor 优先（(sort_index, id) 键集），否则按 page 走 OFFSET；多取一行生成 nextCursor。 */
+export const listAssetsPageByAlbumIdDb = (
+  albumId: string,
+  query: { page?: number; cursor?: string; pageSize: number }
+): { items: AssetRecord[]; nextCursor: string | null } => {
+  const db = getDb();
+  const pageSize = Math.max(1, Math.trunc(query.pageSize));
+  const cursor = query.cursor ? decodeAssetCursor(query.cursor) : null;
+  const rows = (cursor
+    ? db.prepare("SELECT * FROM assets WHERE album_id = ? AND (sort_index, id) > (?, ?) ORDER BY sort_index ASC, id ASC LIMIT ?")
+      .all(albumId, cursor.sortIndex, cursor.id, pageSize + 1)
+    : db.prepare("SELECT * FROM assets WHERE album_id = ? ORDER BY sort_index ASC, id ASC LIMIT ? OFFSET ?")
+      .all(albumId, pageSize + 1, (Math.max(1, Math.trunc(query.page ?? 1)) - 1) * pageSize)
+  ).map((row: unknown) => rowToAsset(row as Record<string, unknown>));
+  const hasMore = rows.length > pageSize;
+  const items = hasMore ? rows.slice(0, pageSize) : rows;
+  const last = items.at(-1);
+  return { items, nextCursor: hasMore && last ? encodeAssetCursor({ sortIndex: last.sortIndex, id: last.id }) : null };
 };
 
 export const countAssetsByAlbumIdDb = (albumId: string): number => {
@@ -367,12 +443,12 @@ export const updateAlbumScanMetadataDb = (
   input: {
     sourceMtime: string | null;
     assetsFingerprint: string | null;
-    updatedAt: string;
   }
 ) => {
   const db = getDb();
+  // 只同步扫描元数据，不改 updated_at：内容未变的图集不应因重扫而“变新”。
   db.prepare(
-    "UPDATE albums SET source_mtime = @sourceMtime, assets_fingerprint = @assetsFingerprint, updated_at = @updatedAt WHERE id = @albumId"
+    "UPDATE albums SET source_mtime = @sourceMtime, assets_fingerprint = @assetsFingerprint WHERE id = @albumId"
   ).run({
     albumId,
     ...input

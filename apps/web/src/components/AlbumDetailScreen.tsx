@@ -37,6 +37,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   const [loadedItems, setLoadedItems] = useState<AssetListItemDTO[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
+  /** 游标分页：下一页游标；null 表示没有更多；undefined 表示服务端未提供（回退按总数判断） */
+  const [nextCursor, setNextCursor] = useState<string | null | undefined>(undefined);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isRescanningAlbum, setIsRescanningAlbum] = useState(false);
   const [isUpdatingFavorite, setIsUpdatingFavorite] = useState(false);
@@ -52,7 +54,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   }, [loadedItems]);
 
   const loadPage = useCallback(
-    async (targetPage: number, append: boolean): Promise<boolean> => {
+    async (targetPage: number, append: boolean, cursor?: string): Promise<boolean> => {
       if (!albumId) {
         return false;
       }
@@ -61,7 +63,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
         setIsLoadingMore(true);
       }
 
-      const result = await fetchAssets(albumId, { page: targetPage, pageSize: PAGE_SIZE });
+      const result = await fetchAssets(albumId, { page: targetPage, cursor, pageSize: PAGE_SIZE });
 
       if (!result) {
         if (append) {
@@ -77,6 +79,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
 
       setCurrentPage(result.pagination.page);
       setTotalItems(result.pagination.total);
+      setNextCursor(result.pagination.nextCursor);
       setLoadedItems((prev) => {
         if (!append) {
           return result.items;
@@ -101,6 +104,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     loadedItemsRef.current = [];
     setCurrentPage(0);
     setTotalItems(0);
+    setNextCursor(undefined);
     setVisibleRenderCount(RENDER_CHUNK_SIZE);
 
     if (albumId) {
@@ -115,7 +119,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   useEffect(() => {
     const root = scrollContainerRef.current;
     const target = loadMoreTriggerRef.current;
-    const hasMore = loadedItems.length < totalItems;
+    const hasMore = nextCursor === undefined ? loadedItems.length < totalItems : Boolean(nextCursor);
     const hasMoreToRender = visibleRenderCount < loadedItems.length;
 
     if ((!hasMore && !hasMoreToRender) || isLoading || isLoadingMore || !root || !target) {
@@ -134,7 +138,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           return;
         }
 
-        void loadPage(currentPage + 1, true);
+        void loadPage(currentPage + 1, true, nextCursor ?? undefined);
       },
       {
         root,
@@ -148,7 +152,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     return () => {
       observer.disconnect();
     };
-  }, [currentPage, isLoading, isLoadingMore, loadedItems, totalItems, visibleRenderCount, loadPage]);
+  }, [currentPage, isLoading, isLoadingMore, loadedItems, nextCursor, totalItems, visibleRenderCount, loadPage]);
 
   const preloadBefore = systemConfig?.preloadBefore ?? DEFAULT_PRELOAD_BEFORE;
   const preloadAfter = systemConfig?.preloadAfter ?? DEFAULT_PRELOAD_AFTER;
@@ -158,7 +162,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
       : (systemConfig?.albumDetailItemMinWidthMobile ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE))
     : (systemConfig?.albumDetailItemMinWidthDesktop ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP);
   const renderedItems = loadedItems.slice(0, visibleRenderCount);
-  const hasMore = loadedItems.length < totalItems;
+  const hasMore = nextCursor === undefined ? loadedItems.length < totalItems : Boolean(nextCursor);
   const hasMoreToRender = visibleRenderCount < loadedItems.length;
 
   const handleReloadFirstPage = useCallback(async () => {

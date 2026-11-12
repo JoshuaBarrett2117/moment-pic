@@ -15,7 +15,7 @@ test("相册搜索：≥3 字走 trigram 全文索引（含中文子串、大小
   insert("s2", "Tokyo Night Walk");
   insert("s3", "100%_完成");
   insert("s4", "京都");
-  const names = (keyword: string) => listAlbumsDb(1, 50, { libraryRootId: "search-root", keyword }).items.map((item) => item.name).sort();
+  const names = (keyword: string) => listAlbumsDb({ page: 1, pageSize: 50 }, { libraryRootId: "search-root", keyword }).items.map((item) => item.name).sort();
 
   assert.deepEqual(names("旅行照片"), ["京都旅行照片集 2024"]);
   assert.deepEqual(names("night"), ["Tokyo Night Walk"]);
@@ -32,8 +32,8 @@ test("相册搜索：≥3 字走 trigram 全文索引（含中文子串、大小
 
 test("相册分页：延迟关联保持排序与总数正确", () => {
   for (let index = 0; index < 25; index += 1) insert(`p${index}`, `分页-${String(index).padStart(2, "0")}`, new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString());
-  const page1 = listAlbumsDb(1, 10, { libraryRootId: "search-root", keyword: "分页-", sortBy: "updatedAt", sortOrder: "desc" });
-  const page3 = listAlbumsDb(3, 10, { libraryRootId: "search-root", keyword: "分页-", sortBy: "updatedAt", sortOrder: "desc" });
+  const page1 = listAlbumsDb({ page: 1, pageSize: 10 }, { libraryRootId: "search-root", keyword: "分页-", sortBy: "updatedAt", sortOrder: "desc" });
+  const page3 = listAlbumsDb({ page: 3, pageSize: 10 }, { libraryRootId: "search-root", keyword: "分页-", sortBy: "updatedAt", sortOrder: "desc" });
   assert.equal(page1.total, 25);
   assert.equal(page1.items[0]?.name, "分页-24");
   assert.deepEqual(page3.items.map((item) => item.name), ["分页-04", "分页-03", "分页-02", "分页-01", "分页-00"]);

@@ -18,8 +18,8 @@ import type {
 } from "../types/dto.js";
 import type { AlbumRecord, LibraryRootRecord } from "../types/store.js";
 import {
-  type AlbumSortBy,
-  type SortOrder,
+  type AlbumListFilters,
+  type AlbumListQuery,
   countAssetsByAlbumIdDb,
   deleteAlbumDb,
   deleteAssetDb,
@@ -30,7 +30,7 @@ import {
   isAssetInAlbumDb,
   listActiveAlbumSharesDb,
   listAlbumsDb,
-  listAssetsByAlbumIdDb,
+  listAssetsPageByAlbumIdDb,
   deleteAlbumShareDb,
   deleteExpiredAlbumSharesDb,
   updateAlbumFavoriteDb,
@@ -49,28 +49,21 @@ const ALBUM_LIST_CACHE_TTL_MS = 2000;
 type AlbumListResult = {
   items: AlbumListItemDTO[];
   pagination: {
+    /** 游标请求时为调用方回显的页序号（仅用于前端累积），不参与定位 */
     page: number;
     pageSize: number;
     total: number;
+    /** 下一页游标；null 表示已到最后一页 */
+    nextCursor: string | null;
   };
 };
 const albumListCache = new Map<string, { expiresAt: number; value: AlbumListResult }>();
 
-const buildAlbumListCacheKey = (
-  page: number,
-  pageSize: number,
-  input?: {
-    libraryRootId?: string;
-    sourceType?: "folder" | "zip";
-    keyword?: string;
-    sortBy?: AlbumSortBy;
-    sortOrder?: SortOrder;
-    favoriteOnly?: boolean;
-  }
-) =>
+const buildAlbumListCacheKey = (query: AlbumListQuery, input?: AlbumListFilters) =>
   JSON.stringify({
-    page,
-    pageSize,
+    page: query.page ?? 1,
+    cursor: query.cursor ?? "",
+    pageSize: query.pageSize,
     libraryRootId: input?.libraryRootId ?? "",
     sourceType: input?.sourceType ?? "",
     keyword: input?.keyword?.trim() ?? "",
@@ -105,35 +98,26 @@ export const listLibraryRoots = async (): Promise<LibraryRootDTO[]> => {
   }));
 };
 
-export const listAlbums = async (
-  page: number,
-  pageSize: number,
-  input?: {
-    libraryRootId?: string;
-    sourceType?: "folder" | "zip";
-    keyword?: string;
-    sortBy?: AlbumSortBy;
-    sortOrder?: SortOrder;
-    favoriteOnly?: boolean;
-  }
-) => {
-  const cacheKey = buildAlbumListCacheKey(page, pageSize, input);
+/** 列表分页：cursor 优先（键集分页），否则按 page（OFFSET，向后兼容）。非法游标抛 InvalidCursorError。 */
+export const listAlbums = async (query: AlbumListQuery, input?: AlbumListFilters) => {
+  const cacheKey = buildAlbumListCacheKey(query, input);
   const now = Date.now();
   const cached = albumListCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
     return cached.value;
   }
 
-  const result = listAlbumsDb(page, pageSize, input);
+  const result = listAlbumsDb(query, input);
 
   const items: AlbumListItemDTO[] = result.items.map(toAlbumListItem);
 
   const payload: AlbumListResult = {
     items,
     pagination: {
-      page,
-      pageSize,
-      total: result.total
+      page: query.page ?? 1,
+      pageSize: query.pageSize,
+      total: result.total,
+      nextCursor: result.nextCursor
     }
   };
   albumListCache.set(cacheKey, {
@@ -160,13 +144,19 @@ export const getAlbumDetail = async (albumId: string): Promise<AlbumDetailDTO | 
   };
 };
 
-export const getAlbumAssets = async (albumId: string, page = 1, pageSize = 120): Promise<AlbumAssetsDTO | null> => {
+export const getAlbumAssets = async (
+  albumId: string,
+  page = 1,
+  pageSize = 120,
+  cursor?: string
+): Promise<AlbumAssetsDTO | null> => {
   const album = findAlbumByIdDb(albumId);
   if (!album) {
     return null;
   }
 
-  const assets = await fillAssetDimensions(listAssetsByAlbumIdDb(albumId, page, pageSize));
+  const assetPage = listAssetsPageByAlbumIdDb(albumId, { page, cursor, pageSize });
+  const assets = await fillAssetDimensions(assetPage.items);
   const total = countAssetsByAlbumIdDb(albumId);
 
   const libraryRoot = findLibraryRootByIdDb(album.libraryRootId);
@@ -201,7 +191,8 @@ export const getAlbumAssets = async (albumId: string, page = 1, pageSize = 120):
     pagination: {
       page,
       pageSize,
-      total
+      total,
+      nextCursor: assetPage.nextCursor
     }
   };
 };

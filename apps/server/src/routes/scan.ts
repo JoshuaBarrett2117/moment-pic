@@ -1,204 +1,56 @@
 import type { FastifyPluginAsync } from "fastify";
-import { wsService } from "../services/websocket-service.js";
 
 import { ok } from "../lib/api.js";
-import { nowIso } from "../lib/time.js";
-import { scanLibrary } from "../services/library-scanner.js";
-import { warmupCoverThumbnails } from "../services/thumbnail-service.js";
-import { clearAlbumListCache } from "../services/album-service.js";
+import { scanTaskService, type ScanTaskRecord } from "../services/scan-task-service.js";
 
-type ScanTaskStatus = "pending" | "running" | "completed" | "failed";
-type WarmupTaskStatus = "pending" | "running" | "completed" | "failed" | "skipped";
-
-type ScanTaskRecord = {
-  id: string;
-  libraryRootId: string | null;
-  status: ScanTaskStatus;
-  createdAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  error: string | null;
-  result: {
-    albumsDiscovered: number;
-    assetsDiscovered: number;
-    failureCount: number;
-    outcome: string;
-  } | null;
-  progress: {
-    albumsDiscovered: number;
-    assetsDiscovered: number;
-    scannedAlbumsInRoot: number;
-    libraryRootId: string | null;
-    rootIndex: number;
-    totalRoots: number;
-    updatedAt: string | null;
-  };
-  warmup: {
-    status: WarmupTaskStatus;
-    startedAt: string | null;
-    finishedAt: string | null;
-    error: string | null;
-    result: {
-      total: number;
-      completed: number;
-      failed: number;
-    } | null;
-  };
-};
-
-const scanTasks = new Map<string, ScanTaskRecord>();
+const toScanTaskDTO = (task: ScanTaskRecord) => ({
+  taskId: task.id,
+  status: task.status,
+  libraryRootId: task.libraryRootId,
+  createdAt: task.createdAt,
+  startedAt: task.startedAt,
+  finishedAt: task.finishedAt,
+  error: task.error,
+  failureCount: task.result?.failureCount ?? (task.status === "failed" ? 1 : 0),
+  outcome: task.result?.outcome ?? (task.status === "failed" ? "failed" : null),
+  albumsDiscovered: task.result?.albumsDiscovered ?? 0,
+  assetsDiscovered: task.result?.assetsDiscovered ?? 0,
+  progress: task.progress,
+  warmupStatus: task.warmup.status,
+  warmupStartedAt: task.warmup.startedAt,
+  warmupFinishedAt: task.warmup.finishedAt,
+  warmupError: task.warmup.error,
+  warmupResult: task.warmup.result
+});
 
 export const scanRoutes: FastifyPluginAsync = async (app) => {
-  const runScanTask = async (taskId: string) => {
-    const task = scanTasks.get(taskId);
-    if (!task) {
-      return;
-    }
-
-    task.status = "running";
-    task.startedAt = nowIso();
-    const heartbeatTimer = setInterval(() => {
-      if (task.status === "running") {
-        task.progress.updatedAt = nowIso();
-      }
-    }, 1000);
-
-    try {
-      const result = await scanLibrary({
-        libraryRootId: task.libraryRootId ?? undefined,
-        onProgress: (progress) => {
-          task.progress = {
-            albumsDiscovered: progress.albumsDiscovered,
-            assetsDiscovered: progress.assetsDiscovered,
-            scannedAlbumsInRoot: progress.scannedAlbumsInRoot,
-            libraryRootId: progress.libraryRootId,
-            rootIndex: progress.rootIndex,
-            totalRoots: progress.totalRoots,
-            updatedAt: nowIso()
-          };
-        }
-      });
-      task.status = result.failureCount ? "failed" : "completed";
-      task.error = result.message;
-      task.result = {
-        albumsDiscovered: result.albumsDiscovered,
-        assetsDiscovered: result.assetsDiscovered,
-        failureCount: result.failureCount,
-        outcome: result.outcome
-      };
-      wsService.sendScanComplete({ libraryRootId: task.libraryRootId ?? "", albumsDiscovered: result.albumsDiscovered, assetsDiscovered: result.assetsDiscovered, failureCount: result.failureCount, message: result.message, timestamp: nowIso() });
-      task.progress = {
-        ...task.progress,
-        albumsDiscovered: result.albumsDiscovered,
-        assetsDiscovered: result.assetsDiscovered,
-        updatedAt: nowIso()
-      };
-      clearAlbumListCache();
-      task.finishedAt = nowIso();
-      task.warmup.status = "running";
-      task.warmup.startedAt = nowIso();
-      task.warmup.finishedAt = null;
-      task.warmup.error = null;
-
-      void warmupCoverThumbnails({
-        libraryRootId: task.libraryRootId ?? undefined,
-        concurrency: 3
-      })
-        .then((warmupResult) => {
-          task.warmup.status = "completed";
-          task.warmup.finishedAt = nowIso();
-          task.warmup.result = warmupResult;
-          app.log.info(
-            {
-              taskId,
-              libraryRootId: task.libraryRootId,
-              ...warmupResult
-            },
-            "cover thumbnail warmup completed"
-          );
-        })
-        .catch((error) => {
-          task.warmup.status = "failed";
-          task.warmup.finishedAt = nowIso();
-          task.warmup.error = "封面预热失败，请稍后重试";
-          app.log.warn(
-            {
-              taskId,
-              libraryRootId: task.libraryRootId,
-              error: error instanceof Error ? error.message : String(error)
-            },
-            "cover thumbnail warmup failed"
-          );
-        });
-    } catch (error) {
-      task.status = "failed";
-      task.finishedAt = nowIso();
-      task.error = "扫描失败，已保留不可判定范围的索引，请检查媒体目录后重试";
-      clearAlbumListCache();
-      wsService.sendScanComplete({ libraryRootId: task.libraryRootId ?? "", albumsDiscovered: task.progress.albumsDiscovered, assetsDiscovered: task.progress.assetsDiscovered, failureCount: 1, message: task.error, timestamp: nowIso() });
-      task.warmup.status = "skipped";
-      task.warmup.startedAt = null;
-      task.warmup.finishedAt = nowIso();
-      task.warmup.error = "scan failed, warmup skipped";
-      task.warmup.result = null;
-    } finally {
-      clearInterval(heartbeatTimer);
-    }
-  };
-
   app.post("/api/v1/scan", async (request, reply) => {
-    const body = (request.body ?? {}) as { libraryRootId?: string };
-    if (body.libraryRootId && typeof body.libraryRootId !== "string") {
+    const body = (request.body ?? {}) as { libraryRootId?: unknown };
+    if (body.libraryRootId !== undefined && body.libraryRootId !== null && typeof body.libraryRootId !== "string") {
       return reply.status(400).send({
         code: 4003,
         message: "libraryRootId must be string"
       });
     }
 
-    const taskId = `scan_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const task: ScanTaskRecord = {
-      id: taskId,
-      libraryRootId: body.libraryRootId ?? null,
-      status: "pending",
-      createdAt: nowIso(),
-      startedAt: null,
-      finishedAt: null,
-      error: null,
-      result: null,
-      progress: {
-        albumsDiscovered: 0,
-        assetsDiscovered: 0,
-        scannedAlbumsInRoot: 0,
-        libraryRootId: body.libraryRootId ?? null,
-        rootIndex: 0,
-        totalRoots: 0,
-        updatedAt: null
-      },
-      warmup: {
-        status: "pending",
-        startedAt: null,
-        finishedAt: null,
-        error: null,
-        result: null
-      }
-    };
-
-    scanTasks.set(taskId, task);
-
-    runScanTask(taskId);
+    // 同范围或全量扫描已在排队/执行时合并到已有任务，避免重复点击触发多次全量扫描
+    const { task, alreadyRunning } = scanTaskService.startScanTask({
+      libraryRootId: typeof body.libraryRootId === "string" && body.libraryRootId ? body.libraryRootId : null
+    });
 
     return ok({
-      taskId,
+      taskId: task.id,
       libraryRootId: task.libraryRootId,
       status: task.status,
       createdAt: task.createdAt,
-      warmupStatus: task.warmup.status
+      warmupStatus: task.warmup.status,
+      alreadyRunning
     });
   });
 
   app.get("/api/v1/scan/:taskId", async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
-    const task = scanTasks.get(taskId);
+    const task = scanTaskService.getScanTask(taskId);
     if (!task) {
       return reply.status(404).send({
         code: 4004,
@@ -206,50 +58,8 @@ export const scanRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    return ok({
-      taskId: task.id,
-      status: task.status,
-      libraryRootId: task.libraryRootId,
-      createdAt: task.createdAt,
-      startedAt: task.startedAt,
-      finishedAt: task.finishedAt,
-      error: task.error,
-      failureCount: task.result?.failureCount ?? (task.status === "failed" ? 1 : 0),
-      outcome: task.result?.outcome ?? (task.status === "failed" ? "failed" : null),
-      albumsDiscovered: task.result?.albumsDiscovered ?? 0,
-      assetsDiscovered: task.result?.assetsDiscovered ?? 0,
-      progress: task.progress,
-      warmupStatus: task.warmup.status,
-      warmupStartedAt: task.warmup.startedAt,
-      warmupFinishedAt: task.warmup.finishedAt,
-      warmupError: task.warmup.error,
-      warmupResult: task.warmup.result
-    });
+    return ok(toScanTaskDTO(task));
   });
 
-  app.get("/api/v1/scan", async (_request, _reply) => {
-    const tasks = Array.from(scanTasks.values())
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 50);
-
-    return ok(tasks.map(task => ({
-      taskId: task.id,
-      status: task.status,
-      libraryRootId: task.libraryRootId,
-      createdAt: task.createdAt,
-      startedAt: task.startedAt,
-      finishedAt: task.finishedAt,
-      error: task.error,
-      failureCount: task.result?.failureCount ?? (task.status === "failed" ? 1 : 0),
-      outcome: task.result?.outcome ?? (task.status === "failed" ? "failed" : null),
-      albumsDiscovered: task.result?.albumsDiscovered ?? 0,
-      assetsDiscovered: task.result?.assetsDiscovered ?? 0,
-      progress: task.progress,
-      warmupStatus: task.warmup.status,
-      warmupStartedAt: task.warmup.startedAt,
-      warmupFinishedAt: task.warmup.finishedAt,
-      warmupError: task.warmup.error,
-      warmupResult: task.warmup.result
-    })));
-  });
+  app.get("/api/v1/scan", async () => ok(scanTaskService.listScanTasks(50).map(toScanTaskDTO)));
 };

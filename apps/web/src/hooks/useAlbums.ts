@@ -5,6 +5,8 @@ import type { AlbumFavoriteDTO, AlbumShareDTO, AlbumsListDTO, AlbumAssetsDTO, Ma
 
 interface UseAlbumsOptions {
   page?: number;
+  /** 游标分页：有游标时服务端按键集定位，page 仅作回显序号 */
+  cursor?: string;
   pageSize?: number;
   keyword?: string;
   libraryRootId?: string;
@@ -36,6 +38,7 @@ export function useAlbums(): UseAlbumsReturn {
     try {
       const params = new URLSearchParams();
       if (options.page) params.append('page', String(options.page));
+      if (options.cursor) params.append('cursor', options.cursor);
       if (options.pageSize) params.append('pageSize', String(options.pageSize));
       if (options.keyword) params.append('keyword', options.keyword);
       if (options.libraryRootId) params.append('libraryRootId', options.libraryRootId);
@@ -60,6 +63,8 @@ export function useAlbums(): UseAlbumsReturn {
 
 interface UseAlbumAssetsOptions {
   page?: number;
+  /** 游标分页（sort_index 键集）；page 仅作回显序号 */
+  cursor?: string;
   pageSize?: number;
 }
 
@@ -85,6 +90,7 @@ export function useAlbumAssets(): UseAlbumAssetsReturn {
     try {
       const params = new URLSearchParams();
       if (options.page) params.append('page', String(options.page));
+      if (options.cursor) params.append('cursor', options.cursor);
       if (options.pageSize) params.append('pageSize', String(options.pageSize));
 
       const query = params.toString() ? `?${params.toString()}` : '';

@@ -47,6 +47,16 @@ export const useGalleryDataController = ({
   const smartAlbumsQueryKey = JSON.stringify([debouncedKeyword, filters.sortBy, filters.sortOrder, filters.pageSize]);
   const albums = useAccumulatedPages(albumPage, albumsQueryKey);
   const smartAlbums = useAccumulatedPages(smartAlbumPage, smartAlbumsQueryKey);
+  // 图集列表走游标分页：记下每页对应的游标（只对同一查询有效），加载/刷新第 N 页时优先用游标，
+  // 拿不到（如从网址直接打开第 N 页）时回退 page（服务端 OFFSET 兼容）。
+  const albumCursorsRef = useRef<{ key: string; pageCursors: Record<number, string> }>({ key: '', pageCursors: {} });
+  useEffect(() => {
+    albumCursorsRef.current = { key: albumsQueryKey, pageCursors: albums?.pageCursors ?? {} };
+  }, [albums, albumsQueryKey]);
+  const resolveAlbumCursor = useCallback((page: number) => {
+    if (page <= 1 || albumCursorsRef.current.key !== albumsQueryKey) return undefined;
+    return albumCursorsRef.current.pageCursors[page];
+  }, [albumsQueryKey]);
   // 最近浏览不消费关键词或筛选条件，防抖落地不应使其请求失效。
   const queryKey = JSON.stringify([currentScreen, isRecentActive ? null : debouncedKeyword, isRecentActive ? null : filters, galleryViewMode, isAuthenticated, isRecentActive, selectedSmartAlbum]);
   const queryRef = useRef({ key: queryKey, generation: 0 });
@@ -70,6 +80,7 @@ export const useGalleryDataController = ({
   const loadAlbums = useCallback(() => {
     return fetchAlbums({
       page: filters.page,
+      cursor: resolveAlbumCursor(filters.page),
       pageSize: filters.pageSize,
       keyword: debouncedKeyword || undefined,
       sortBy: filters.sortBy === 'albumCount' ? 'updatedAt' : filters.sortBy,
@@ -77,11 +88,12 @@ export const useGalleryDataController = ({
       sourceType: filters.sourceType || undefined,
       libraryRootId: filters.libraryRootId || undefined,
     });
-  }, [debouncedKeyword, fetchAlbums, filters.libraryRootId, filters.page, filters.pageSize, filters.sortBy, filters.sortOrder, filters.sourceType]);
+  }, [debouncedKeyword, fetchAlbums, filters.libraryRootId, filters.page, filters.pageSize, filters.sortBy, filters.sortOrder, filters.sourceType, resolveAlbumCursor]);
 
   const loadFavoriteAlbums = useCallback(() => {
     return fetchAlbums({
       page: filters.page,
+      cursor: resolveAlbumCursor(filters.page),
       pageSize: filters.pageSize,
       keyword: debouncedKeyword || undefined,
       sortBy: filters.sortBy === 'albumCount' ? 'updatedAt' : filters.sortBy,
@@ -90,7 +102,7 @@ export const useGalleryDataController = ({
       libraryRootId: filters.libraryRootId || undefined,
       favoriteOnly: true,
     });
-  }, [debouncedKeyword, fetchAlbums, filters.libraryRootId, filters.page, filters.pageSize, filters.sortBy, filters.sortOrder, filters.sourceType]);
+  }, [debouncedKeyword, fetchAlbums, filters.libraryRootId, filters.page, filters.pageSize, filters.sortBy, filters.sortOrder, filters.sourceType, resolveAlbumCursor]);
 
   const loadSmartAlbums = useCallback(() => {
     return fetchSmartAlbums({

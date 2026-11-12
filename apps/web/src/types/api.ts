@@ -11,6 +11,8 @@ export type PaginationDTO = {
   page: number;
   pageSize: number;
   total: number;
+  /** 游标分页：下一页游标，null 表示没有更多；不支持游标的接口不返回此字段 */
+  nextCursor?: string | null;
 };
 
 export type LibraryRootDTO = {

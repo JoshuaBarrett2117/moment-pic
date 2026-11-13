@@ -6,7 +6,7 @@
 [![Docker Image](https://img.shields.io/badge/Docker-joshualoooooo%2Fmoment--pic-2496ED?style=flat&logo=docker)](https://hub.docker.com/r/joshualoooooo/moment-pic)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-轻量级、可自托管的本地图片库。把 NAS / 硬盘上的图片目录和压缩包（ZIP / CBZ / RAR / CBR / 7z）变成能在手机和电脑上浏览的相册：自动生成缩略图、记住每个人的阅读进度、按规则或 AI 自动归纳系列图集，还能生成带密码和有效期的分享链接。
+轻量级、可自托管的本地图片库。把 NAS / 硬盘上的图片目录和压缩包（ZIP / CBZ / RAR / CBR / 7z）变成能在手机和电脑上浏览的相册：自动生成缩略图、记住每个人的阅读进度、按规则或 AI 自动归纳系列图集，还能生成带密码和有效期的分享链接。界面提供「暗夜玻璃」和「玫瑰纸感」两套主题，背景可以用默认照片墙或你自己的图片。
 
 > 面向本地 / 内网私有部署。需要外网访问时，请放在 HTTPS 反向代理之后，并设置 `TRUSTED_PROXIES`。
 
@@ -35,17 +35,27 @@
 
 - 支持两种图集：图片文件夹，以及 ZIP / CBZ / RAR / CBR / 7z 压缩包（不解压到磁盘，按需读取）
 - 可添加多个图库目录（环境变量 `LIBRARY_ROOTS` 自动登记，或在设置里添加）；首次全量扫描，之后监听目录变化并增量重扫，也可对单个图集手动重扫
+- 所有扫描（启动扫描、手动扫描、目录监听、单图集重扫）排队串行执行，不会互相冲突；重复点「扫描」会直接返回正在进行的任务
+- 内容没有变化的图集重扫后不改更新时间，「最近更新」排序保持准确
 - 支持的图片格式：jpg、jpeg、png、webp、gif、bmp
 - 缩略图后台预热，缓存有容量上限，超出后按最旧优先自动回收
 
 **浏览**
 
-- 首页按来源（文件夹 / 压缩包）筛选，按名称、更新时间、图片数量排序，按名称全文搜索
+- 首页（默认落地页）：继续阅读（带进度条）、最近更新、收藏、智能相册
+- 侧栏分为「浏览」（首页 / 全部相册 / 收藏 / 最近浏览）、「整理」（目录 / 智能相册）和「图库」三组；窗口较窄时收起为图标栏，手机上改为底部标签栏
+- 全部相册：按来源（文件夹 / 压缩包）筛选，按名称、更新时间、图片数量排序，按名称全文搜索（快捷键 `/`）；卡片有大 / 中 / 小三档
+- 列表无限滚动，后端用游标分页，翻页时不重复、不漏项；从相册返回时保留已加载内容和滚动位置
 - 「继续阅读」：每个用户各自记录看到第几张，下次打开直接跳回
-- 最近浏览、收藏图集、目录相册（按图库目录逐层进入）
+- 目录：按图库目录逐层进入，子文件夹和图集分开显示
+- 相册详情：封面横幅，网格或等高拼图两种排列
 - 大图查看器：缩放、旋转、全屏、键盘 ← → 切换、滚轮缩放，手机上左右滑动翻页
 - 四档画质（省流 / 均衡 / 高清 / 原图），可设默认档位，查看时随时切换；可设置前后预加载张数
-- 适配手机：独立的移动端布局、底部操作栏、手势翻页
+
+**外观**
+
+- 两套主题：暗夜玻璃（默认，深色磨砂玻璃）和玫瑰纸感（浅色，粉色与奶油色，卡片带相框）；大图查看器始终是深色
+- 背景三选一：默认照片墙、上传自己的图片、不用图片。上传的图片按账号保存在服务器上，换设备也能用；服务端会自动旋转、去掉 EXIF / GPS，并压缩成 WebP
 
 **自动整理（智能归纳）**
 
@@ -67,25 +77,29 @@
 **安全与运维**
 
 - 默认安全响应头（CSP、nosniff、禁止页面嵌套、no-referrer）
-- 数据库结构版本化迁移，失败自动回滚并拒绝启动
+- 数据库结构版本化迁移，失败自动回滚并拒绝启动；旧版本遇到新版迁移过的数据库会拒绝打开
 - 内置健康检查 `/api/v1/health`，Docker 镜像自带 `HEALTHCHECK`
 - 多架构镜像（amd64 / arm64）
 
 ## 截图
 
-截图使用示例图片拍摄。
+截图使用 [Wikimedia Commons](https://commons.wikimedia.org/) 上公开授权的示例图片拍摄。
 
-| 登录 | 图集详情 |
+| 全部相册 | 相册详情 |
 | :---: | :---: |
-| ![登录](docs/screenshots/login.webp) | ![图集详情](docs/screenshots/album.webp) |
-| **大图查看器与画质切换** | **分享图集** |
-| ![大图查看器](docs/screenshots/viewer.webp) | ![分享](docs/screenshots/share.webp) |
-| **用户管理** | **智能归纳设置** |
-| ![用户管理](docs/screenshots/settings-users.webp) | ![智能归纳](docs/screenshots/settings-smart.webp) |
+| ![全部相册](docs/screenshots/albums.webp) | ![相册详情](docs/screenshots/album.webp) |
+| **大图查看器** | **玫瑰纸感主题** |
+| ![大图查看器](docs/screenshots/viewer.webp) | ![玫瑰纸感主题](docs/screenshots/theme-rose.webp) |
+| **外观：主题与背景** | **登录** |
+| ![外观设置](docs/screenshots/appearance.webp) | ![登录](docs/screenshots/login.webp) |
+| **用户管理** | **智能相册规则** |
+| ![用户管理](docs/screenshots/settings-users.webp) | ![智能相册](docs/screenshots/settings-smart.webp) |
+| **分享页（访客视角）** | |
+| ![分享](docs/screenshots/share.webp) | |
 
-**手机端**
+**手机端**：首页、全部相册、相册详情
 
-![手机端：首页、图集、大图](docs/screenshots/mobile.webp)
+![手机端](docs/screenshots/mobile.webp)
 
 ## 部署
 
@@ -116,7 +130,7 @@ services:
       TZ: Asia/Shanghai
       LIBRARY_ROOTS: /photos                # 启动时自动登记为图库目录，多个用逗号分隔
     volumes:
-      - ./config:/data                      # 数据库与缩略图缓存
+      - ./config:/data                      # 数据库、缩略图缓存与背景图
       - /path/to/photos:/photos:ro          # 你的图片目录，只读挂载即可，可挂多个
     restart: unless-stopped
 ```
@@ -210,9 +224,10 @@ Lucky、Caddy、群晖自带反代同理：开启 WebSocket 支持，并把反�
 ### 首次使用
 
 1. 用 `admin` 和 `ADMIN_PASSWORD` 登录。
-2. 设置了 `LIBRARY_ROOTS` 时，目录已自动登记并开始首次扫描，首页会陆续出现图集，缩略图在后台生成。也可以在「设置 → 基础设置 → 添加库目录」手动添加，填写**容器内**路径，然后点「扫描全部」。
+2. 设置了 `LIBRARY_ROOTS` 时，目录已自动登记并开始首次扫描，首页会陆续出现图集，缩略图在后台生成。也可以在「设置 → 图库与浏览 → 添加库目录」手动添加，填写**容器内**路径，然后点「扫描全部」。
 3. 想隐藏某个 `LIBRARY_ROOTS` 里的目录，请在设置里「禁用」而不是删除：删除后只要它还在环境变量里，下次重启会重新登记。
 4. 建议到「设置 → 账号」改成你自己的用户名和密码；需要给家人看时，在「设置 → 用户管理」添加只读用户。
+5. 在「设置 → 外观」切换主题和背景。主题与背景模式保存在当前浏览器；上传的背景图保存在服务器上，跟着账号走。
 
 数据库里已有用户后，`ADMIN_PASSWORD` 不再生效，以页面上设置的密码为准。
 
@@ -223,7 +238,7 @@ Lucky、Caddy、群晖自带反代同理：开启 WebSocket 支持，并把反�
 | `ADMIN_PASSWORD` | — | 首次启动（数据库中还没有用户）时必填，用来创建 `admin` |
 | `ADMIN_PASSWORD_RESET` | — | 设为 `true` 重启一次，会用 `ADMIN_PASSWORD` 重置第一个管理员的密码。忘记密码时用，用完删掉 |
 | `PORT` / `HOST` | `3210` / `0.0.0.0` | 监听端口与地址 |
-| `SQLITE_PATH` | `/data/gallery.sqlite` | 数据库文件 |
+| `SQLITE_PATH` | `/data/gallery.sqlite` | 数据库文件。用户上传的背景图存放在同级的 `backgrounds/` 目录 |
 | `CACHE_DIR` | `/data/cache` | 缩略图缓存目录 |
 | `CACHE_MAX_BYTES` | `5368709120` | 缓存容量上限（5 GiB），超出后按最旧优先回收 |
 | `CACHE_GC_MIN_AGE_HOURS` | `24` | 缓存文件的最短保留时间 |
@@ -245,26 +260,29 @@ docker compose pull          # 使用固定 sha 标签时，先改 compose 里�
 docker compose up -d
 ```
 
-数据库结构在启动时自动迁移。迁移失败会整体回滚并拒绝启动，不会留下半升级状态。每个版本的变化和注意事项见 [CHANGELOG.md](CHANGELOG.md)。
+数据库结构在启动时自动迁移。迁移失败会整体回滚并拒绝启动，不会留下半升级状态。**升级前请先备份数据库**：迁移后的数据库，旧版本镜像会拒绝启动。每个版本的变化和注意事项见 [CHANGELOG.md](CHANGELOG.md)。
+
+当前数据库结构版本为 5（迁移 0005 为游标分页新增了 `albums` 复合索引）。图库很大时，首次启动建索引会稍慢一些。
 
 从 0.1.x 升级到 0.2.0：首次启动会用 `ADMIN_PASSWORD` 创建 `admin` 账号，旧的登录 Cookie 失效，所有设备需要重新登录一次；原有阅读进度归属第一个管理员。
 
 **备份**
 
-需要备份的只有配置目录里的数据库（缓存可以重新生成）：
+需要备份的是配置目录里的数据库和自定义背景图（`cache` 目录可以重新生成）：
 
 ```bash
 docker compose stop
 cp config/gallery.sqlite* /path/to/backup/
+cp -r config/backgrounds /path/to/backup/     # 用户上传的背景图，没有上传过可以跳过
 docker compose start
 ```
 
-**回滚**：把 `image` 改回旧标签，并恢复升级前备份的数据库。新版本迁移过的数据库不能被旧版本直接读取。
+**回滚**：把 `image` 改回旧标签，并恢复升级前备份的数据库。新版本迁移过的数据库不能被旧版本直接读取（旧版检测到更高的 `user_version` 会拒绝启动）。
 
 ## 常见问题
 
 **扫描后首页是空的？**
-看启动日志里是否有「LIBRARY_ROOTS 中的目录未登记」的警告，并确认「设置 → 基础设置」里的库目录填的是容器内路径。用 `docker exec moment-pic ls <路径>` 检查容器能否读到文件。
+看启动日志里是否有「LIBRARY_ROOTS 中的目录未登记」的警告，并确认「设置 → 图库与浏览」里的库目录填的是容器内路径。用 `docker exec moment-pic ls <路径>` 检查容器能否读到文件。
 
 **缩略图大量失败或看不到图片？**
 多半是权限问题：容器以 uid 1000 运行，读不到媒体目录。给媒体目录加读权限，或参考上文改用 `user: "0:0"`。
@@ -274,6 +292,9 @@ docker compose start
 
 **外网访问时扫描进度不更新？**
 反代没有转发 WebSocket，或 `WS_ALLOWED_ORIGINS` 没有包含访问域名。
+
+**`docker compose pull` 拉到的 `latest` 是旧版本？**
+部分 Docker Hub 镜像加速源会长时间缓存 `latest`。改用固定的 `sha-<提交>` 标签拉取即可，或者直连 Docker Hub。
 
 **数据库报 `database is locked` 或损坏？**
 配置目录不能放在 NFS / SMB 上，请改用本地磁盘。
@@ -310,8 +331,11 @@ apps/
     src/services         业务逻辑：扫描、缩略图、压缩包读取、智能归纳、认证
     src/repositories     SQLite 数据访问
     src/db/migrations    版本化数据库迁移（PRAGMA user_version）
-  web/                   React 19 + Vite + Tailwind CSS 4
-docs/                    设计文档与截图；docs/archive 为历史验收记录
+  web/                   React 19 + Vite 8 + Tailwind CSS 4
+    src/components       页面与组件（首页、相册、详情、查看器、设置等）
+    src/theme            主题变量（glass-dark 暗夜玻璃、rose-paper 玫瑰纸感）
+    public/backgrounds   默认照片墙背景
+docs/                    设计文档与截图；主题设计见 docs/ui-glass-theme-design.md，docs/archive 为历史验收记录
 scripts/                 测试发现与运行脚本
 ```
 

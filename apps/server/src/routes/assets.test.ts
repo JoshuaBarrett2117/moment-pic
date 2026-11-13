@@ -251,3 +251,76 @@ test("thumbnail fit 白名单拒绝非法值，cover/inside 可通过协议校�
     }
   } finally { await app.close(); }
 });
+
+test("媒体缓存：缩略图 304 在生成前判断、带 Vary；URL 版本匹配时永久缓存；原图 ETag/304/Range/416", async () => {
+  const sharp = (await import("sharp")).default;
+  const { assetVersion, etagMatches, parseByteRange } = await import("../lib/media-cache.js");
+  const thumbnailService = await import("../services/thumbnail-service.js");
+  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "moment-pic-route-cache-"));
+  const sourcePath = path.join(tempDir, "photo.jpg");
+  const app = Fastify();
+  try {
+    const image = await sharp({ create: { width: 64, height: 48, channels: 3, background: { r: 200, g: 80, b: 20 } } }).jpeg().toBuffer();
+    await fs.promises.writeFile(sourcePath, image);
+    const seeded = await seedFolderAsset(sourcePath);
+    const asset = { ...seeded, sourceMtime: "1700000000000", sizeBytes: String(image.length) };
+    const { getDb } = await import("../db/sqlite.js");
+    getDb().prepare("UPDATE assets SET source_mtime = ?, size_bytes = ? WHERE id = ?").run(asset.sourceMtime, asset.sizeBytes, asset.id);
+    const version = assetVersion(asset);
+    await app.register(assetRoutes);
+    await app.ready();
+
+    const first = await app.inject({ url: `/api/v1/assets/${asset.id}/thumbnail?v=${version}`, headers: { accept: "image/webp" } });
+    assert.equal(first.statusCode, 200);
+    assert.equal(first.headers["cache-control"], "private, max-age=31536000, immutable");
+    assert.equal(first.headers.vary, "Accept");
+    const etag = String(first.headers.etag);
+    assert.match(etag, /^"thumb-/);
+
+    const stale = await app.inject({ url: `/api/v1/assets/${asset.id}/thumbnail?v=old`, headers: { accept: "image/webp" } });
+    assert.equal(stale.headers["cache-control"], "private, max-age=86400, must-revalidate");
+
+    // 304 不应触发生成：删掉缓存文件后仍能直接 304
+    const { env } = await import("../config/env.js");
+    const cacheKey = thumbnailService.planThumbnail(asset, { format: "webp" }).cacheKey;
+    const cached = (await fs.promises.readdir(env.cacheDir, { recursive: true })).filter((name) => String(name).includes(cacheKey));
+    assert.ok(cached.length > 0);
+    for (const name of cached) await fs.promises.rm(path.join(env.cacheDir, String(name)), { force: true });
+    const revalidated = await app.inject({ url: `/api/v1/assets/${asset.id}/thumbnail`, headers: { accept: "image/webp", "if-none-match": `W/${etag}, "other"` } });
+    assert.equal(revalidated.statusCode, 304);
+    assert.equal(revalidated.headers.etag, etag);
+    assert.equal((await fs.promises.readdir(env.cacheDir, { recursive: true })).filter((name) => String(name).includes(cacheKey)).length, 0);
+
+    const original = await app.inject({ url: `/api/v1/assets/${asset.id}/original?v=${version}` });
+    assert.equal(original.statusCode, 200);
+    assert.equal(original.headers.etag, `"orig-${version}"`);
+    assert.equal(original.headers["accept-ranges"], "bytes");
+    assert.equal(original.headers["cache-control"], "private, max-age=31536000, immutable");
+    assert.equal(original.headers["last-modified"], new Date(1700000000000).toUTCString());
+    assert.equal(original.rawPayload.length, image.length);
+
+    assert.equal((await app.inject({ url: `/api/v1/assets/${asset.id}/original`, headers: { "if-none-match": `"orig-${version}"` } })).statusCode, 304);
+
+    const partial = await app.inject({ url: `/api/v1/assets/${asset.id}/original`, headers: { range: "bytes=0-9" } });
+    assert.equal(partial.statusCode, 206);
+    assert.equal(partial.headers["content-range"], `bytes 0-9/${image.length}`);
+    assert.deepEqual(partial.rawPayload, image.subarray(0, 10));
+
+    const unsatisfiable = await app.inject({ url: `/api/v1/assets/${asset.id}/original`, headers: { range: `bytes=${image.length + 5}-` } });
+    assert.equal(unsatisfiable.statusCode, 416);
+    assert.equal(unsatisfiable.headers["content-range"], `bytes */${image.length}`);
+
+    // If-Range 与 ETag 不一致时忽略 Range，返回整文件
+    const ifRange = await app.inject({ url: `/api/v1/assets/${asset.id}/original`, headers: { range: "bytes=0-9", "if-range": '"stale"' } });
+    assert.equal(ifRange.statusCode, 200);
+    assert.equal(ifRange.rawPayload.length, image.length);
+
+    assert.ok(etagMatches("*", '"x"'));
+    assert.ok(!etagMatches('"a", "b"', '"c"'));
+    assert.deepEqual(parseByteRange("bytes=-5", 100), { start: 95, end: 99 });
+    assert.equal(parseByteRange("bytes=0-1,4-5", 100), null);
+  } finally {
+    await app.close();
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+});

@@ -227,7 +227,7 @@ const getInitialFilters = (initialViewMode: GalleryViewMode): GalleryFilters => 
   return {
     // 列表改为无限滚动：刷新或从网址进入时总是从第 1 页开始
     page: 1,
-    pageSize: urlFilters.pageSize || 24,
+    pageSize: urlFilters.pageSize || 60,
     keyword: urlFilters.keyword || '',
     sortBy: urlFilters.sortBy || defaultSortBy,
     sortOrder: urlFilters.sortOrder || 'desc',

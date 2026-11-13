@@ -361,6 +361,12 @@ export const findAlbumShareByTokenDb = (token: string): AlbumShareRecord | null 
   return row ? rowToAlbumShare(row) : null;
 };
 
+/** 只返回未过期的分享（读路径用，不写库）。 */
+export const findActiveAlbumShareByTokenDb = (token: string, nowIso: string): AlbumShareRecord | null => {
+  const row = getDb().prepare("SELECT id, album_id, token, password_hash, expires_at, created_at FROM album_shares WHERE token = ? AND expires_at > ? LIMIT 1").get(token, nowIso) as Record<string, unknown> | undefined;
+  return row ? rowToAlbumShare(row) : null;
+};
+
 export const updateAlbumSharePasswordDb = (shareId: string, hash: string): boolean => {
   return getDb().prepare("UPDATE album_shares SET password_hash = ? WHERE id = ? AND expires_at > ?").run(hash, shareId, new Date().toISOString()).changes > 0;
 };

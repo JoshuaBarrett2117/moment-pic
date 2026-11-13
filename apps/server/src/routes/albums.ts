@@ -1,6 +1,4 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
-import { lookup as lookupMimeType } from "mime-types";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { mediaRequestSignal } from "../lib/media-request.js";
 import { isArchiveControlError } from "../services/archive/archive-limits.js";
@@ -28,14 +26,12 @@ import {
   setAlbumFavorite
   , resetManagedAlbumSharePassword
 } from "../services/album-service.js";
-import { InvalidCursorError } from "../repositories/album-repository.js";
+import { findAssetByIdDb, InvalidCursorError } from "../repositories/album-repository.js";
+import { sendOriginal, sendVariant } from "./media-response.js";
 import { DirectoryAlbumPathInvalidError, DirectoryAlbumRootNotFoundError, listDirectoryAlbums } from "../services/directory-album-service.js";
 import { rescanAlbum, ScanAlbumNotFoundError, ScanAlbumSourceInvalidError, ScanLibraryRootNotFoundError } from "../services/library-scanner.js";
 import {
   AssetNotFoundError,
-  ensurePreview,
-  ensureThumbnail,
-  openOriginalImage,
   OriginalAssetSourceMissingError
 } from "../services/thumbnail-service.js";
 
@@ -65,33 +61,27 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     if (!canReadSharedAsset(token, assetId, accessToken)) {
       return sendSharedAssetNotFound(reply);
     }
+    const asset = findAssetByIdDb(assetId);
+    if (!asset) return sendSharedAssetNotFound(reply);
     const signal = mediaRequestSignal(request, reply);
-
-    try {
-      if (variant === "thumbnail") {
-        const thumbnail = await ensureThumbnail(assetId, { signal });
-        reply.type(thumbnail.mimeType);
-        return reply.send(fs.createReadStream(thumbnail.filePath));
-      }
-
-      if (variant === "preview") {
-        const preview = await ensurePreview(assetId, { preset, signal });
-        reply.type(preview.mimeType);
-        return reply.send(fs.createReadStream(preview.filePath));
-      }
-
-      const { asset, body, sizeBytes } = await openOriginalImage(assetId, signal);
-      const mimeType = lookupMimeType(asset.name) || "application/octet-stream";
-      if (sizeBytes !== null && Number.isFinite(sizeBytes)) {
-        reply.header("Content-Length", String(sizeBytes));
-      }
-      reply.type(mimeType);
-      return reply.send(body);
-    } catch (error) {
+    const format = (normalizeHeader(request.headers.accept) ?? "").includes("image/webp") ? "webp" as const : "jpeg" as const;
+    const onError = async (error: unknown) => {
       if (error instanceof AssetNotFoundError || error instanceof OriginalAssetSourceMissingError) {
         return sendSharedAssetNotFound(reply);
       }
       throw error;
+    };
+
+    try {
+      if (variant === "thumbnail") {
+        return await sendVariant(request, reply, asset, { kind: "thumbnail", format }, signal, onError);
+      }
+      if (variant === "preview") {
+        return await sendVariant(request, reply, asset, { kind: "preview", preset, format }, signal, onError);
+      }
+      return await sendOriginal(request, reply, asset, signal);
+    } catch (error) {
+      return onError(error);
     }
   };
 

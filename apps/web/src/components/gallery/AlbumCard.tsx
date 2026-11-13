@@ -43,7 +43,7 @@ export function AlbumCard({ album, onNavigateToAlbum, onFavoriteToggle, onShare 
               event.stopPropagation();
               onShare?.(album);
             }}
-            className="flex h-8 w-8 items-center justify-center mp-glass-overlay rounded-full text-on-surface-variant transition-colors hover:text-primary"
+            className="flex h-8 w-8 items-center justify-center mp-photo-btn rounded-full text-on-surface-variant transition-colors hover:text-primary"
             title="分享图集"
           >
             <Share2 className="h-4 w-4" />
@@ -54,7 +54,7 @@ export function AlbumCard({ album, onNavigateToAlbum, onFavoriteToggle, onShare 
               event.stopPropagation();
               onFavoriteToggle?.(album);
             }}
-            className={`flex h-8 w-8 items-center justify-center mp-glass-overlay rounded-full transition-colors ${album.isFavorite ? 'text-favorite' : 'text-on-surface-variant hover:text-favorite'}`}
+            className={`flex h-8 w-8 items-center justify-center mp-photo-btn rounded-full transition-colors ${album.isFavorite ? 'text-favorite' : 'text-on-surface-variant hover:text-favorite'}`}
             title={album.isFavorite ? '取消收藏' : '收藏图集'}
             aria-pressed={album.isFavorite}
           >

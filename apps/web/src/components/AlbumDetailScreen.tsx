@@ -19,7 +19,7 @@ interface AlbumDetailScreenProps {
   /** 侧栏目录里点了同级图集：直接跳到对应图集 */
 }
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 96;
 const RENDER_CHUNK_SIZE = 96;
 const DEFAULT_PRELOAD_BEFORE = 2;
 const DEFAULT_PRELOAD_AFTER = 3;
@@ -454,7 +454,7 @@ function AssetTile({ asset, onOpen, justifiedRowHeight }: { asset: AssetListItem
       onClick={onOpen}
       style={style}
       aria-label={`查看 ${asset.name}`}
-      className={`mp-cover-card group ${justifiedRowHeight ? 'max-h-[60vh]' : 'aspect-square'}`}
+      className={`mp-cover-card mp-cv group ${justifiedRowHeight ? 'max-h-[60vh]' : 'aspect-square'}`}
     >
       {failed ? (
         <span className="flex h-full w-full flex-col items-center justify-center gap-2 bg-surface-container-high text-outline">

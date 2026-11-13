@@ -1,4 +1,5 @@
 import { type ImgHTMLAttributes, useEffect, useRef, useState } from 'react';
+import { isScrollingRecently, observeVisibility } from '../lib/visibility-observer';
 
 type ThrottledImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
   src: string;
@@ -9,8 +10,8 @@ const MAX_RETRIES = 2;
 const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 /**
- * 进入视口并停留 250ms 后才开始加载（快速滚动时不发请求），失败最多重试 2 次（1s、2s 退避）。
- * 替代 react-cool-img，行为保持一致。
+ * 进入视口即加载；只有在快速滚动中进入视口时才等 250ms（滚过去就不发请求）。
+ * 所有图片共享一个 IntersectionObserver。失败最多重试 2 次（1s、2s 退避）。
  */
 export function ThrottledImage({ src, onError, ...props }: ThrottledImageProps) {
   const ref = useRef<HTMLImageElement>(null);
@@ -24,23 +25,23 @@ export function ThrottledImage({ src, onError, ...props }: ThrottledImageProps) 
   useEffect(() => {
     const node = ref.current;
     if (!node || visible) return;
-    if (typeof IntersectionObserver === 'undefined') {
-      setVisible(true);
-      return;
-    }
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry?.isIntersecting) {
-        timer = setTimeout(() => setVisible(true), VISIBLE_DEBOUNCE_MS);
-      } else if (timer) {
-        clearTimeout(timer);
-        timer = undefined;
-      }
-    }, { rootMargin: '200px' });
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
+    const clear = () => {
       if (timer) clearTimeout(timer);
+      timer = undefined;
+    };
+    const stop = observeVisibility(node, (isIntersecting) => {
+      clear();
+      if (!isIntersecting) return;
+      if (!isScrollingRecently()) {
+        setVisible(true);
+        return;
+      }
+      timer = setTimeout(() => setVisible(true), VISIBLE_DEBOUNCE_MS);
+    });
+    return () => {
+      stop();
+      clear();
     };
   }, [visible]);
 

@@ -25,7 +25,7 @@ export function CoverCard({ title, meta, coverUrl, placeholderIcon, tag, badge, 
   return (
     <motion.div variants={galleryCardItemVariants} className="group">
       {notice}
-      <div className="mp-cover-card">
+      <div className="mp-cover-card mp-cv">
         <button
           type="button"
           onClick={onOpen}

@@ -33,3 +33,12 @@ test("health SELECT 1 成功返回真实版本、uptime/时延，SQLite 锁等�
     assert.equal(getDb().pragma("busy_timeout", { simple: true }), 2000);
   } finally { await app.close(); }
 });
+
+test("health 附带扫描状态：扫描进行中仍返回 ok", async () => {
+  const { getHealth } = await import("../services/health-service.js");
+  const busy = getHealth(() => undefined, () => ({ busy: true, label: "library:*" }));
+  assert.equal(busy.status, "ok");
+  assert.deepEqual(busy.scan, { busy: true, label: "library:*" });
+  const idle = getHealth(() => undefined);
+  assert.equal(typeof idle.scan.busy, "boolean");
+});

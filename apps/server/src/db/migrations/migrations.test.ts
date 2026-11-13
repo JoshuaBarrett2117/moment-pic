@@ -95,8 +95,29 @@ test("0006 清空动图（gif/webp）的错误尺寸，其他资产保持不变"
     db.prepare(`INSERT INTO assets (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`).run(...keys.map((k) => values[k] as string | number));
   };
   insert("g1", "a.GIF"); insert("w1", "b.webp"); insert("j1", "c.jpg");
-  assert.deepEqual(runMigrations(db), [6]);
+  assert.deepEqual(runMigrations(db, MIGRATIONS.slice(0, 6)), [6]);
   const rows = db.prepare("SELECT id, width, height FROM assets ORDER BY id").all();
   assert.deepEqual(rows, [{ id: "g1", width: null, height: null }, { id: "j1", width: 400, height: 3000 }, { id: "w1", width: null, height: null }]);
   assert.equal(getSchemaVersion(db), 6);
+});
+
+test("0007 最近浏览按用户去重：每个图集只留最后一次，归属最早的管理员，最近列表走索引", () => {
+  const db = new Database(":memory:");
+  runMigrations(db, MIGRATIONS.slice(0, 6));
+  db.prepare("INSERT INTO users (id, username, password_hash, role, created_at, updated_at) VALUES ('u-admin', 'admin', 'x', 'admin', '2026-01-01', '2026-01-01')").run();
+  const insert = db.prepare("INSERT INTO album_views (id, album_id, viewed_at) VALUES (?, ?, ?)");
+  insert.run("v1", "a1", "2026-10-01");
+  insert.run("v2", "a1", "2026-10-03");
+  insert.run("v3", "a2", "2026-10-02");
+  assert.deepEqual(runMigrations(db), [7]);
+  const rows = db.prepare("SELECT user_id, album_id, viewed_at FROM album_views ORDER BY album_id").all();
+  assert.deepEqual(rows, [
+    { user_id: "u-admin", album_id: "a1", viewed_at: "2026-10-03" },
+    { user_id: "u-admin", album_id: "a2", viewed_at: "2026-10-02" }
+  ]);
+  db.prepare("INSERT INTO album_views (user_id, album_id, viewed_at) VALUES ('u-admin', 'a2', '2026-10-05') ON CONFLICT (user_id, album_id) DO UPDATE SET viewed_at = excluded.viewed_at").run();
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM album_views").get() as { n: number }).n, 2);
+  const plan = db.prepare("EXPLAIN QUERY PLAN SELECT album_id FROM album_views WHERE user_id = 'u-admin' ORDER BY viewed_at DESC LIMIT 10").all() as Array<{ detail: string }>;
+  assert.ok(plan.some((row) => row.detail.includes("idx_album_views_user_viewed_at")), JSON.stringify(plan));
+  assert.ok(!plan.some((row) => row.detail.includes("TEMP B-TREE")), JSON.stringify(plan));
 });

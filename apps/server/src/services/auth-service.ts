@@ -12,6 +12,7 @@ import {
 import { nowIso } from "../lib/time.js";
 import { SharePasswordService } from "./share-password.js";
 import { claimLegacyProgressDb, deleteUserProgressDb } from "../repositories/album-progress-repository.js";
+import { claimLegacyAlbumViewsDb, deleteUserAlbumViewsDb } from "../repositories/system-config-repository.js";
 import { LEGACY_PROGRESS_OWNER } from "../db/migrations/0004-per-user-progress.js";
 
 export const SESSION_TTL_SECONDS = 24 * 60 * 60;
@@ -68,6 +69,7 @@ export const ensureInitialAdmin = (adminPassword: string | undefined, options: {
     const id = makeId("user");
     insertUserDb({ id, username: DEFAULT_ADMIN_USERNAME, passwordHash: hashPasswordSync(password), role: "admin", disabled: false, createdAt: timestamp, updatedAt: timestamp });
     claimLegacyProgressDb(id, LEGACY_PROGRESS_OWNER);
+    claimLegacyAlbumViewsDb(id, LEGACY_PROGRESS_OWNER);
     return;
   }
   if (options.reset) {
@@ -197,5 +199,6 @@ export const deleteUser = (actor: UserRecord, userId: string): void => {
   if (actor.id === target.id) throw httpError(409, "不能删除自己");
   assertKeepsAdmin(target, { deleting: true });
   deleteUserProgressDb(target.id);
+  deleteUserAlbumViewsDb(target.id);
   deleteUserDb(target.id);
 };

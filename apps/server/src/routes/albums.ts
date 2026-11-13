@@ -4,7 +4,7 @@ import { mediaRequestSignal } from "../lib/media-request.js";
 import { isArchiveControlError } from "../services/archive/archive-limits.js";
 
 import { ok } from "../lib/api.js";
-import { buildShareCookie, getShareAccessToken } from "../lib/auth.js";
+import { buildShareCookie, getSession, getShareAccessToken } from "../lib/auth.js";
 import { parseBoundedInteger, parseEnumValue, parseOptionalString } from "../lib/request-query.js";
 import {
   AlbumShareInputInvalidError,
@@ -34,6 +34,9 @@ import {
   AssetNotFoundError,
   OriginalAssetSourceMissingError
 } from "../services/thumbnail-service.js";
+
+/** 最近浏览按登录用户隔离；无会话（理论上已被鉴权钩子拦截）时返回 null。 */
+const sessionUserId = (request: FastifyRequest): string | null => (request.authSession ?? getSession(request))?.user.id ?? null;
 
 export const albumRoutes: FastifyPluginAsync = async (app) => {
   const normalizeHeader = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
@@ -153,7 +156,8 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/v1/albums/recent", async (request, reply) => {
     const query = request.query as { limit?: string };
     const limit = parseBoundedInteger(query.limit, { defaultValue: 50, min: 1, max: 100 });
-    const payload = await getRecentAlbums(limit);
+    const userId = sessionUserId(request);
+    const payload = userId ? await getRecentAlbums(userId, limit) : [];
 
     return ok({ items: payload });
   });
@@ -187,7 +191,10 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/api/v1/albums/:albumId/view", async (request, reply) => {
     const { albumId } = request.params as { albumId: string };
-    await recordAlbumView(albumId);
+    {
+      const userId = sessionUserId(request);
+      if (userId) await recordAlbumView(userId, albumId);
+    }
     return ok({ success: true });
   });
 
@@ -334,7 +341,10 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    await recordAlbumView(albumId);
+    {
+      const userId = sessionUserId(request);
+      if (userId) await recordAlbumView(userId, albumId);
+    }
 
     return ok(album);
   });

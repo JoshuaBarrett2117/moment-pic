@@ -393,18 +393,20 @@ export const rescanAlbum = (albumId: string) =>
 export const rescanAlbums = (albumIds: string[]) =>
   scanCoordinator.runExclusive(`albums:${albumIds.length}`, () => rescanAlbumsUnlocked(albumIds));
 
-export const ensureScannedLibrary = async () => {
+/** 空库且已登记图库目录时执行首次全量扫描；返回是否真的扫描了。 */
+export const ensureScannedLibrary = async (): Promise<boolean> => {
   const existingRoots = listLibraryRootsDb();
   if (existingRoots.length === 0) {
-    return;
+    return false;
   }
 
   const existing = listAlbumsDb({ page: 1, pageSize: 1 });
   if (existing.total > 0) {
-    return;
+    return false;
   }
 
   await scanLibrary();
+  return true;
 };
 
 export const listExistingLibraryRoots = () => listLibraryRootsDb();

@@ -17,7 +17,6 @@ import {
   type GalleryDisplayMode,
   type GallerySourceType,
 } from './gallery/gallery-screen-state';
-import { useChunkedAlbumRendering } from './gallery/useChunkedAlbumRendering';
 import { useGalleryScrollRestoration } from './gallery/useGalleryScrollRestoration';
 import { hasMorePages } from '../app/infinite-pages';
 import { useMobile, useSystemConfig, useWideMobile } from '../hooks';
@@ -107,10 +106,9 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
   const isHome = resolvedDisplayMode === 'home';
   const isSmartAlbumsMode = resolvedDisplayMode === 'smartAlbums';
   const isDirectoryAlbumsMode = resolvedDisplayMode === 'directoryAlbums';
-  const { loadMoreRef, renderedItems: renderedAlbums, hasMoreItems } = useChunkedAlbumRendering(albums);
   const { mainRef, rememberScrollPosition } = useGalleryScrollRestoration({ scrollPosition, onScrollPositionChange });
   const pageSentinelRef = useRef<HTMLDivElement | null>(null);
-  const canLoadMorePages = Boolean(onLoadMore) && hasMorePages(pagination) && !hasMoreItems;
+  const canLoadMorePages = Boolean(onLoadMore) && hasMorePages(pagination);
 
   const hasActiveFilters = hasGalleryActiveFilters({
     isRecentActive,
@@ -212,11 +210,12 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
 
             <GalleryAlbumGrid
               albums={albums}
-              renderedAlbums={renderedAlbums}
               isLoading={isLoading}
               isMobile={isMobile}
               isSmartAlbumsMode={isSmartAlbumsMode}
-              gridGapClass={isMobile ? 'gap-3' : 'gap-4 xl:gap-5'}
+              gridGapClass={isMobile ? 'gap-3' : 'gap-4'}
+              gridGap={isMobile ? 12 : 16}
+              scrollElementRef={mainRef}
               albumListItemMinWidth={albumListItemMinWidth}
               emptyTitle={emptyText.title}
               emptyDescription={emptyText.description}
@@ -226,7 +225,6 @@ export const GalleryScreen: React.FC<GalleryScreenProps> = ({
               onAlbumShare={setSharingAlbum}
             />
 
-            {hasMoreItems && <div ref={loadMoreRef} className="h-10" aria-hidden="true" />}
             {canLoadMorePages && (
               <div ref={pageSentinelRef} className="flex items-center justify-center gap-2 py-8 text-sm text-on-surface-variant">
                 {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}

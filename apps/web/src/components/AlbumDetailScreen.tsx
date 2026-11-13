@@ -8,6 +8,7 @@ import { AlbumPathTrail } from './AlbumPathTrail';
 import { useToast } from './Toast';
 import { useAlbumReader } from '../hooks/use-album-reader';
 import { ViewerGallery } from './ViewerGallery';
+import { VirtualGrid } from './VirtualGrid';
 import { useAlbumAssets, rescanAlbum, setAlbumFavorite, useMobile, useSystemConfig, useWideMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
@@ -120,7 +121,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     const root = scrollContainerRef.current;
     const target = loadMoreTriggerRef.current;
     const hasMore = nextCursor === undefined ? loadedItems.length < totalItems : Boolean(nextCursor);
-    const hasMoreToRender = visibleRenderCount < loadedItems.length;
+    // 网格模式由虚拟网格渲染全部已加载项，分批渲染只用于等高拼图
+    const hasMoreToRender = layout === 'justified' && visibleRenderCount < loadedItems.length;
 
     if ((!hasMore && !hasMoreToRender) || isLoading || isLoadingMore || !root || !target) {
       return;
@@ -152,7 +154,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     return () => {
       observer.disconnect();
     };
-  }, [currentPage, isLoading, isLoadingMore, loadedItems, nextCursor, totalItems, visibleRenderCount, loadPage]);
+  }, [currentPage, isLoading, isLoadingMore, layout, loadedItems, nextCursor, totalItems, visibleRenderCount, loadPage]);
 
   const preloadBefore = systemConfig?.preloadBefore ?? DEFAULT_PRELOAD_BEFORE;
   const preloadAfter = systemConfig?.preloadAfter ?? DEFAULT_PRELOAD_AFTER;
@@ -163,7 +165,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
     : (systemConfig?.albumDetailItemMinWidthDesktop ?? DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP);
   const renderedItems = loadedItems.slice(0, visibleRenderCount);
   const hasMore = nextCursor === undefined ? loadedItems.length < totalItems : Boolean(nextCursor);
-  const hasMoreToRender = visibleRenderCount < loadedItems.length;
+  const hasMoreToRender = layout === 'justified' && visibleRenderCount < loadedItems.length;
 
   const handleReloadFirstPage = useCallback(async () => {
     await loadPage(1, false);
@@ -360,11 +362,16 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           ) : (
             <>
               {layout === 'grid' ? (
-                <div className="grid gap-2.5 md:gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${thumbSize}px), 1fr))` }}>
-                  {renderedItems.map((asset) => (
-                    <AssetTile key={asset.id} asset={asset} onOpen={() => void reader.open(asset.id, asset.sortIndex - 1)} />
-                  ))}
-                </div>
+                // 网格模式按行虚拟化：正方形格子行高确定，已加载的图片全部交给虚拟网格，只渲染视口附近几屏
+                <VirtualGrid
+                  items={loadedItems}
+                  getKey={(asset) => asset.id}
+                  renderItem={(asset) => <AssetTile asset={asset} onOpen={() => void reader.open(asset.id, asset.sortIndex - 1)} />}
+                  minItemWidth={thumbSize}
+                  gap={isMobile ? 10 : 12}
+                  estimateRowHeight={(itemWidth) => itemWidth}
+                  scrollElementRef={scrollContainerRef}
+                />
               ) : (
                 <div className="flex flex-wrap gap-2 md:gap-2.5 after:block after:grow-[999]">
                   {renderedItems.map((asset) => (

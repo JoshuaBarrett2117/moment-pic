@@ -49,3 +49,14 @@ export const buildAuthCookie = (token: string, maxAgeSeconds: number, secure = f
 export const buildClearAuthCookie = (secure = false): string => {
   return `${AUTH_COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
 };
+
+/** 分享访问令牌只放在 HttpOnly Cookie 里，并用 Path 限定在该分享下，图片 URL 不再携带令牌。 */
+export const SHARE_COOKIE_NAME = "mp_share";
+
+export const shareCookiePath = (shareToken: string): string => `/api/v1/shares/${encodeURIComponent(shareToken)}/`;
+
+export const buildShareCookie = (shareToken: string, accessToken: string, maxAgeSeconds: number, secure = false): string =>
+  `${SHARE_COOKIE_NAME}=${encodeURIComponent(accessToken)}; Max-Age=${Math.max(0, Math.floor(maxAgeSeconds))}; Path=${shareCookiePath(shareToken)}; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
+
+export const getShareAccessToken = (request: Pick<FastifyRequest, "headers">): string =>
+  parseCookies(request.headers.cookie)[SHARE_COOKIE_NAME] ?? "";

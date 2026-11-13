@@ -6,6 +6,7 @@ import { mediaRequestSignal } from "../lib/media-request.js";
 import { isArchiveControlError } from "../services/archive/archive-limits.js";
 
 import { ok } from "../lib/api.js";
+import { buildShareCookie, getShareAccessToken } from "../lib/auth.js";
 import { parseBoundedInteger, parseEnumValue, parseOptionalString } from "../lib/request-query.js";
 import {
   AlbumShareInputInvalidError,
@@ -19,6 +20,7 @@ import {
   getAlbumDetail,
   getRecentAlbums,
   getSharedAlbumAssets,
+  getSharedAlbumSession,
   listManagedAlbumShares,
   listAlbums,
   recordAlbumView,
@@ -98,7 +100,10 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     const body = (request.body ?? {}) as { password?: string };
 
     try {
-      return ok(await authenticateAlbumShare(token, String(body.password ?? ""), request.ip, mediaRequestSignal(request, reply)));
+      const { accessToken, ...session } = await authenticateAlbumShare(token, String(body.password ?? ""), request.ip, mediaRequestSignal(request, reply));
+      const maxAgeSeconds = (Date.parse(session.expiresAt) - Date.now()) / 1000;
+      reply.header("set-cookie", buildShareCookie(token, accessToken, maxAgeSeconds, request.protocol === "https"));
+      return ok(session);
     } catch (error) {
       if (error instanceof AlbumShareNotFoundError) {
         return sendShareNotFound(reply);
@@ -115,12 +120,22 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
+  // 同一浏览器刷新分享页时，用 Cookie 恢复访问，无需重新输入密码
+  app.get("/api/v1/shares/:token/session", async (request, reply) => {
+    const { token } = request.params as { token: string };
+    const session = getSharedAlbumSession(token, getShareAccessToken(request));
+    if (!session) {
+      return sendShareNotFound(reply);
+    }
+    return ok(session);
+  });
+
   app.get("/api/v1/shares/:token/assets", async (request, reply) => {
     const { token } = request.params as { token: string };
-    const query = request.query as { page?: string; pageSize?: string; accessToken?: string };
+    const query = request.query as { page?: string; pageSize?: string };
     const page = parseBoundedInteger(query.page, { defaultValue: 1, min: 1, max: 100000 });
     const pageSize = parseBoundedInteger(query.pageSize, { defaultValue: 120, min: 1, max: 300 });
-    const payload = await getSharedAlbumAssets(token, String(query.accessToken ?? ""), page, pageSize);
+    const payload = await getSharedAlbumAssets(token, getShareAccessToken(request), page, pageSize);
 
     if (!payload) {
       return sendShareNotFound(reply);
@@ -131,20 +146,18 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/shares/:token/assets/:assetId/thumbnail", async (request, reply) => {
     const { token, assetId } = request.params as { token: string; assetId: string };
-    const query = request.query as { accessToken?: string };
-    return sendSharedAsset(request, token, assetId, String(query.accessToken ?? ""), reply, "thumbnail");
+    return sendSharedAsset(request, token, assetId, getShareAccessToken(request), reply, "thumbnail");
   });
 
   app.get("/api/v1/shares/:token/assets/:assetId/original", async (request, reply) => {
     const { token, assetId } = request.params as { token: string; assetId: string };
-    const query = request.query as { accessToken?: string };
-    return sendSharedAsset(request, token, assetId, String(query.accessToken ?? ""), reply, "original");
+    return sendSharedAsset(request, token, assetId, getShareAccessToken(request), reply, "original");
   });
 
   app.get("/api/v1/shares/:token/assets/:assetId/preview", async (request, reply) => {
     const { token, assetId } = request.params as { token: string; assetId: string };
-    const query = request.query as { preset?: "low" | "balanced" | "high"; accessToken?: string };
-    return sendSharedAsset(request, token, assetId, String(query.accessToken ?? ""), reply, "preview", parseEnumValue(query.preset, ["low", "balanced", "high"] as const));
+    const query = request.query as { preset?: "low" | "balanced" | "high" };
+    return sendSharedAsset(request, token, assetId, getShareAccessToken(request), reply, "preview", parseEnumValue(query.preset, ["low", "balanced", "high"] as const));
   });
 
   app.get("/api/v1/albums/recent", async (request, reply) => {

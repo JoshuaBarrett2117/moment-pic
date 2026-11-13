@@ -334,9 +334,9 @@ export type ManagedAlbumSharesDTO = {
   items: ManagedAlbumShareDTO[];
 };
 
+/** 访问令牌由服务端写入 HttpOnly Cookie，前端不接触。 */
 export type SharedAlbumAuthDTO = {
   token: string;
-  accessToken: string;
   albumId: string;
   name: string;
   expiresAt: string;

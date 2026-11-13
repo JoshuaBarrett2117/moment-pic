@@ -24,9 +24,9 @@ test("真实管理/分享媒体路由遇到预算、取消、超时、上限或�
       let calls = 0;
       context.mock.method(archiveBudget, "acquire", async () => { calls += 1; throw error; });
       for (const variant of ["thumbnail", "preview", "original"]) {
-        for (const url of [`/api/v1/assets/${id}/${variant}`, `/api/v1/shares/${share.token}/assets/${id}/${variant}?accessToken=${encodeURIComponent(auth.accessToken)}`]) {
+        for (const url of [`/api/v1/assets/${id}/${variant}`, `/api/v1/shares/${share.token}/assets/${id}/${variant}`]) {
           calls = 0;
-          const response = await app.inject({ url, headers: { cookie: testSessionCookie(60_000) } });
+          const response = await app.inject({ url, headers: { cookie: `${testSessionCookie(60_000)}; mp_share=${encodeURIComponent(auth.accessToken)}` } });
           assert.ok(response.statusCode >= 400);
           assert.equal(calls, 1, `${url} 不可重试 ${error.name}`);
         }

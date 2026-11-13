@@ -1,6 +1,6 @@
-import { type FC, useCallback, useMemo, useRef, useState } from 'react';
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, LockKeyhole, Share2 } from 'lucide-react';
-import { authenticateAlbumShare, fetchSharedAlbumAssets } from '../hooks';
+import { authenticateAlbumShare, fetchSharedAlbumAssets, fetchSharedAlbumSession } from '../hooks';
 import type { AssetListItemDTO, SharedAlbumAuthDTO } from '../types/api';
 import { Polaroid } from './Polaroid';
 import { ViewerGallery } from './ViewerGallery';
@@ -32,17 +32,12 @@ export const SharedAlbumScreen: FC<SharedAlbumScreenProps> = ({ token }) => {
     return new Date(auth.expiresAt).toLocaleString('zh-CN');
   }, [auth?.expiresAt]);
 
-  const loadPage = useCallback(async (page: number, append: boolean, accessTokenOverride?: string): Promise<boolean> => {
+  const loadPage = useCallback(async (page: number, append: boolean): Promise<boolean> => {
     if (append) {
       setIsLoadingMore(true);
     }
 
-    const accessToken = accessTokenOverride ?? auth?.accessToken;
-    if (!accessToken) {
-      return false;
-    }
-
-    const result = await fetchSharedAlbumAssets(token, accessToken, { page, pageSize: PAGE_SIZE });
+    const result = await fetchSharedAlbumAssets(token, { page, pageSize: PAGE_SIZE });
     if (!result) {
       setError('分享链接已失效或不存在');
       setIsLoadingMore(false);
@@ -65,7 +60,18 @@ export const SharedAlbumScreen: FC<SharedAlbumScreenProps> = ({ token }) => {
     });
     setIsLoadingMore(false);
     return result.items.length > 0;
-  }, [auth?.accessToken, token]);
+  }, [token]);
+
+  // 刷新页面时，若本浏览器已输过密码（Cookie 仍有效），直接恢复
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSharedAlbumSession(token).then(async (session) => {
+      if (cancelled || !session) return;
+      await loadPage(1, false);
+      if (!cancelled) setAuth(session);
+    });
+    return () => { cancelled = true; };
+  }, [loadPage, token]);
 
   const handleAuthenticate = async () => {
     setError('');
@@ -83,7 +89,7 @@ export const SharedAlbumScreen: FC<SharedAlbumScreenProps> = ({ token }) => {
     }
 
     setAuth(result);
-    await loadPage(1, false, result.accessToken);
+    await loadPage(1, false);
   };
 
   const handleLoadMoreForViewer = useCallback(async (): Promise<boolean> => {

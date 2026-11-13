@@ -140,7 +140,15 @@ export const buildApp = () => {
     prefix: "/",
     index: ["index.html"],
     wildcard: false,
+    preCompressed: true,
     setHeaders: (res, filePath) => {
+      const baseName = path.basename(filePath).replace(/\.(br|gz)$/, "");
+      if (baseName === "index.html") {
+        res.header("Cache-Control", "no-store");
+      } else if (filePath.split(path.sep).includes("assets")) {
+        // Vite 产物文件名带内容哈希，可永久缓存。
+        res.header("Cache-Control", "public, max-age=31536000, immutable");
+      }
       const currentTypeHeader = res.getHeader("Content-Type");
       const currentType = Array.isArray(currentTypeHeader)
         ? String(currentTypeHeader[0] ?? "")
@@ -152,9 +160,6 @@ export const buildApp = () => {
       const nextType = appendUtf8Charset(currentType);
       if (nextType !== currentType) {
         res.header("Content-Type", nextType);
-      }
-      if (path.basename(filePath) === "index.html") {
-        res.header("Cache-Control", "no-store");
       }
     }
   });

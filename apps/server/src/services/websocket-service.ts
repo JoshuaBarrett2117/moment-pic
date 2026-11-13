@@ -15,7 +15,9 @@ type ScanCompleteMessage = {
   event: { libraryRootId: string; albumsDiscovered: number; assetsDiscovered: number; timestamp: string; failureCount?: number; message?: string | null };
 };
 type Message = FileChangeMessage | ScanCompleteMessage;
-type Client = { socket: WebSocket; ip: string; expiresAt: number; expiry: NodeJS.Timeout; tokenHash: string };
+type Client = { socket: WebSocket; ip: string; expiresAt: number; expiry: NodeJS.Timeout; tokenHash: string; sessionCheckedAt: number };
+/** 广播时会话吊销检查的间隔：避免每条消息、每个客户端都查一次库。 */
+const SESSION_RECHECK_MS = 30_000;
 type SocketLimits = { global: number; perClient: number; bufferedBytes: number };
 const DEFAULT_LIMITS: SocketLimits = { global: 64, perClient: 4, bufferedBytes: 1024 * 1024 };
 
@@ -50,7 +52,7 @@ export class WebSocketService {
             terminate.unref();
           }, Math.min(expiresAt - Date.now(), 2_147_483_647));
           expiry.unref();
-          const client: Client = { socket: ws, ip, expiresAt, expiry, tokenHash };
+          const client: Client = { socket: ws, ip, expiresAt, expiry, tokenHash, sessionCheckedAt: Date.now() };
           this.clients.add(client);
           ws.on("error", () => ws.terminate());
           ws.once("close", () => { clearTimeout(expiry); this.clients.delete(client); });
@@ -65,7 +67,12 @@ export class WebSocketService {
     const data = JSON.stringify(message);
     for (const client of this.clients) {
       // 会话过期或已被吊销（登出、改密、禁用）时断开推送
-      if (client.expiresAt <= Date.now() || !findSessionDb(client.tokenHash)) { client.socket.close(4001, "会话已过期"); continue; }
+      const now = Date.now();
+      if (client.expiresAt <= now) { client.socket.close(4001, "会话已过期"); continue; }
+      if (now - client.sessionCheckedAt >= SESSION_RECHECK_MS) {
+        if (!findSessionDb(client.tokenHash)) { client.socket.close(4001, "会话已过期"); continue; }
+        client.sessionCheckedAt = now;
+      }
       if (client.socket.bufferedAmount + Buffer.byteLength(data) > this.limits.bufferedBytes) { client.socket.terminate(); continue; }
       if (client.socket.readyState === WebSocket.OPEN) client.socket.send(data, (error) => { if (error) client.socket.terminate(); });
     }

@@ -99,6 +99,7 @@ docker compose ps                                   # 等待状态变成 healthy
 | `WS_ALLOWED_ORIGINS` | 空 | 跨源访问时允许的网页 origin，逗号分隔 |
 | `AI_API_TOKEN` | 空 | 智能归纳的 AI Token，优先于页面中保存的值 |
 | `LOG_LEVEL` | `info` | `trace` / `debug` / `info` / `warn` / `error` / `fatal` |
+| `THUMBNAIL_CONCURRENCY` | `min(2, CPU 核数)` | 缩略图/预览同时生成的数量（1–16）；每个任务内 sharp 仍单线程 |
 | `LIBRARY_ROOTS` | `/data/library` | 容器内的图库目录，多个用逗号、分号或换行分隔。启动时自动登记其中存在的目录（只新增，不改动已登记或已禁用的目录）；也可以在「设置」里手动添加 |
 
 旧变量 `LIBRARY_ROOT_PATH` 已废弃，启动时会提示改用新变量。

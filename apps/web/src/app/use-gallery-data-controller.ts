@@ -163,12 +163,8 @@ export const useGalleryDataController = ({
 
   const { isConnected: wsConnected, lastScanComplete } = useWebSocket(
     (event) => {
+      // 图库列表只在 scan_complete 时刷新（服务端防抖后的增量扫描结束才发），避免删除大量文件时逐事件刷新。
       if (event.type !== 'unlink' || !isAuthenticated) {
-        return;
-      }
-
-      if (currentScreen === Screen.GALLERY) {
-        void refreshCurrentGallery();
         return;
       }
 

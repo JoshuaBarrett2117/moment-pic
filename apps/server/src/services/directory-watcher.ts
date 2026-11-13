@@ -25,6 +25,7 @@ type WatchCallback = (event: FileChangeEvent) => void;
 class DirectoryWatcherService {
   private watchers: Map<string, FSWatcher> = new Map();
   private callbacks: Set<WatchCallback> = new Set();
+  private pendingBroadcastByRoot = new Map<string, { type: FileChangeEvent["type"]; filePath: string }>();
   private debounceTimersByRoot: Map<string, NodeJS.Timeout> = new Map();
   private incrementalScanStates: Map<string, { running: boolean; pending: boolean }> = new Map();
   private activeScans = new Set<Promise<void>>();
@@ -97,16 +98,31 @@ class DirectoryWatcherService {
       clearTimeout(existingTimer);
     }
 
+    const eventType: FileChangeEvent["type"] = type === "addDir" ? "add" : type === "unlinkDir" ? "unlink" : type;
+    // 一个防抖窗口内只推送一条汇总：删除优先（客户端据此刷新），否则取最后一个事件。
+    const previous = this.pendingBroadcastByRoot.get(libraryRootId);
+    this.pendingBroadcastByRoot.set(libraryRootId, {
+      type: previous?.type === "unlink" ? "unlink" : eventType,
+      filePath: previous?.type === "unlink" && eventType !== "unlink" ? previous.filePath : filePath
+    });
+
     const timer = setTimeout(() => {
       this.debounceTimersByRoot.delete(libraryRootId);
+      this.flushFileChange(libraryRootId);
       this.queueIncrementalScan(libraryRootId);
     }, this.DEBOUNCE_MS);
 
     this.debounceTimersByRoot.set(libraryRootId, timer);
+  }
 
+  private flushFileChange(libraryRootId: string): void {
+    const pending = this.pendingBroadcastByRoot.get(libraryRootId);
+    this.pendingBroadcastByRoot.delete(libraryRootId);
+    if (!pending) return;
+    const rootPath = listExistingLibraryRoots().find((root) => root.id === libraryRootId)?.path ?? path.dirname(pending.filePath);
     const event: FileChangeEvent = {
-      type: type === "addDir" ? "add" : type === "unlinkDir" ? "unlink" : type,
-      path: path.relative(listExistingLibraryRoots().find((root) => root.id === libraryRootId)?.path ?? path.dirname(filePath), filePath).split(path.sep).join("/"),
+      type: pending.type,
+      path: path.relative(rootPath, pending.filePath).split(path.sep).join("/"),
       libraryRootId,
       timestamp: nowIso()
     };

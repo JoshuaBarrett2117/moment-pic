@@ -1,5 +1,6 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
+import { LazyMotion } from 'motion/react';
 import App from './App.tsx';
 import { ToastProvider } from './components/Toast.tsx';
 import './index.css';
@@ -10,8 +11,11 @@ applyTheme(getActiveThemeId());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ToastProvider>
-      <App />
-    </ToastProvider>
+    {/* 动画特性异步加载；strict 确保没有组件误用完整的 motion.* */}
+    <LazyMotion features={() => import('./motion-features').then((mod) => mod.default)} strict>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </LazyMotion>
   </StrictMode>,
 );

@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 import type { AlbumListItemDTO, DirectoryAlbumNodeDTO } from '../../types/api';
 import { AlbumCard } from './AlbumCard';
 import { DirectoryFolderRow, DirectoryNodeCard } from './DirectoryNodeCard';
@@ -79,7 +79,7 @@ export function GalleryAlbumGrid({
   return (
     <>
       {folders.length > 0 && (
-        <motion.div
+        <m.div
           variants={galleryGridContainerVariants}
           initial="hidden"
           animate="show"
@@ -90,12 +90,12 @@ export function GalleryAlbumGrid({
           {folders.map((folder) => (
             <DirectoryFolderRow key={folder.id} node={folder} onClick={onDirectoryNodeClick} />
           ))}
-        </motion.div>
+        </m.div>
       )}
       {isLoading && albums.length === 0 ? (
-        <motion.div variants={galleryGridContainerVariants} initial="hidden" animate="show" className={`grid w-full ${gridGapClass}`} style={{ gridTemplateColumns }}>
+        <m.div variants={galleryGridContainerVariants} initial="hidden" animate="show" className={`grid w-full ${gridGapClass}`} style={{ gridTemplateColumns }}>
           <GalleryLoadingAlbumCards isMobile={isMobile} />
-        </motion.div>
+        </m.div>
       ) : albums.length === 0 ? (
         <div className={`grid w-full ${gridGapClass}`} style={{ gridTemplateColumns }}>
           <GalleryEmptyState title={emptyTitle} description={emptyDescription} />

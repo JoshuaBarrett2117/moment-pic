@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { AnimatePresence, motion, type Transition, type Variants } from 'motion/react';
+import { AnimatePresence, m, type Transition, type Variants } from 'motion/react';
 import type { PageTransitionModeDTO } from '../types/api';
 
 type PageTransitionFrameProps = {
@@ -66,7 +66,7 @@ export function PageTransitionFrame({
 
   return (
     <AnimatePresence initial={false} custom={direction} mode="sync">
-      <motion.div
+      <m.div
         key={screenKey}
         custom={direction}
         variants={variants}
@@ -77,7 +77,7 @@ export function PageTransitionFrame({
         className="absolute inset-0 h-full w-full"
       >
         {children}
-      </motion.div>
+      </m.div>
     </AnimatePresence>
   );
 }

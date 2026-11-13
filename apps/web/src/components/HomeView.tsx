@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 import { api } from '../lib/api';
 import { useCurrentUser } from '../app/current-user';
 import { useAppNavigation } from '../app/app-navigation';
@@ -65,7 +65,7 @@ const Row = ({ title, actionLabel, onAction, children }: { title: string; action
         <ArrowRight className="h-3.5 w-3.5" />
       </button>
     </div>
-    <motion.div
+    <m.div
       variants={galleryGridContainerVariants}
       initial="hidden"
       animate="show"
@@ -73,7 +73,7 @@ const Row = ({ title, actionLabel, onAction, children }: { title: string; action
       style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 168px), 1fr))' }}
     >
       {children}
-    </motion.div>
+    </m.div>
   </section>
 );
 

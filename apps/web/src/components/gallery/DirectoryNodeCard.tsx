@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 import { ChevronRight, FolderOpen, Images } from 'lucide-react';
 import type { DirectoryAlbumNodeDTO } from '../../types/api';
 import { CoverCard } from './CoverCard';
@@ -31,7 +31,7 @@ export function DirectoryNodeCard({ album, onDirectoryNodeClick }: DirectoryNode
 /** 子文件夹：紧凑横条，与图集网格分开展示。 */
 export function DirectoryFolderRow({ node, onClick }: { node: DirectoryAlbumNodeDTO; onClick?: (node: DirectoryAlbumNodeDTO) => void }) {
   return (
-    <motion.button
+    <m.button
       variants={galleryCardItemVariants}
       type="button"
       onClick={() => onClick?.(node)}
@@ -45,6 +45,6 @@ export function DirectoryFolderRow({ node, onClick }: { node: DirectoryAlbumNode
         <span className="block text-xs tabular-nums text-outline">{node.childCount} 项</span>
       </span>
       <ChevronRight className="h-4 w-4 text-outline transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
-    </motion.button>
+    </m.button>
   );
 }

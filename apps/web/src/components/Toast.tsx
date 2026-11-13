@@ -1,5 +1,5 @@
 import React, { type FC, useEffect, useState, useCallback, createContext, useContext } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { m, AnimatePresence } from 'motion/react';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -85,8 +85,7 @@ const ToastCard: FC<{ item: ToastItem; onDismiss: (id: number) => void }> = ({
   const Icon = iconMap[item.type];
 
   return (
-    <motion.div
-      layout
+    <m.div
       initial={{ opacity: 0, x: 80, scale: 0.9 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: 80, scale: 0.9 }}
@@ -101,6 +100,6 @@ const ToastCard: FC<{ item: ToastItem; onDismiss: (id: number) => void }> = ({
       >
         <X className="w-4 h-4" />
       </button>
-    </motion.div>
+    </m.div>
   );
 };

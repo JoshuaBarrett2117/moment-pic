@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 import { ImageOff } from 'lucide-react';
 import { ThrottledImage } from './ThrottledImage';
 
@@ -29,7 +29,7 @@ export const Polaroid: React.FC<PolaroidProps> = ({
   const [hasError, setHasError] = useState(false);
 
   return (
-    <motion.div
+    <m.div
       whileHover={{ y: -2, zIndex: 30 }}
       transition={{ duration: 0.16 }}
       className={`polaroid cursor-pointer ${className}`}
@@ -57,6 +57,6 @@ export const Polaroid: React.FC<PolaroidProps> = ({
           {date && <p className="text-xs text-outline font-label mt-1">{date}</p>}
         </div>
       )}
-    </motion.div>
+    </m.div>
   );
 };

@@ -221,15 +221,38 @@ export const updateSmartAlbumAiConfigDb = (
   return getSmartAlbumAiConfigDb();
 };
 
+/**
+ * 用新一轮计算结果差量替换智能相册。
+ * 同一 normalized_key 沿用旧 id、created_at 与 status（例如用户隐藏的保持隐藏），
+ * 内容没变就不动 updated_at；只删除本轮不再出现的智能相册。
+ * 这样后台增量扫描后，正在打开的智能相册不会因 id 变化而 404。
+ * 返回值里的 idMap 把调用方生成的临时 id 映射到最终 id。
+ */
 export const replaceSmartAlbumsDb = (input: {
   smartAlbums: SmartAlbumRecord[];
   members: SmartAlbumMemberRecord[];
   matchRecords: SmartAlbumMatchRecord[];
-}) => {
+}): { idMap: Map<string, string>; created: number; updated: number; removed: number } => {
   const db = getDb();
+  const existingRows = db
+    .prepare("SELECT id, normalized_key, name, cover_asset_id, album_count, asset_count, source_summary, status, created_at, updated_at FROM smart_albums")
+    .all() as Array<{
+      id: string;
+      normalized_key: string;
+      name: string;
+      cover_asset_id: string | null;
+      album_count: number;
+      asset_count: number;
+      source_summary: string | null;
+      status: SmartAlbumRecord["status"];
+      created_at: string;
+      updated_at: string;
+    }>;
+  const existingByKey = new Map(existingRows.map((row) => [row.normalized_key, row]));
+
   const deleteMembers = db.prepare("DELETE FROM smart_album_members");
-  const deleteAlbums = db.prepare("DELETE FROM smart_albums");
   const deleteMatchRecords = db.prepare("DELETE FROM smart_album_match_records");
+  const deleteAlbum = db.prepare("DELETE FROM smart_albums WHERE id = ?");
   const insertAlbum = db.prepare(`
     INSERT INTO smart_albums (
       id, name, normalized_key, cover_asset_id, album_count, asset_count, source_summary, status, created_at, updated_at
@@ -237,6 +260,12 @@ export const replaceSmartAlbumsDb = (input: {
     VALUES (
       @id, @name, @normalizedKey, @coverAssetId, @albumCount, @assetCount, @sourceSummary, @status, @createdAt, @updatedAt
     )
+  `);
+  const updateAlbum = db.prepare(`
+    UPDATE smart_albums
+    SET name = @name, cover_asset_id = @coverAssetId, album_count = @albumCount, asset_count = @assetCount,
+        source_summary = @sourceSummary, updated_at = @updatedAt
+    WHERE id = @id
   `);
   const insertMember = db.prepare(`
     INSERT INTO smart_album_members (
@@ -255,19 +284,50 @@ export const replaceSmartAlbumsDb = (input: {
     )
   `);
 
+  const idMap = new Map<string, string>();
+  let created = 0;
+  let updated = 0;
+  let removed = 0;
+
   const transaction = db.transaction(() => {
     deleteMembers.run();
-    deleteAlbums.run();
     deleteMatchRecords.run();
+
+    const keptKeys = new Set<string>();
+    for (const smartAlbum of input.smartAlbums) {
+      keptKeys.add(smartAlbum.normalizedKey);
+      const existing = existingByKey.get(smartAlbum.normalizedKey);
+      if (!existing) {
+        insertAlbum.run(smartAlbum);
+        idMap.set(smartAlbum.id, smartAlbum.id);
+        created += 1;
+        continue;
+      }
+      idMap.set(smartAlbum.id, existing.id);
+      const changed = existing.name !== smartAlbum.name
+        || existing.cover_asset_id !== smartAlbum.coverAssetId
+        || Number(existing.album_count) !== smartAlbum.albumCount
+        || Number(existing.asset_count) !== smartAlbum.assetCount
+        || existing.source_summary !== smartAlbum.sourceSummary;
+      if (changed) {
+        updateAlbum.run({ ...smartAlbum, id: existing.id });
+        updated += 1;
+      }
+    }
+    for (const row of existingRows) {
+      if (!keptKeys.has(row.normalized_key)) {
+        deleteAlbum.run(row.id);
+        removed += 1;
+      }
+    }
+
     for (const record of input.matchRecords) {
       insertMatchRecord.run(record);
-    }
-    for (const smartAlbum of input.smartAlbums) {
-      insertAlbum.run(smartAlbum);
     }
     for (const member of input.members) {
       insertMember.run({
         ...member,
+        smartAlbumId: idMap.get(member.smartAlbumId) ?? member.smartAlbumId,
         isPinned: member.isPinned ? 1 : 0,
         isExcluded: member.isExcluded ? 1 : 0
       });
@@ -275,6 +335,7 @@ export const replaceSmartAlbumsDb = (input: {
   });
 
   transaction();
+  return { idMap, created, updated, removed };
 };
 
 /** 启动时把历史明文 AI token 原地加密（幂等）。 */

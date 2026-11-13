@@ -32,9 +32,10 @@ import {
   type SmartAlbumAiConnectionTestInput
 } from "./smart-album-ai-candidates.js";
 import {
-  findAlbumByIdDb,
+  findAlbumsByIdsDb,
   listAlbumsForSmartRuleScopeDb,
-  listAssetNamesByAlbumIdDb
+  listAssetNamesByAlbumIdDb,
+  listAssetNamesGroupedByAlbumDb
 } from "../repositories/album-repository.js";
 import {
   getSmartAlbumAiConfigDb,
@@ -68,7 +69,25 @@ type SmartAlbumAiConfigInput = {
   preferredScopes: SmartAlbumRuleScopeDTO[];
   reviewRequiredBelowConfidence: number;
 };
-const extractScopeTexts = (scope: SmartAlbumRuleScopeDTO, album: { id: string; name: string; sourcePath: string }): string[] => {
+type ScopeAlbumRow = ReturnType<typeof listAlbumsForSmartRuleScopeDb>[number];
+type AssetNameLookup = (albumId: string) => string[];
+
+/** 单次规则计算内共享：只有出现 assetFileName 作用域时才一次性载入全部资产名。 */
+const createAssetNameLookup = (rules: readonly SmartAlbumRuleDTO[]): AssetNameLookup => {
+  let grouped: Map<string, string[]> | null = null;
+  const needsAssetNames = rules.some((rule) => rule.scope === "assetFileName");
+  return (albumId) => {
+    if (!needsAssetNames) return listAssetNamesByAlbumIdDb(albumId);
+    grouped ??= listAssetNamesGroupedByAlbumDb();
+    return grouped.get(albumId) ?? [];
+  };
+};
+
+const extractScopeTexts = (
+  scope: SmartAlbumRuleScopeDTO,
+  album: { id: string; name: string; sourcePath: string },
+  assetNames: AssetNameLookup
+): string[] => {
   if (scope === "albumName") {
     return [album.name];
   }
@@ -78,7 +97,7 @@ const extractScopeTexts = (scope: SmartAlbumRuleScopeDTO, album: { id: string; n
   if (scope === "parentPath") {
     return [path.dirname(album.sourcePath)];
   }
-  return listAssetNamesByAlbumIdDb(album.id);
+  return assetNames(album.id);
 };
 
 const buildTargetName = (rule: SmartAlbumRuleDTO, matchedToken: string): string => {
@@ -91,62 +110,72 @@ const buildTargetName = (rule: SmartAlbumRuleDTO, matchedToken: string): string 
   return matchedToken;
 };
 
-const matchPattern = (mode: SmartAlbumRuleDTO["matchMode"], haystack: string, pattern: string): boolean => {
-  if (mode === "equals") {
-    return haystack === pattern;
-  }
-  if (mode === "prefix") {
-    return haystack.startsWith(pattern);
-  }
-  if (mode === "suffix") {
-    return haystack.endsWith(pattern);
-  }
-  if (mode === "regex") {
-    try {
-      return new RegExp(pattern, "i").test(haystack);
-    } catch {
-      return false;
-    }
-  }
-  return haystack.includes(pattern);
+type CompiledPattern = {
+  rawPattern: string;
+  test: (haystack: string) => boolean;
+  smartAlbumName: string;
+  normalizedKey: string;
 };
 
-const buildRuleCandidates = (rule: SmartAlbumRuleDTO, albums: SmartAlbumScopeAlbum[]): CandidateRecord[] => {
+/** 规则模式只归一化、只编译一次，不在「图集 × 文本 × 模式」最内层重复做。 */
+export const compileRulePatterns = (rule: SmartAlbumRuleDTO): CompiledPattern[] => {
+  const compiled: CompiledPattern[] = [];
+  for (const rawPattern of rule.patterns) {
+    const normalizedPattern = normalizeSmartAlbumText(rawPattern, rule.normalizeOptions);
+    if (!normalizedPattern) continue;
+    const smartAlbumName = buildTargetName(rule, rawPattern);
+    const normalizedKey = normalizeSmartAlbumText(smartAlbumName, rule.normalizeOptions);
+    if (!normalizedKey) continue;
+    let test: (haystack: string) => boolean;
+    if (rule.matchMode === "equals") test = (haystack) => haystack === normalizedPattern;
+    else if (rule.matchMode === "prefix") test = (haystack) => haystack.startsWith(normalizedPattern);
+    else if (rule.matchMode === "suffix") test = (haystack) => haystack.endsWith(normalizedPattern);
+    else if (rule.matchMode === "regex") {
+      let regex: RegExp;
+      try {
+        regex = new RegExp(normalizedPattern, "i");
+      } catch {
+        continue;
+      }
+      test = (haystack) => regex.test(haystack);
+    } else test = (haystack) => haystack.includes(normalizedPattern);
+    compiled.push({ rawPattern, test, smartAlbumName, normalizedKey });
+  }
+  return compiled;
+};
+
+const buildRuleCandidates = (
+  rule: SmartAlbumRuleDTO,
+  albums: SmartAlbumScopeAlbum[],
+  assetNames: AssetNameLookup = createAssetNameLookup([rule])
+): CandidateRecord[] => {
+  const patterns = compileRulePatterns(rule);
+  if (patterns.length === 0) return [];
   const matches: CandidateRecord[] = [];
   const albumCounts = new Map<string, number>();
 
   for (const album of albums) {
-    const texts = extractScopeTexts(rule.scope, album);
+    const texts = extractScopeTexts(rule.scope, album, assetNames);
     let matched = false;
     for (const rawText of texts) {
       const normalizedText = normalizeSmartAlbumText(rawText, rule.normalizeOptions);
-      for (const rawPattern of rule.patterns) {
-        const normalizedPattern = normalizeSmartAlbumText(rawPattern, rule.normalizeOptions);
-        if (!normalizedPattern) {
-          continue;
-        }
-        if (!matchPattern(rule.matchMode, normalizedText, normalizedPattern)) {
-          continue;
-        }
-
-        const targetName = buildTargetName(rule, rawPattern);
-        const normalizedKey = normalizeSmartAlbumText(targetName, rule.normalizeOptions);
-        if (!normalizedKey) {
+      for (const pattern of patterns) {
+        if (!pattern.test(normalizedText)) {
           continue;
         }
 
         matches.push({
           albumId: album.id,
-          normalizedKey,
-          smartAlbumName: targetName,
+          normalizedKey: pattern.normalizedKey,
+          smartAlbumName: pattern.smartAlbumName,
           confidence: rule.minConfidence,
           sourceEngine: "rule",
           ruleId: rule.id,
           matchedScopes: [rule.scope],
-          matchedTokens: [rawPattern],
+          matchedTokens: [pattern.rawPattern],
           reason: `matched by rule:${rule.name}`
         });
-        albumCounts.set(normalizedKey, (albumCounts.get(normalizedKey) ?? 0) + 1);
+        albumCounts.set(pattern.normalizedKey, (albumCounts.get(pattern.normalizedKey) ?? 0) + 1);
         matched = true;
         break;
       }
@@ -159,7 +188,11 @@ const buildRuleCandidates = (rule: SmartAlbumRuleDTO, albums: SmartAlbumScopeAlb
   return matches.filter((match) => (albumCounts.get(match.normalizedKey) ?? 0) >= rule.minAlbumCount);
 };
 
-const buildSmartAlbumRecords = (candidates: CandidateRecord[], runId: string) => {
+const buildSmartAlbumRecords = (
+  candidates: CandidateRecord[],
+  runId: string,
+  albumsById: Map<string, ScopeAlbumRow>
+) => {
   const grouped = new Map<string, CandidateRecord[]>();
   for (const candidate of candidates) {
     const current = grouped.get(candidate.normalizedKey) ?? [];
@@ -174,7 +207,7 @@ const buildSmartAlbumRecords = (candidates: CandidateRecord[], runId: string) =>
 
   for (const [normalizedKey, items] of grouped.entries()) {
     const albumRows = items
-      .map((item) => findAlbumByIdDb(item.albumId))
+      .map((item) => albumsById.get(item.albumId) ?? null)
       .filter((item): item is NonNullable<typeof item> => item !== null);
     if (albumRows.length === 0) {
       continue;
@@ -233,17 +266,44 @@ const buildSmartAlbumRecords = (candidates: CandidateRecord[], runId: string) =>
 
 const collectCandidateAlbumIds = (candidates: CandidateRecord[]): Set<string> => new Set(candidates.map((candidate) => candidate.albumId));
 
-export const rebuildSmartAlbums = async (): Promise<{ smartAlbumsDiscovered: number; membersDiscovered: number }> => {
+const pickPreferredCandidates = (candidates: CandidateRecord[]): CandidateRecord[] => {
+  const map = new Map<string, CandidateRecord>();
+  for (const candidate of candidates) {
+    const key = `${candidate.albumId}:${candidate.normalizedKey}`;
+    const existing = map.get(key);
+    const candidatePriority = candidate.sourceEngine === "rule" ? 2 : 1;
+    const existingPriority = existing?.sourceEngine === "rule" ? 2 : 1;
+    if (!existing || existingPriority < candidatePriority || (existingPriority === candidatePriority && existing.confidence < candidate.confidence)) {
+      map.set(key, candidate);
+    }
+  }
+  return Array.from(map.values());
+};
+
+export type RebuildSmartAlbumsOptions = {
+  /** 是否调用 AI 重新聚类。扫描后的自动重建传 false，只套用已有规则（含已保存的 AI 规则）；手动重建默认 true。 */
+  runAi?: boolean;
+};
+
+export const rebuildSmartAlbums = async (
+  options: RebuildSmartAlbumsOptions = {}
+): Promise<{ smartAlbumsDiscovered: number; membersDiscovered: number }> => {
+  const runAi = options.runAi ?? true;
   const albums = listAlbumsForSmartRuleScopeDb();
-  const rules = listSmartAlbumRulesDb().filter((rule) => rule.enabled && rule.action === "assignSmartAlbum");
-  const baseRules = rules.filter((rule) => rule.sourceEngine !== "ai");
-  const baseRuleDtos = baseRules.map(toSmartAlbumRuleDto);
-  const baseCandidates = baseRuleDtos.flatMap((rule) => buildRuleCandidates(rule, albums));
-  const coveredAlbumIds = collectCandidateAlbumIds(baseCandidates);
-  const remainingAlbums = albums.filter((album) => !coveredAlbumIds.has(album.id));
+  const albumsById = new Map(albums.map((album) => [album.id, album]));
+  const isActiveRule = (rule: SmartAlbumRuleRecord) => rule.enabled && rule.action === "assignSmartAlbum";
+  const rules = listSmartAlbumRulesDb().filter(isActiveRule);
+  const baseRuleDtos = rules.filter((rule) => rule.sourceEngine !== "ai").map(toSmartAlbumRuleDto);
   const aiConfig = getSmartAlbumAiConfigDb();
 
-  if (aiConfig.enabled) {
+  let aiRuleDtos = rules.filter((rule) => rule.sourceEngine === "ai").map(toSmartAlbumRuleDto);
+  const assetNames = createAssetNameLookup([...baseRuleDtos, ...aiRuleDtos]);
+  // 非 AI 规则只算一遍：既用于 AI 的「剩余图集」，也直接进入最终候选。
+  const baseCandidates = baseRuleDtos.flatMap((rule) => buildRuleCandidates(rule, albums, assetNames));
+
+  if (aiConfig.enabled && runAi) {
+    const coveredAlbumIds = collectCandidateAlbumIds(baseCandidates);
+    const remainingAlbums = albums.filter((album) => !coveredAlbumIds.has(album.id));
     const aiCandidates = remainingAlbums.length >= aiConfig.minClusterAlbumCount
       ? await buildAiCandidates(aiConfig, remainingAlbums)
       : [];
@@ -251,24 +311,17 @@ export const rebuildSmartAlbums = async (): Promise<{ smartAlbumsDiscovered: num
       ? buildSmartAlbumRuleRecords(aiCandidates, remainingAlbums, makeId("srun"), aiConfig)
       : [];
     replaceSmartAlbumRulesBySourceEngineDb("ai", aiRules);
+    aiRuleDtos = listSmartAlbumRulesDb()
+      .filter((rule) => isActiveRule(rule) && rule.sourceEngine === "ai")
+      .map(toSmartAlbumRuleDto);
   }
 
-  const refreshedRules = listSmartAlbumRulesDb().filter((rule) => rule.enabled && rule.action === "assignSmartAlbum");
-  const candidates = refreshedRules
-    .flatMap((rule) => buildRuleCandidates(toSmartAlbumRuleDto(rule), albums))
-    .reduce((map, candidate) => {
-      const key = `${candidate.albumId}:${candidate.normalizedKey}`;
-      const existing = map.get(key);
-      const candidatePriority = candidate.sourceEngine === "rule" ? 2 : 1;
-      const existingPriority = existing?.sourceEngine === "rule" ? 2 : 1;
-      if (!existing || existingPriority < candidatePriority || (existingPriority === candidatePriority && existing.confidence < candidate.confidence)) {
-        map.set(key, candidate);
-      }
-      return map;
-    }, new Map<string, CandidateRecord>());
+  const aiAssetNames = aiRuleDtos.some((rule) => rule.scope === "assetFileName") ? createAssetNameLookup(aiRuleDtos) : assetNames;
+  const aiCandidates = aiRuleDtos.flatMap((rule) => buildRuleCandidates(rule, albums, aiAssetNames));
+  const candidates = pickPreferredCandidates([...baseCandidates, ...aiCandidates]);
 
   const runId = makeId("srun");
-  const payload = buildSmartAlbumRecords(Array.from(candidates.values()), runId);
+  const payload = buildSmartAlbumRecords(candidates, runId, albumsById);
   replaceSmartAlbumsDb(payload);
 
   return {
@@ -328,9 +381,11 @@ export const getSmartAlbumMembers = async (smartAlbumId: string): Promise<SmartA
   if (!smartAlbum) {
     return null;
   }
-  return listSmartAlbumMembersDb(smartAlbumId)
+  const members = listSmartAlbumMembersDb(smartAlbumId);
+  const albumsById = findAlbumsByIdsDb(members.map((member) => member.albumId));
+  return members
     .map((member) => {
-      const album = findAlbumByIdDb(member.albumId);
+      const album = albumsById.get(member.albumId);
       if (!album) {
         return null;
       }
@@ -389,9 +444,11 @@ export const testSmartAlbumRule = async (ruleId: string): Promise<SmartAlbumRule
     return null;
   }
   const ruleDto = toSmartAlbumRuleDto(rule);
-  const matchedAlbums = buildRuleCandidates(ruleDto, listAlbumsForSmartRuleScopeDb())
+  const matches = buildRuleCandidates(ruleDto, listAlbumsForSmartRuleScopeDb());
+  const albumsById = findAlbumsByIdsDb(matches.map((item) => item.albumId));
+  const matchedAlbums = matches
     .map((item) => {
-      const album = findAlbumByIdDb(item.albumId);
+      const album = albumsById.get(item.albumId);
       if (!album) {
         return null;
       }

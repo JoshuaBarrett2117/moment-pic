@@ -638,3 +638,68 @@ test("smart album rebuild replaces stale ai rules with freshly generated rules w
     await app.close();
   }
 });
+
+test("smart album ids stay stable across rebuilds and keep their status", async () => {
+  const suffix = crypto.randomUUID().replace(/-/g, "");
+  const libraryRootId = `root_${suffix}`;
+  const timestamp = new Date().toISOString();
+  const token = `stable-${suffix}`;
+  upsertLibraryRootDb({
+    id: libraryRootId,
+    name: `stable-root-${suffix}`,
+    path: `C:/stable-test/${suffix}`,
+    enabled: true,
+    lastScannedAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+  seedAlbum({ libraryRootId, sourcePath: `C:/stable-test/${suffix}/a`, name: `${token} NO.001` });
+  seedAlbum({ libraryRootId, sourcePath: `C:/stable-test/${suffix}/b`, name: `${token} NO.002` });
+  upsertSmartAlbumRuleDb({
+    id: makeId("sar"),
+    name: `rule-${suffix}`,
+    enabled: true,
+    sourceEngine: "manual",
+    priority: 200,
+    scope: "albumName",
+    matchMode: "regex",
+    patternsJson: JSON.stringify([`^${token}`]),
+    normalizeOptionsJson: JSON.stringify({ trimSpaces: true, normalizeCase: true }),
+    action: "assignSmartAlbum",
+    targetName: token,
+    targetNameTemplate: null,
+    minAlbumCount: 2,
+    minConfidence: 1,
+    generatedNormalizedKey: null,
+    generatedConfidence: null,
+    generatedReason: null,
+    generatedRunId: null,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+
+  const { getDb } = await import("../db/sqlite.js");
+  const findRow = () => getDb()
+    .prepare("SELECT id, status, album_count, updated_at FROM smart_albums WHERE name = ?")
+    .get(token) as { id: string; status: string; album_count: number; updated_at: string } | undefined;
+
+  await rebuildSmartAlbums({ runAi: false });
+  const first = findRow();
+  assert.ok(first, "first rebuild should create the smart album");
+  assert.equal(first.album_count, 2);
+  getDb().prepare("UPDATE smart_albums SET status = 'hidden' WHERE id = ?").run(first.id);
+
+  await rebuildSmartAlbums({ runAi: false });
+  const second = findRow();
+  assert.equal(second?.id, first.id);
+  assert.equal(second?.status, "hidden");
+  assert.equal(second?.updated_at, first.updated_at, "unchanged content keeps updated_at");
+
+  seedAlbum({ libraryRootId, sourcePath: `C:/stable-test/${suffix}/c`, name: `${token} NO.003` });
+  await rebuildSmartAlbums({ runAi: false });
+  const third = findRow();
+  assert.equal(third?.id, first.id);
+  assert.equal(third?.album_count, 3);
+  const memberCount = getDb().prepare("SELECT COUNT(*) AS n FROM smart_album_members WHERE smart_album_id = ?").get(first.id) as { n: number };
+  assert.equal(memberCount.n, 3);
+});

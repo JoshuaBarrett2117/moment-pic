@@ -494,6 +494,35 @@ export const listAssetNamesByAlbumIdDb = (albumId: string): string[] => {
   return rows.map((row) => row.name);
 };
 
+/** 智能相册规则计算用：一次性按图集分组载入全部资产名，避免每个图集、每条规则各查一次。 */
+export const listAssetNamesGroupedByAlbumDb = (): Map<string, string[]> => {
+  const db = getDb();
+  const grouped = new Map<string, string[]>();
+  const statement = db.prepare("SELECT album_id, name FROM assets ORDER BY album_id ASC, sort_index ASC");
+  for (const row of statement.iterate() as Iterable<{ album_id: string; name: string }>) {
+    const list = grouped.get(row.album_id);
+    if (list) list.push(row.name);
+    else grouped.set(row.album_id, [row.name]);
+  }
+  return grouped;
+};
+
+/** 按 id 批量取图集，分块避开 SQLite 变量上限。 */
+export const findAlbumsByIdsDb = (albumIds: readonly string[]): Map<string, AlbumRecord> => {
+  const db = getDb();
+  const result = new Map<string, AlbumRecord>();
+  const unique = Array.from(new Set(albumIds));
+  for (let offset = 0; offset < unique.length; offset += 500) {
+    const chunk = unique.slice(offset, offset + 500);
+    const rows = db.prepare(`SELECT * FROM albums WHERE id IN (${chunk.map(() => "?").join(",")})`).all(...chunk) as Array<Record<string, unknown>>;
+    for (const row of rows) {
+      const album = rowToAlbum(row);
+      result.set(album.id, album);
+    }
+  }
+  return result;
+};
+
 /** 只回填缺失尺寸，不触碰缩略图键及图集时间；媒体探测必须在调用前结束。 */
 export const updateAssetDimensionsDb = (updates: Array<{ assetId: string; width: number; height: number }>): number => {
   const db = getDb();

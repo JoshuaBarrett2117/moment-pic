@@ -25,6 +25,7 @@ import {
   deleteAlbumDb,
   deleteAssetDb,
   findAlbumByIdDb,
+  findAlbumsByIdsDb,
   findAssetByIdDb,
   findAlbumShareByTokenDb,
   insertAlbumShareDb,
@@ -548,25 +549,18 @@ export const updateLibraryRoot = async (id: string, updates: { name?: string; pa
   };
 };
 
-export const recordAlbumView = async (albumId: string): Promise<void> => {
-  recordAlbumViewDb(albumId);
+export const recordAlbumView = async (userId: string, albumId: string): Promise<void> => {
+  recordAlbumViewDb(userId, albumId);
 };
 
-export const getRecentAlbums = async (limit = 50): Promise<AlbumListItemDTO[]> => {
-  const albumIds = getRecentAlbumIdsDb(limit);
+export const getRecentAlbums = async (userId: string, limit = 50): Promise<AlbumListItemDTO[]> => {
+  const albumIds = getRecentAlbumIdsDb(userId, limit);
   if (albumIds.length === 0) {
     return [];
   }
-
-  const items: AlbumListItemDTO[] = [];
-  for (const albumId of albumIds) {
-    const album = findAlbumByIdDb(albumId);
-    if (album) {
-      items.push({
-        ...toAlbumListItem(album)
-      });
-    }
-  }
-
-  return items;
+  const albumsById = findAlbumsByIdsDb(albumIds);
+  return albumIds
+    .map((albumId) => albumsById.get(albumId))
+    .filter((album): album is NonNullable<typeof album> => Boolean(album))
+    .map((album) => toAlbumListItem(album));
 };

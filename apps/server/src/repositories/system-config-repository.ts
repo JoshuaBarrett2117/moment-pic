@@ -1,6 +1,4 @@
 import { getDb } from "../db/sqlite.js";
-import { makeId } from "./ids.js";
-import { rowToAlbumView } from "./sqlite-mappers.js";
 
 export type SystemConfigRecord = {
   id: string;
@@ -97,35 +95,48 @@ export const updateSystemConfigDb = (updates: { enablePolling?: boolean; polling
   return getSystemConfigDb();
 };
 
-export const recordAlbumViewDb = (albumId: string): void => {
+/** 每个用户最多保留的最近浏览条数 */
+export const ALBUM_VIEWS_PER_USER_LIMIT = 500;
+let viewInsertsSincePrune = 0;
+
+export const recordAlbumViewDb = (userId: string, albumId: string, viewedAt = new Date().toISOString()): void => {
   const db = getDb();
-  const id = makeId("view");
-  const now = new Date().toISOString();
-  db.prepare("INSERT INTO album_views (id, album_id, viewed_at) VALUES (?, ?, ?)").run(id, albumId, now);
+  db.prepare(`
+    INSERT INTO album_views (user_id, album_id, viewed_at) VALUES (?, ?, ?)
+    ON CONFLICT (user_id, album_id) DO UPDATE SET viewed_at = excluded.viewed_at
+  `).run(userId, albumId, viewedAt);
+  viewInsertsSincePrune += 1;
+  if (viewInsertsSincePrune >= 50) {
+    viewInsertsSincePrune = 0;
+    pruneAlbumViewsDb(userId);
+  }
 };
 
-export const listRecentAlbumViewsDb = (limit = 50) => {
+/** 只保留该用户最近 ALBUM_VIEWS_PER_USER_LIMIT 条。 */
+export const pruneAlbumViewsDb = (userId: string, keep = ALBUM_VIEWS_PER_USER_LIMIT): number =>
+  getDb().prepare(`
+    DELETE FROM album_views
+    WHERE user_id = ? AND album_id NOT IN (
+      SELECT album_id FROM album_views WHERE user_id = ? ORDER BY viewed_at DESC LIMIT ?
+    )
+  `).run(userId, userId, keep).changes;
+
+export const getRecentAlbumIdsDb = (userId: string, limit = 50): string[] => {
   const db = getDb();
   const rows = db.prepare(`
-    SELECT DISTINCT album_id, MAX(viewed_at) as viewed_at
-    FROM album_views
-    GROUP BY album_id
-    ORDER BY MAX(viewed_at) DESC
+    SELECT v.album_id
+    FROM album_views v
+    JOIN albums a ON a.id = v.album_id
+    WHERE v.user_id = ?
+    ORDER BY v.viewed_at DESC
     LIMIT ?
-  `).all(limit) as { album_id: string; viewed_at: string }[];
-
-  return rows.map((row) => rowToAlbumView(row));
-};
-
-export const getRecentAlbumIdsDb = (limit = 50): string[] => {
-  const db = getDb();
-  const rows = db.prepare(`
-    SELECT DISTINCT album_id
-    FROM album_views
-    GROUP BY album_id
-    ORDER BY MAX(viewed_at) DESC
-    LIMIT ?
-  `).all(limit) as { album_id: string }[];
+  `).all(userId, limit) as { album_id: string }[];
 
   return rows.map((row) => row.album_id);
 };
+
+export const claimLegacyAlbumViewsDb = (userId: string, legacyOwner: string): number =>
+  getDb().prepare("UPDATE OR IGNORE album_views SET user_id = ? WHERE user_id = ?").run(userId, legacyOwner).changes;
+
+export const deleteUserAlbumViewsDb = (userId: string): number =>
+  getDb().prepare("DELETE FROM album_views WHERE user_id = ?").run(userId).changes;

@@ -147,3 +147,22 @@ jobs:
           done
       - name: Inspect
         run: docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+
+  # 同步 Docker Hub 仓库描述（docs/dockerhub.md）。需要 DOCKERHUB_TOKEN 具备 read/write/delete 权限；
+  # 权限不足时只让这一步失败，不影响镜像发布。
+  dockerhub-description:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: merge
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.IMAGE_NAME }}
+          short-description: 自托管本地图片库：文件夹/压缩包相册、阅读进度、智能归纳、分享链接
+          readme-filepath: ./docs/dockerhub.md

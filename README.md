@@ -103,7 +103,7 @@
 
 ## 部署
 
-镜像发布在 Docker Hub：`joshualoooooo/moment-pic`。
+镜像发布在 Docker Hub：[`joshualoooooo/moment-pic`](https://hub.docker.com/r/joshualoooooo/moment-pic)。Docker Hub 页面上的说明由 [`docs/dockerhub.md`](docs/dockerhub.md) 生成，合并到 main 后自动同步；改部署说明时请两处一起改。
 
 | 标签 | 说明 |
 | :--- | :--- |

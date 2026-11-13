@@ -99,14 +99,30 @@ export const readOriginalSharpInput = async (asset: AssetRecord, signal?: AbortS
   }
 };
 
-export const openOriginalAssetSource = async (asset: AssetRecord, signal?: AbortSignal): Promise<{
+export type ByteRangeResolver = (size: number) => { start: number; end: number } | "unsatisfiable" | null;
+
+export const openOriginalAssetSource = async (asset: AssetRecord, signal?: AbortSignal, resolveRange?: ByteRangeResolver): Promise<{
   asset: AssetRecord;
   body: OriginalImageBody;
   sizeBytes: number | null;
+  /** 目录图且请求带合法 Range 时，body 只包含这一段。 */
+  range?: { start: number; end: number; size: number } | "unsatisfiable";
 }> => {
   if (asset.sourceType === "folder") {
     try {
       const stat = await fs.promises.stat(asset.sourcePath);
+      const range = resolveRange?.(stat.size) ?? null;
+      if (range === "unsatisfiable") {
+        return { asset, body: Buffer.alloc(0), sizeBytes: stat.size, range };
+      }
+      if (range) {
+        return {
+          asset,
+          body: fs.createReadStream(asset.sourcePath, { signal, start: range.start, end: range.end }),
+          sizeBytes: range.end - range.start + 1,
+          range: { ...range, size: stat.size }
+        };
+      }
       return {
         asset,
         body: fs.createReadStream(asset.sourcePath, { signal }),

@@ -30,11 +30,13 @@ test('viewer gallery exposes quality labels and preload hints', () => {
   assert.equal(getQualityLabel('original'), '原图');
   assert.equal(getPreloadHint('low'), null);
   assert.equal(getPreloadHint('high'), '当前档位会减少相邻预加载');
-  assert.equal(getPreloadHint('original'), '当前档位已关闭相邻预加载');
+  assert.equal(getPreloadHint('original'), '当前档位只预加载下一张');
 });
 
 test('resolvePreloadWindow clamps original and high quality preload ranges', () => {
-  assert.deepEqual(resolvePreloadWindow({ activeIndex: 5, total: 10, preset: 'original', preloadBefore: 8, preloadAfter: 8 }), { start: 5, end: 5 });
+  assert.deepEqual(resolvePreloadWindow({ activeIndex: 5, total: 10, preset: 'original', preloadBefore: 8, preloadAfter: 8 }), { start: 5, end: 6 });
+  assert.deepEqual(resolvePreloadWindow({ activeIndex: 5, total: 10, preset: 'original', preloadBefore: 0, preloadAfter: 0 }), { start: 5, end: 6 });
+  assert.deepEqual(resolvePreloadWindow({ activeIndex: 9, total: 10, preset: 'original', preloadBefore: 2, preloadAfter: 3 }), { start: 9, end: 9 });
   assert.deepEqual(resolvePreloadWindow({ activeIndex: 5, total: 10, preset: 'high', preloadBefore: 8, preloadAfter: 8 }), { start: 4, end: 6 });
   assert.deepEqual(resolvePreloadWindow({ activeIndex: 1, total: 3, preset: 'balanced', preloadBefore: 8, preloadAfter: 8 }), { start: 0, end: 2 });
   assert.equal(resolvePreloadWindow({ activeIndex: 0, total: 0, preset: 'balanced', preloadBefore: 1, preloadAfter: 1 }), null);
@@ -83,4 +85,11 @@ test('resolveViewerNextAction shows end prompt only after requesting next from t
 
 test('getTouchPointsDistance returns euclidean distance', () => {
   assert.equal(getTouchPointsDistance({ clientX: 0, clientY: 0 }, { clientX: 3, clientY: 4 }), 5);
+});
+
+test('预览 URL 沿用原图 URL 的内容版本', () => {
+  assert.equal(buildPreviewSrc('asset_1', 'low', 'abc'), '/api/v1/assets/asset_1/preview?preset=low&v=abc');
+  assert.equal(resolveImageSrc({ id: 'a1', originalSrc: '/api/v1/assets/a1/original?v=123abc' }, 'balanced'), '/api/v1/assets/a1/preview?preset=balanced&v=123abc');
+  assert.equal(resolveImageSrc({ id: 'a1', originalSrc: '/api/v1/assets/a1/original' }, 'balanced'), '/api/v1/assets/a1/preview?preset=balanced');
+  assert.equal(resolveImageSrc({ id: 'a1', originalSrc: '/api/v1/shares/t/assets/a1/original?v=9' }, 'low'), '/api/v1/shares/t/assets/a1/preview?v=9&preset=low');
 });

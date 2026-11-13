@@ -1,5 +1,7 @@
 import fs from "node:fs";
 
+import type { AssetRecord } from "../types/store.js";
+
 import { env } from "../config/env.js";
 import {
   findAssetByIdDb,
@@ -10,6 +12,7 @@ import {
   openOriginalAssetSource,
   OriginalAssetSourceMissingError,
   readOriginalBuffer,
+  type ByteRangeResolver,
   type OriginalImageBody
 } from "./thumbnail/original-image-source.js";
 import {
@@ -39,26 +42,21 @@ export {
 export type { OriginalImageBody } from "./thumbnail/original-image-source.js";
 const inFlightVariantTasks = new Map<string, Promise<ImageVariantResult>>();
 
-const ensureCacheDir = async () => {
-  await fs.promises.mkdir(env.cacheDir, { recursive: true });
+let cacheDirReady: Promise<void> | null = null;
+/** 缓存目录只在第一次用到时创建；失败后下次重试。 */
+const ensureCacheDir = (): Promise<void> => {
+  cacheDirReady ??= fs.promises.mkdir(env.cacheDir, { recursive: true }).then(() => undefined, (error) => {
+    cacheDirReady = null;
+    throw error;
+  });
+  return cacheDirReady;
 };
 
-export const ensureThumbnail = async (
-  assetId: string,
-  input?: {
-    fit?: ThumbnailFit;
-    width?: number;
-    height?: number;
-    format?: ThumbnailFormat;
-    signal?: AbortSignal;
-  }
-) => {
-  await ensureCacheDir();
-  const asset = findAssetByIdDb(assetId);
-  if (!asset) {
-    throw new AssetNotFoundError(assetId);
-  }
+type ThumbnailInput = { fit?: ThumbnailFit; width?: number; height?: number; format?: ThumbnailFormat };
+type PreviewInput = { preset?: PreviewPreset; format?: ThumbnailFormat };
 
+/** 只算缓存键，不生成；路由用它在拿生成闸门之前判断 304。 */
+export const planThumbnail = (asset: AssetRecord, input?: ThumbnailInput) => {
   const { width, height } = resolveThumbnailSize(input);
   const format = resolveThumbnailFormat(input?.format);
   const quality = format === "webp" ? 80 : 82;
@@ -74,6 +72,40 @@ export const ensureThumbnail = async (
     format,
     quality
   });
+  return { fit, width, height, format, quality, cacheKey };
+};
+
+export const planPreview = (asset: AssetRecord, input?: PreviewInput) => {
+  const preset = resolvePreviewPreset(input?.preset);
+  const format = resolveThumbnailFormat(input?.format);
+  const presetOptions = PREVIEW_PRESET_OPTIONS[preset];
+  const quality = getEncodeQuality(format, presetOptions);
+  const cacheKey = buildCacheKey({
+    kind: "preview",
+    sourcePath: asset.sourcePath,
+    zipEntryPath: asset.zipEntryPath,
+    sourceMtime: asset.sourceMtime,
+    width: presetOptions.maxWidth,
+    height: presetOptions.maxHeight,
+    format,
+    quality
+  });
+  return { preset, format, quality, cacheKey };
+};
+
+export const findAssetOrThrow = (assetId: string): AssetRecord => {
+  const asset = findAssetByIdDb(assetId);
+  if (!asset) throw new AssetNotFoundError(assetId);
+  return asset;
+};
+
+export const ensureThumbnail = async (
+  assetId: string,
+  input?: ThumbnailInput & { signal?: AbortSignal; asset?: AssetRecord }
+) => {
+  await ensureCacheDir();
+  const asset = input?.asset ?? findAssetOrThrow(assetId);
+  const { fit, width, height, format, quality, cacheKey } = planThumbnail(asset, input);
   const dedupeKey = cacheKey;
   if (input?.signal) return ensureThumbnailVariant({ fit, asset, width, height, format, cacheKey, quality, signal: input.signal });
   const inFlight = inFlightVariantTasks.get(dedupeKey);
@@ -99,32 +131,11 @@ export const ensureThumbnail = async (
 
 export const ensurePreview = async (
   assetId: string,
-  input?: {
-    preset?: PreviewPreset;
-    format?: ThumbnailFormat;
-    signal?: AbortSignal;
-  }
+  input?: PreviewInput & { signal?: AbortSignal; asset?: AssetRecord }
 ) => {
   await ensureCacheDir();
-  const asset = findAssetByIdDb(assetId);
-  if (!asset) {
-    throw new AssetNotFoundError(assetId);
-  }
-
-  const preset = resolvePreviewPreset(input?.preset);
-  const format = resolveThumbnailFormat(input?.format);
-  const presetOptions = PREVIEW_PRESET_OPTIONS[preset];
-  const quality = getEncodeQuality(format, presetOptions);
-  const cacheKey = buildCacheKey({
-    kind: "preview",
-    sourcePath: asset.sourcePath,
-    zipEntryPath: asset.zipEntryPath,
-    sourceMtime: asset.sourceMtime,
-    width: presetOptions.maxWidth,
-    height: presetOptions.maxHeight,
-    format,
-    quality
-  });
+  const asset = input?.asset ?? findAssetOrThrow(assetId);
+  const { preset, format, quality, cacheKey } = planPreview(asset, input);
   const dedupeKey = cacheKey;
   if (input?.signal) return ensurePreviewVariant({ asset, preset, format, cacheKey, quality, signal: input.signal });
   const inFlight = inFlightVariantTasks.get(dedupeKey);
@@ -151,14 +162,9 @@ export const readOriginalImage = async (assetId: string) => {
   return { asset, buffer };
 };
 
-export const openOriginalImage = async (assetId: string, signal?: AbortSignal) => {
-  const asset = findAssetByIdDb(assetId);
-
-  if (!asset) {
-    throw new AssetNotFoundError(assetId);
-  }
-
-  return openOriginalAssetSource(asset, signal);
+export const openOriginalImage = async (assetId: string, signal?: AbortSignal, preloaded?: AssetRecord, resolveRange?: ByteRangeResolver) => {
+  const asset = preloaded ?? findAssetOrThrow(assetId);
+  return openOriginalAssetSource(asset, signal, resolveRange);
 };
 
 export type CoverThumbnailWarmupResult = {

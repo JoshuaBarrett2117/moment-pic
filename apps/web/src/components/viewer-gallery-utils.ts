@@ -14,8 +14,11 @@ export const QUALITY_OPTIONS: Array<{ value: ImageQualityPreset; label: string; 
   { value: 'original', label: '原图', description: '最完整' },
 ];
 
-export const buildPreviewSrc = (assetId: string, preset: Exclude<ImageQualityPreset, 'original'>): string =>
-  `/api/v1/assets/${assetId}/preview?preset=${preset}`;
+export const buildPreviewSrc = (assetId: string, preset: Exclude<ImageQualityPreset, 'original'>, version?: string | null): string =>
+  `/api/v1/assets/${assetId}/preview?preset=${preset}${version ? `&v=${encodeURIComponent(version)}` : ''}`;
+
+/** 原图 URL 上的内容版本（`v`），预览沿用它，命中后浏览器永久缓存。 */
+const versionOf = (src: string): string | null => new URLSearchParams(src.split('?')[1] ?? '').get('v');
 
 export const resolveImageSrc = (image: ViewerImage, preset: ImageQualityPreset): string => {
   if (preset === 'original') {
@@ -30,7 +33,7 @@ export const resolveImageSrc = (image: ViewerImage, preset: ImageQualityPreset):
     return `${previewPath}?${params.toString()}`;
   }
 
-  return buildPreviewSrc(image.id, preset);
+  return buildPreviewSrc(image.id, preset, versionOf(image.originalSrc));
 };
 
 export const resolveViewerInitialIndex = (initialIndex: number, total: number): number | null => {
@@ -91,7 +94,7 @@ export const getQualityLabel = (preset: ImageQualityPreset): string => {
 
 export const getPreloadHint = (preset: ImageQualityPreset): string | null => {
   if (preset === 'original') {
-    return '当前档位已关闭相邻预加载';
+    return '当前档位只预加载下一张';
   }
 
   if (preset === 'high') {
@@ -112,13 +115,14 @@ export const resolvePreloadWindow = (input: {
     return null;
   }
 
+  // 原图档位：不预加载上一张，但至少预加载下一张（翻页是主要动作）
   const effectivePreloadBefore = input.preset === 'original'
     ? 0
     : input.preset === 'high'
       ? Math.min(Math.max(0, input.preloadBefore), 1)
       : Math.max(0, input.preloadBefore);
   const effectivePreloadAfter = input.preset === 'original'
-    ? 0
+    ? Math.min(Math.max(1, input.preloadAfter), 1)
     : input.preset === 'high'
       ? Math.min(Math.max(0, input.preloadAfter), 1)
       : Math.max(0, input.preloadAfter);

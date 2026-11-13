@@ -2,6 +2,8 @@ import type { MouseEventHandler } from 'react';
 
 type ViewerImageStageProps = {
   imageSrc: string;
+  /** 网格里已缓存的缩略图，主图加载完之前当模糊占位 */
+  placeholderSrc?: string;
   alt: string;
   position: { x: number; y: number };
   scale: number;
@@ -16,6 +18,7 @@ type ViewerImageStageProps = {
 
 export function ViewerImageStage({
   imageSrc,
+  placeholderSrc,
   alt,
   position,
   scale,
@@ -37,6 +40,17 @@ export function ViewerImageStage({
       data-viewer-state={isImageLoading ? 'loading' : 'ready'}
       style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'pointer' }}
     >
+      {isImageLoading && placeholderSrc && (
+        <img
+          key={`placeholder-${placeholderSrc}`}
+          src={placeholderSrc}
+          alt=""
+          aria-hidden="true"
+          className="viewer-image viewer-image-placeholder"
+          style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)` }}
+          draggable={false}
+        />
+      )}
       {isImageLoading && (
         <div className="viewer-loading" data-viewer-loading="true">
           <div className="viewer-loading-spinner" />

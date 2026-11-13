@@ -184,6 +184,20 @@ export const ViewerGalleryStyles: FC<ViewerGalleryStylesProps> = ({ showControls
       object-fit: contain;
       transition: transform 0.15s ease-out;
     }
+    .viewer-image-placeholder {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+      object-fit: contain;
+      filter: blur(14px);
+      pointer-events: none;
+    }
+    .viewer-image-placeholder ~ .viewer-loading {
+      background: rgba(0, 0, 0, 0.15);
+    }
     .viewer-loading {
       position: absolute;
       inset: 0;

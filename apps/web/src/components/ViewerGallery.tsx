@@ -338,6 +338,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
 
       <ViewerImageStage
         imageSrc={currentImageSrc}
+        placeholderSrc={currentImage.backdropSrc}
         alt={currentImage.alt}
         position={position}
         scale={scale}

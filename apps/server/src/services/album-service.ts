@@ -16,7 +16,8 @@ import type {
   AssetDetailDTO,
   LibraryRootDTO
 } from "../types/dto.js";
-import type { AlbumRecord, LibraryRootRecord } from "../types/store.js";
+import type { AlbumRecord, AssetRecord, LibraryRootRecord } from "../types/store.js";
+import { assetVersion, withVersion } from "../lib/media-cache.js";
 import {
   type AlbumListFilters,
   type AlbumListQuery,
@@ -33,6 +34,7 @@ import {
   listAssetsPageByAlbumIdDb,
   deleteAlbumShareDb,
   deleteExpiredAlbumSharesDb,
+  findActiveAlbumShareByTokenDb,
   updateAlbumFavoriteDb,
   updateAlbumSharePasswordDb,
 } from "../repositories/album-repository.js";
@@ -40,10 +42,22 @@ import { findLibraryRootByIdDb, listLibraryRootsDb, deleteLibraryRootDb, upsertL
 import { makeId } from "../repositories/ids.js";
 import { recordAlbumViewDb, getRecentAlbumIdsDb } from "../repositories/system-config-repository.js";
 
-const toAssetUrls = (assetId: string) => ({
-  thumbnailUrl: `/api/v1/assets/${assetId}/thumbnail`,
-  originalUrl: `/api/v1/assets/${assetId}/original`
-});
+const toAssetUrls = (asset: AssetRecord) => {
+  const version = assetVersion(asset);
+  return {
+    thumbnailUrl: withVersion(`/api/v1/assets/${asset.id}/thumbnail`, version),
+    originalUrl: withVersion(`/api/v1/assets/${asset.id}/original`, version)
+  };
+};
+
+const EXPIRED_SHARE_PRUNE_INTERVAL_MS = 10 * 60 * 1000;
+let lastExpiredSharePruneAt = 0;
+/** 过期分享清理最多每 10 分钟一次；读路径只按 expires_at 过滤，不再每次取写锁。 */
+const pruneExpiredSharesThrottled = (now = Date.now()) => {
+  if (now - lastExpiredSharePruneAt < EXPIRED_SHARE_PRUNE_INTERVAL_MS) return;
+  lastExpiredSharePruneAt = now;
+  deleteExpiredAlbumSharesDb(new Date(now).toISOString());
+};
 
 const ALBUM_LIST_CACHE_TTL_MS = 2000;
 type AlbumListResult = {
@@ -186,7 +200,7 @@ export const getAlbumAssets = async (
       width: asset.width,
       height: asset.height,
       sortIndex: asset.sortIndex,
-      ...toAssetUrls(asset.id)
+      ...toAssetUrls(asset)
     })),
     pagination: {
       page,
@@ -211,7 +225,7 @@ export const getAssetDetail = async (assetId: string): Promise<AssetDetailDTO | 
     width: asset.width,
     height: asset.height,
     sortIndex: asset.sortIndex,
-    ...toAssetUrls(asset.id)
+    ...toAssetUrls(asset)
   };
 };
 
@@ -419,9 +433,8 @@ export const resetManagedAlbumSharePassword = async (shareId: string, password: 
 };
 
 export const getSharedAlbumAssets = async (token: string, accessToken: string, page = 1, pageSize = 120): Promise<AlbumAssetsDTO | null> => {
-  deleteExpiredAlbumSharesDb(new Date().toISOString());
-
-  const share = findAlbumShareByTokenDb(token);
+  pruneExpiredSharesThrottled();
+  const share = findActiveAlbumShareByTokenDb(token, new Date().toISOString());
   if (!share) {
     return null;
   }
@@ -442,15 +455,15 @@ export const getSharedAlbumAssets = async (token: string, accessToken: string, p
     ...assets,
     items: assets.items.map((asset) => ({
       ...asset,
-      thumbnailUrl: `/api/v1/shares/${token}/assets/${asset.id}/thumbnail`,
-      originalUrl: `/api/v1/shares/${token}/assets/${asset.id}/original`
+      thumbnailUrl: `/api/v1/shares/${token}/assets/${asset.id}/thumbnail${asset.thumbnailUrl.slice(asset.thumbnailUrl.indexOf("?"))}`,
+      originalUrl: `/api/v1/shares/${token}/assets/${asset.id}/original${asset.originalUrl.slice(asset.originalUrl.indexOf("?"))}`
     }))
   };
 };
 
 export const getSharedAlbumSession = (token: string, accessToken: string): Omit<SharedAlbumAuthDTO, "accessToken"> | null => {
-  deleteExpiredAlbumSharesDb(new Date().toISOString());
-  const share = findAlbumShareByTokenDb(token);
+  pruneExpiredSharesThrottled();
+  const share = findActiveAlbumShareByTokenDb(token, new Date().toISOString());
   if (!share || !verifyShareAccessToken(accessToken, { shareId: share.id, expiresAt: share.expiresAt, passwordHash: share.passwordHash })) {
     return null;
   }
@@ -462,9 +475,8 @@ export const getSharedAlbumSession = (token: string, accessToken: string): Omit<
 };
 
 export const canReadSharedAsset = (token: string, assetId: string, accessToken: string): boolean => {
-  deleteExpiredAlbumSharesDb(new Date().toISOString());
-
-  const share = findAlbumShareByTokenDb(token);
+  pruneExpiredSharesThrottled();
+  const share = findActiveAlbumShareByTokenDb(token, new Date().toISOString());
   if (!share) {
     return false;
   }

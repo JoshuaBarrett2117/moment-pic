@@ -35,9 +35,9 @@ test("真实 HTTP 管理/分享原图断开，取消传播到提取子进程并�
     const origin = await app.listen({ host: "127.0.0.1", port: 0 });
     const share = (await createAlbumShare(id, { password: "Http-Share-Test!", expiresAt: new Date(Date.now() + 60_000).toISOString(), origin }))!;
     const auth = await authenticateAlbumShare(share.token, share.password, id);
-    for (const url of [`/api/v1/assets/${id}/original`, `/api/v1/shares/${share.token}/assets/${id}/original?accessToken=${encodeURIComponent(auth.accessToken)}`]) {
+    for (const url of [`/api/v1/assets/${id}/original`, `/api/v1/shares/${share.token}/assets/${id}/original`]) {
       await new Promise<void>((resolve, reject) => {
-        const request = http.get(origin + url, { headers: { cookie: testSessionCookie(60_000) } }, (response) => {
+        const request = http.get(origin + url, { headers: { cookie: `${testSessionCookie(60_000)}; mp_share=${encodeURIComponent(auth.accessToken)}` } }, (response) => {
           assert.equal(response.statusCode, 200);
           response.once("data", () => { response.destroy(); request.destroy(); resolve(); });
           response.on("error", () => {});
@@ -74,10 +74,10 @@ test("真实 RAR4/RAR5 HTTP 管理/分享原图断开立即终止 WASM worker，
     const origin = await app.listen({ host: "127.0.0.1", port: 0 });
     const share = (await createAlbumShare(id, { password: "Rar-Http-Test!", expiresAt: new Date(Date.now() + 60_000).toISOString(), origin }))!;
     const auth = await authenticateAlbumShare(share.token, share.password, id);
-    const headers = { cookie: testSessionCookie(60_000) };
+    const headers = { cookie: `${testSessionCookie(60_000)}; mp_share=${encodeURIComponent(auth.accessToken)}` };
     for (const create of [createStoredRarArchive, createStoredRar5Archive]) {
       await fs.writeFile(archive, create([{ entryPath: "page.png", content: Buffer.concat([png, Buffer.alloc(16 * 1024 * 1024)]) }]));
-      for (const url of [`/api/v1/assets/${id}/original`, `/api/v1/shares/${share.token}/assets/${id}/original?accessToken=${encodeURIComponent(auth.accessToken)}`]) {
+      for (const url of [`/api/v1/assets/${id}/original`, `/api/v1/shares/${share.token}/assets/${id}/original`]) {
         const previousCount = workers.length;
         await new Promise<void>((resolve, reject) => {
           const request = http.get(origin + url, { headers }, (response) => {
@@ -96,7 +96,7 @@ test("真实 RAR4/RAR5 HTTP 管理/分享原图断开立即终止 WASM worker，
       corrupt[corrupt.indexOf(png) + 40] ^= 0xff;
       await fs.writeFile(archive, corrupt);
       for (const variant of ["thumbnail", "preview"]) {
-        for (const url of [`/api/v1/assets/${id}/${variant}`, `/api/v1/shares/${share.token}/assets/${id}/${variant}?accessToken=${encodeURIComponent(auth.accessToken)}`]) {
+        for (const url of [`/api/v1/assets/${id}/${variant}`, `/api/v1/shares/${share.token}/assets/${id}/${variant}`]) {
           const previousCount = workers.length;
           const response = await app.inject({ url, headers });
           assert.equal(response.statusCode, 422);

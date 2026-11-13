@@ -2,6 +2,9 @@
 
 ## 未发布
 
+### 安全
+- 分享访问令牌不再出现在图片 URL 和响应体里。输对分享密码后，服务端写入 HttpOnly Cookie `mp_share`（Path 限定在 `/api/v1/shares/<token>/`，到分享过期时失效），分享图片只在输过密码的浏览器里能打开，复制图片地址到其他浏览器会返回 404。旧的 `?accessToken=` 参数不再被接受。新增 `GET /api/v1/shares/:token/session`，同一浏览器刷新分享页时免重输密码。
+
 ### 修复
 - 扫描互斥：启动扫描、手动扫描、目录监听增量扫描、单图集重扫经进程内扫描协调器串行执行，修复并发扫描同一新目录时 `UNIQUE constraint failed: albums.source_path`；写库时按 source_path 兜底复用已有记录。
 - 内容未变的图集重扫不再刷新 `updated_at`（“最近更新”排序不再被一次重扫打乱）。

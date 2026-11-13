@@ -9,6 +9,7 @@ export {
   deleteManagedAlbumShare,
   fetchManagedAlbumShares,
   fetchSharedAlbumAssets,
+  fetchSharedAlbumSession,
   useRecentAlbums,
   recordAlbumView,
   rescanAlbum,

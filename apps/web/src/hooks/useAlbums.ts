@@ -175,14 +175,21 @@ export const authenticateAlbumShare = async (token: string, password: string): P
   }
 };
 
+/** 同一浏览器此前输过密码时，凭 Cookie 恢复分享会话；否则返回 null。 */
+export const fetchSharedAlbumSession = async (token: string): Promise<SharedAlbumAuthDTO | null> => {
+  try {
+    return await api.get<SharedAlbumAuthDTO>(`/shares/${token}/session`);
+  } catch {
+    return null;
+  }
+};
+
 export const fetchSharedAlbumAssets = async (
   token: string,
-  accessToken: string,
   options: UseAlbumAssetsOptions = {}
 ): Promise<AlbumAssetsDTO | null> => {
   try {
     const params = new URLSearchParams();
-    params.append('accessToken', accessToken);
     if (options.page) params.append('page', String(options.page));
     if (options.pageSize) params.append('pageSize', String(options.pageSize));
 

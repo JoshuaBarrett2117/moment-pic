@@ -442,10 +442,23 @@ export const getSharedAlbumAssets = async (token: string, accessToken: string, p
     ...assets,
     items: assets.items.map((asset) => ({
       ...asset,
-      thumbnailUrl: `/api/v1/shares/${token}/assets/${asset.id}/thumbnail?accessToken=${encodeURIComponent(accessToken)}`,
-      originalUrl: `/api/v1/shares/${token}/assets/${asset.id}/original?accessToken=${encodeURIComponent(accessToken)}`
+      thumbnailUrl: `/api/v1/shares/${token}/assets/${asset.id}/thumbnail`,
+      originalUrl: `/api/v1/shares/${token}/assets/${asset.id}/original`
     }))
   };
+};
+
+export const getSharedAlbumSession = (token: string, accessToken: string): Omit<SharedAlbumAuthDTO, "accessToken"> | null => {
+  deleteExpiredAlbumSharesDb(new Date().toISOString());
+  const share = findAlbumShareByTokenDb(token);
+  if (!share || !verifyShareAccessToken(accessToken, { shareId: share.id, expiresAt: share.expiresAt, passwordHash: share.passwordHash })) {
+    return null;
+  }
+  const album = findAlbumByIdDb(share.albumId);
+  if (!album) {
+    return null;
+  }
+  return { token, albumId: album.id, name: album.name, expiresAt: share.expiresAt };
 };
 
 export const canReadSharedAsset = (token: string, assetId: string, accessToken: string): boolean => {

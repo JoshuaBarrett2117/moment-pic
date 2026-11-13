@@ -28,7 +28,6 @@ type WebSocketMessage =
 
 interface UseWebSocketReturn {
   isConnected: boolean;
-  lastFileChange: FileChangeEvent | null;
   lastScanComplete: ScanCompleteEvent | null;
 }
 
@@ -38,7 +37,6 @@ export function useWebSocket(
   enabled = false
 ): UseWebSocketReturn {
   const [isConnected, setIsConnected] = useState(false);
-  const [lastFileChange, setLastFileChange] = useState<FileChangeEvent | null>(null);
   const [lastScanComplete, setLastScanComplete] = useState<ScanCompleteEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -110,7 +108,7 @@ export function useWebSocket(
         const message: WebSocketMessage = JSON.parse(event.data);
         
         if (message.type === 'file_change') {
-          setLastFileChange(message.event);
+          // 不写 state：文件事件可能很密集，写顶层 state 会让整棵应用树反复重渲染。
           onFileChangeRef.current?.(message.event);
         } else if (message.type === 'scan_complete') {
           setLastScanComplete(message.event);
@@ -143,5 +141,5 @@ export function useWebSocket(
     };
   }, [enabled]);
 
-  return { isConnected, lastFileChange, lastScanComplete };
+  return { isConnected, lastScanComplete };
 }

@@ -46,8 +46,13 @@ export const buildCacheKey = (input: {
 }) =>
   crypto
     .createHash("sha1")
-    .update(`${input.kind}|${input.sourcePath}|${input.zipEntryPath ?? ""}|${input.sourceMtime ?? ""}|${input.width}x${input.height}|${input.format}|q${input.quality}|fit=${input.fit ?? (input.kind === "preview" ? "inside" : "cover")}|v5`)
+    .update(`${input.kind}|${input.sourcePath}|${input.zipEntryPath ?? ""}|${input.sourceMtime ?? ""}|${input.width}x${input.height}|${input.format}|q${input.quality}|fit=${input.fit ?? (input.kind === "preview" ? "inside" : "cover")}|${cacheKeyVersion(input)}`)
     .digest("hex");
+
+const ANIMATED_SOURCE_PATTERN = /\.(gif|webp)$/i;
+/** v6：动图缩略图改为只取第一帧，旧的逐帧长条缓存需要失效；其他资产保持 v5，不必重新生成。 */
+const cacheKeyVersion = (input: { kind: ImageVariantKind; sourcePath: string; zipEntryPath: string | null }) =>
+  input.kind === "thumbnail" && ANIMATED_SOURCE_PATTERN.test(input.zipEntryPath ?? input.sourcePath) ? "v6" : "v5";
 
 export const sanitizeDimension = (value: number | undefined, fallback: number) => {
   if (!Number.isFinite(value)) {
@@ -78,9 +83,11 @@ export const getEncodeQuality = (format: ThumbnailFormat, input: { webpQuality: 
 const hasValidDimension = (value: number | null | undefined): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
 
-export const normalizeMetadataDimensions = (metadata: Partial<Pick<Metadata, "width" | "height" | "orientation">>): { width: number | null; height: number | null } => {
+export const normalizeMetadataDimensions = (metadata: Partial<Pick<Metadata, "width" | "height" | "orientation" | "pageHeight">>): { width: number | null; height: number | null } => {
   const rawWidth = hasValidDimension(metadata.width) ? metadata.width : null;
-  const rawHeight = hasValidDimension(metadata.height) ? metadata.height : null;
+  // 动图按多帧读取时 height 是所有帧的总高，单帧高度在 pageHeight。
+  const frameHeight = hasValidDimension(metadata.pageHeight) ? metadata.pageHeight : metadata.height;
+  const rawHeight = hasValidDimension(frameHeight) ? frameHeight : null;
 
   if (!rawWidth || !rawHeight) {
     return { width: null, height: null };

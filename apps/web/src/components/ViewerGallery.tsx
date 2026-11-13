@@ -1,4 +1,5 @@
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getAssetThumbnailPresentation } from '../lib/asset-thumbnail';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useMobile } from '../hooks';
 import type { ImageQualityPreset } from '../lib/viewer-quality';
@@ -68,6 +69,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       .map((item) => ({
         id: item.id,
         originalSrc: item.originalUrl,
+        backdropSrc: item.thumbnailUrl ? getAssetThumbnailPresentation(item).src : undefined,
         alt: item.name,
       }));
   }, [safeItems]);
@@ -313,11 +315,11 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     >
       <ViewerGalleryStyles showControls={showControls} showQualityPanel={showQualityPanel} />
 
-      {/* 氛围背景：当前图片的省流预览，强模糊 + 压暗 */}
+      {/* 氛围背景：复用网格里已缓存的缩略图，强模糊 + 压暗；不再为每页触发一次 1600px 预览生成 */}
       <img
         aria-hidden="true"
         alt=""
-        src={resolveImageSrc(currentImage, 'low')}
+        src={currentImage.backdropSrc ?? resolveImageSrc(currentImage, 'low')}
         className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-45 blur-[48px] saturate-150"
       />
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black/45" />

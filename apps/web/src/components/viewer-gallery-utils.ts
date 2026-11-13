@@ -3,6 +3,8 @@ import type { ImageQualityPreset } from '../lib/viewer-quality';
 export type ViewerImage = {
   id: string;
   originalSrc: string;
+  /** 与网格同一个缩略图 URL（已缓存），用作氛围背景。 */
+  backdropSrc?: string;
 };
 
 export const QUALITY_OPTIONS: Array<{ value: ImageQualityPreset; label: string; description: string }> = [

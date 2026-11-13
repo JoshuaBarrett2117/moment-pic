@@ -1,8 +1,9 @@
-import { useCallback, useEffect, Suspense, useMemo } from 'react';
+import { useCallback, useEffect, useState, Suspense, useMemo } from 'react';
 import { Screen } from './types';
 import { LoginScreen } from './components/LoginScreen';
 import { ThemeBackdrop } from './components/ThemeBackdrop';
 import { recordAlbumView, setAlbumFavorite, useSystemConfig } from './hooks';
+import { readCachedPageTransitionMode, writeCachedPageTransitionMode } from './lib/page-transition-mode-cache';
 import { api } from './lib/api';
 import type { AlbumListItemDTO, DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
 import { clearAuthSession, markAuthSession } from './app/auth-session';
@@ -22,6 +23,11 @@ import { AlbumDetailScreen, GalleryScreen, getShareTokenFromPath, SettingsScreen
 
 function AuthenticatedMomentPicApp() {
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
+  const [cachedTransitionMode] = useState(readCachedPageTransitionMode);
+  const pageTransitionMode = systemConfig?.pageTransitionMode ?? cachedTransitionMode ?? 'page';
+  useEffect(() => {
+    if (systemConfig?.pageTransitionMode) writeCachedPageTransitionMode(systemConfig.pageTransitionMode);
+  }, [systemConfig?.pageTransitionMode]);
   const {
     currentScreen,
     debouncedKeyword,
@@ -424,7 +430,7 @@ function AuthenticatedMomentPicApp() {
         <PageTransitionFrame
           screenKey={currentScreen}
           direction={direction}
-          mode={systemConfig?.pageTransitionMode ?? 'page'}
+          mode={pageTransitionMode}
         >
           {(currentScreen === Screen.LOGIN || !isAuthenticated) && (
             <LoginScreen onLogin={handleLogin} />

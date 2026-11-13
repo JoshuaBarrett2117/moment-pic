@@ -157,17 +157,18 @@
     100% { transform: translateX(300%); }
   }
 
-  /* 内容区让出侧栏：桌面完整侧栏 248px，640–1279px 图标栏 72px，手机（含触屏平板）为底部标签栏 */
+  /* 内容区让出侧栏：桌面完整侧栏 248px，640–1279px 图标栏 72px，手机（含触屏平板）为底部标签栏。
+     条件须与 useMobile() 互补：没有指针设备（pointer: none，如无头浏览器、部分电视）时同样显示侧栏，也要让出宽度。 */
   .mp-with-sidebar {
     padding-bottom: calc(env(safe-area-inset-bottom) + 6.5rem);
   }
-  @media (min-width: 640px) and (hover: hover), (min-width: 640px) and (pointer: fine) {
+  @media (min-width: 640px) and (hover: hover), (min-width: 640px) and (pointer: fine), (min-width: 640px) and (pointer: none) {
     .mp-with-sidebar {
       margin-left: 5.75rem;
       padding-bottom: 4rem;
     }
   }
-  @media (min-width: 1280px) and (hover: hover), (min-width: 1280px) and (pointer: fine) {
+  @media (min-width: 1280px) and (hover: hover), (min-width: 1280px) and (pointer: fine), (min-width: 1280px) and (pointer: none) {
     .mp-with-sidebar {
       margin-left: 17.25rem;
     }

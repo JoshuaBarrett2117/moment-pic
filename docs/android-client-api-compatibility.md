@@ -38,7 +38,8 @@ GET /api/v1/albums?page=1&pageSize=24&keyword=&sortBy=updatedAt&sortOrder=desc
 
 | 参数 | 说明 |
 | :--- | :--- |
-| `page` | 从 1 开始的页码 |
+| `cursor` | 推荐。上一页响应里的 `pagination.nextCursor`，第一页不传 |
+| `page` | 从 1 开始的页码（兼容旧客户端；带 `cursor` 时只作回显） |
 | `pageSize` | 每页数量，移动端建议 24 |
 | `keyword` | 相册名搜索关键词，可为空 |
 | `sortBy` | `updatedAt`、`name`、`assetCount` |
@@ -46,15 +47,15 @@ GET /api/v1/albums?page=1&pageSize=24&keyword=&sortBy=updatedAt&sortOrder=desc
 | `libraryRootId` | 可选，按图库来源过滤 |
 | `sourceType` | 可选，`folder` 或 `zip` |
 
-客户端需要读取响应中的 `items` 和 `pagination.total`。相册封面优先使用 `coverUrl`；如果为空，可以进入相册后用第一张图片缩略图作为兜底封面。
+客户端需要读取响应中的 `items`、`pagination.total` 和 `pagination.nextCursor`。连续加载时把 `nextCursor` 原样传给下一次请求的 `cursor`，为 `null` 表示没有更多；这样在扫描新增图集或多个图集更新时间相同时也不会重复或漏项。游标格式错误、或与本次 `sortBy` / `sortOrder` 不一致时返回 400（code 4012），此时从第一页重新加载。相册封面优先使用 `coverUrl`；如果为空，可以进入相册后用第一张图片缩略图作为兜底封面。
 
 ## 图片列表
 
 ```http
-GET /api/v1/albums/{albumId}/assets?page=1&pageSize=120
+GET /api/v1/albums/{albumId}/assets?pageSize=120&cursor=
 ```
 
-客户端需要读取响应中的 `items` 和 `pagination.total`。每个图片条目建议依赖：
+同样支持 `cursor`（推荐）和 `page`。客户端需要读取响应中的 `items`、`pagination.total` 和 `pagination.nextCursor`。每个图片条目建议依赖：
 
 - `id`
 - `name`

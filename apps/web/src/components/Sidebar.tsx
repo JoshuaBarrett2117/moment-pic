@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, m } from 'motion/react';
 import {
   Clock, FolderTree, HardDrive, Home, Images, Layers3, Loader2, LogOut, RefreshCw, Search, Settings, Share2, Star, UserRound, X,
 } from 'lucide-react';
@@ -231,14 +231,14 @@ const MobileTabBar: FC = () => {
       <AnimatePresence>
         {sheetOpen && (
           <>
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSheetOpen(false)}
               className="fixed inset-0 z-50 mp-scrim"
             />
-            <motion.div
+            <m.div
               role="dialog"
               aria-label="我的"
               initial={{ y: '100%' }}
@@ -258,7 +258,7 @@ const MobileTabBar: FC = () => {
                 <SidebarNav showBrowse={false} onAfterNavigate={() => setSheetOpen(false)} />
                 <SidebarFooter onAfterNavigate={() => setSheetOpen(false)} />
               </div>
-            </motion.div>
+            </m.div>
           </>
         )}
       </AnimatePresence>

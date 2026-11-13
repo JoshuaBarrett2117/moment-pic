@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { motion } from 'motion/react';
+import { m } from 'motion/react';
 import { ThrottledImage } from '../ThrottledImage';
 import { galleryCardItemVariants } from './gallery-card-motion';
 
@@ -23,7 +23,7 @@ type CoverCardProps = {
 /** 封面铺满的相册卡片：信息叠在底部渐变上，纸感主题自动加相框（--mp-photo-frame）。 */
 export function CoverCard({ title, meta, coverUrl, placeholderIcon, tag, badge, actions, notice, onOpen, ariaLabel }: CoverCardProps) {
   return (
-    <motion.div variants={galleryCardItemVariants} className="group">
+    <m.div variants={galleryCardItemVariants} className="group">
       {notice}
       <div className="mp-cover-card mp-cv">
         <button
@@ -58,6 +58,6 @@ export function CoverCard({ title, meta, coverUrl, placeholderIcon, tag, badge, 
           </div>
         )}
       </div>
-    </motion.div>
+    </m.div>
   );
 }

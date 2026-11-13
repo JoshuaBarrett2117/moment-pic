@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { motion, type HTMLMotionProps } from 'motion/react';
+import { m, type HTMLMotionProps } from 'motion/react';
 
 interface WobblyButtonProps extends Omit<HTMLMotionProps<'button'>, 'ref' | 'children'> {
   children: ReactNode;
@@ -24,7 +24,7 @@ export const WobblyButton = ({
   };
 
   return (
-    <motion.button
+    <m.button
       whileHover={{ y: disabled ? 0 : -1 }}
       whileTap={{ scale: disabled ? 1 : 0.98 }}
       transition={{ duration: 0.16 }}
@@ -33,7 +33,7 @@ export const WobblyButton = ({
       {...props}
     >
       {children}
-    </motion.button>
+    </m.button>
   );
 };
 

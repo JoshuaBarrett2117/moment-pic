@@ -21,7 +21,6 @@ import { assetVersion, withVersion } from "../lib/media-cache.js";
 import {
   type AlbumListFilters,
   type AlbumListQuery,
-  countAssetsByAlbumIdDb,
   deleteAlbumDb,
   deleteAssetDb,
   findAlbumByIdDb,
@@ -73,6 +72,20 @@ type AlbumListResult = {
   };
 };
 const albumListCache = new Map<string, { expiresAt: number; value: AlbumListResult }>();
+/** 列表缓存上限：游标分页每页一个 key，写入时顺手清过期项并按插入顺序淘汰。 */
+export const ALBUM_LIST_CACHE_MAX_ENTRIES = 200;
+/** 筛选条件 → 首页算出的总数；游标翻页复用，避免每页 COUNT(*)。 */
+const albumTotalCache = new Map<string, { expiresAt: number; total: number }>();
+const ALBUM_TOTAL_CACHE_TTL_MS = 30_000;
+
+const setBoundedCacheEntry = <V extends { expiresAt: number }>(cache: Map<string, V>, key: string, value: V, now: number) => {
+  for (const [entryKey, entry] of cache) if (entry.expiresAt <= now) cache.delete(entryKey);
+  cache.delete(key);
+  while (cache.size >= ALBUM_LIST_CACHE_MAX_ENTRIES) cache.delete(cache.keys().next().value!);
+  cache.set(key, value);
+};
+
+export const getAlbumListCacheSize = () => albumListCache.size;
 
 const buildAlbumListCacheKey = (query: AlbumListQuery, input?: AlbumListFilters) =>
   JSON.stringify({
@@ -89,7 +102,11 @@ const buildAlbumListCacheKey = (query: AlbumListQuery, input?: AlbumListFilters)
 
 export const clearAlbumListCache = () => {
   albumListCache.clear();
+  albumTotalCache.clear();
 };
+
+const buildAlbumTotalCacheKey = (query: AlbumListQuery, input?: AlbumListFilters) =>
+  buildAlbumListCacheKey({ pageSize: 0 }, input) + `|${query.pageSize}`;
 
 export const toAlbumListItem = (row: AlbumRecord): AlbumListItemDTO => ({
   id: row.id,
@@ -122,7 +139,13 @@ export const listAlbums = async (query: AlbumListQuery, input?: AlbumListFilters
     return cached.value;
   }
 
-  const result = listAlbumsDb(query, input);
+  // 总数只在首页（无游标）计算；游标翻页复用首页的总数，缓存缺失（过期/重启）时再补算一次。
+  const totalKey = buildAlbumTotalCacheKey(query, input);
+  const cachedTotal = query.cursor ? albumTotalCache.get(totalKey) : undefined;
+  const reuseTotal = Boolean(cachedTotal && cachedTotal.expiresAt > now);
+  const result = listAlbumsDb(query, input, { includeTotal: !reuseTotal });
+  const total = reuseTotal ? cachedTotal!.total : result.total ?? 0;
+  if (!reuseTotal) setBoundedCacheEntry(albumTotalCache, totalKey, { expiresAt: now + ALBUM_TOTAL_CACHE_TTL_MS, total }, now);
 
   const items: AlbumListItemDTO[] = result.items.map(toAlbumListItem);
 
@@ -131,14 +154,11 @@ export const listAlbums = async (query: AlbumListQuery, input?: AlbumListFilters
     pagination: {
       page: query.page ?? 1,
       pageSize: query.pageSize,
-      total: result.total,
+      total,
       nextCursor: result.nextCursor
     }
   };
-  albumListCache.set(cacheKey, {
-    expiresAt: now + ALBUM_LIST_CACHE_TTL_MS,
-    value: payload
-  });
+  setBoundedCacheEntry(albumListCache, cacheKey, { expiresAt: now + ALBUM_LIST_CACHE_TTL_MS, value: payload }, now);
   return payload;
 };
 
@@ -172,7 +192,8 @@ export const getAlbumAssets = async (
 
   const assetPage = listAssetsPageByAlbumIdDb(albumId, { page, cursor, pageSize });
   const assets = await fillAssetDimensions(assetPage.items);
-  const total = countAssetsByAlbumIdDb(albumId);
+  // 扫描/删图时 asset_count 与 assets 同事务维护，直接用，不再每页 COUNT(*)。
+  const total = album.assetCount;
 
   const libraryRoot = findLibraryRootByIdDb(album.libraryRootId);
   const relativePath = libraryRoot

@@ -10,6 +10,9 @@ import { acquireArchiveLease, ArchiveDecodeError, ArchiveSafetyError, collectBou
 import type { ArchiveImageEntry } from "./archive-types.js";
 import { RAR_CHUNK_BYTES, RAR_WORKER_CHANNEL, type RarWorkerMessage, type RarWorkerRequest } from "./rar-protocol.js";
 
+/** 传给 readRarStream 的 entryPath 取此值时整包顺序解压（输出所有文件内容的拼接）。 */
+export const RAR_ALL_ENTRIES = "\u0000moment-pic:all-entries";
+
 export const readRarStream = async (archivePath: string, entryPath: string | undefined, options: ArchiveOptions = {}, providedLease?: ArchiveLease): Promise<Readable> => {
   const lease = providedLease ?? await acquireArchiveLease(options);
   let worker: Worker | undefined;
@@ -36,7 +39,8 @@ export const readRarStream = async (archivePath: string, entryPath: string | und
     lease.signal.throwIfAborted();
     const source = import.meta.url.endsWith(".ts");
     const workerUrl = new URL(source ? "./rar-worker.ts" : "./rar-worker.js", import.meta.url);
-    const data: RarWorkerRequest = { archivePath, entryPath: entryPath === undefined ? undefined : normalizeArchiveEntryPath(entryPath),
+    const extractAll = entryPath === RAR_ALL_ENTRIES;
+    const data: RarWorkerRequest = { archivePath, extractAll, entryPath: entryPath === undefined || extractAll ? undefined : normalizeArchiveEntryPath(entryPath),
       maxBytes: options.maxBytes ?? MAX_ENTRY_BYTES, maxEntries: options.maxEntries ?? MAX_ARCHIVE_ENTRIES,
       maxListingBytes: entryPath === undefined ? Math.min(options.maxBytes ?? MAX_LISTING_BYTES, MAX_LISTING_BYTES) : MAX_LISTING_BYTES,
       control: control.buffer as SharedArrayBuffer };

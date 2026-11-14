@@ -77,6 +77,7 @@ export const parseJsonFromModelText = <T>(text: string): T | null => {
       try {
         return JSON.parse(normalized.slice(objectStart, objectEnd + 1)) as T;
       } catch {
+        // 截取的对象片段仍不是合法 JSON，交给后续兜底
       }
     }
   }

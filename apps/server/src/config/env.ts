@@ -11,7 +11,7 @@ export class EnvConfigError extends Error {}
 export const KNOWN_ENV_KEYS = [
   "HOST", "PORT", "ADMIN_PASSWORD", "SESSION_SECRET", "TRUSTED_PROXIES", "WS_ALLOWED_ORIGINS",
   "LIBRARY_ROOTS", "CACHE_DIR", "CACHE_MAX_BYTES", "CACHE_GC_MIN_AGE_HOURS", "CACHE_GC_INTERVAL_HOURS",
-  "SQLITE_PATH", "PUBLIC_DIR", "LOG_LEVEL", "AI_API_TOKEN"
+  "SQLITE_PATH", "PUBLIC_DIR", "LOG_LEVEL", "AI_API_TOKEN", "ARCHIVE_EXTRACT_CACHE_MAX_BYTES"
 ] as const;
 
 export const DEPRECATED_ENV_KEYS: Readonly<Record<string, string>> = {
@@ -71,6 +71,8 @@ export const env = {
   cacheGcMinAgeHours: readNumber("CACHE_GC_MIN_AGE_HOURS", process.env.CACHE_GC_MIN_AGE_HOURS, 24),
   cacheGcIntervalHours: readNumber("CACHE_GC_INTERVAL_HOURS", process.env.CACHE_GC_INTERVAL_HOURS, 6),
   cacheDir: process.env.CACHE_DIR ?? "./data/cache",
+  /** 7z/RAR 整包解压缓存总上限（字节，位于 CACHE_DIR/archive-extract）；单包上限为其 1/4；0 关闭。 */
+  archiveExtractCacheMaxBytes: readNumber("ARCHIVE_EXTRACT_CACHE_MAX_BYTES", process.env.ARCHIVE_EXTRACT_CACHE_MAX_BYTES, 2 * 1024 ** 3),
   sqlitePath: process.env.SQLITE_PATH ?? "./data/gallery.sqlite",
   publicDir: resolvePublicDir()
 };

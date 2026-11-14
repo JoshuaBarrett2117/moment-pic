@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import * as service from "./album-service.js";
 import { insertAlbumWithAssetsDb, deleteAlbumDb, findAlbumShareByTokenDb } from "../repositories/album-repository.js";

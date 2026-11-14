@@ -132,13 +132,16 @@ export function useLibraryScan({ onScanComplete, enabled = true }: UseLibrarySca
   }, [stopTask]);
 
   useEffect(() => {
-    const activeTasks = scanTaskList.filter(isActive).map(({ libraryRootId, taskId }) => ({ libraryRootId, taskId }));
+    const activeTasks = Array.from<ScanTask>(scanTasks.values()).filter(isActive).map(({ libraryRootId, taskId }) => ({ libraryRootId, taskId }));
     if (activeTasks.length) window.localStorage.setItem(SCAN_TASK_STORAGE_KEY, JSON.stringify(activeTasks));
     else window.localStorage.removeItem(SCAN_TASK_STORAGE_KEY);
   }, [scanTasks]);
 
   useEffect(() => {
     mountedRef.current = true;
+    // 两个 ref 在整个生命周期内指向同一个 Map/Set，清理时直接用挂载时取到的实例
+    const requests = requestsRef.current;
+    const locallyChangedTasks = locallyChangedTasksRef.current;
     const restore = new AbortController();
     if (!enabled) setScanTasks(new Map());
     else {
@@ -162,8 +165,8 @@ export function useLibraryScan({ onScanComplete, enabled = true }: UseLibrarySca
     return () => {
       mountedRef.current = false;
       restore.abort();
-      for (const key of requestsRef.current.keys()) stopTask(key);
-      locallyChangedTasksRef.current.clear();
+      for (const key of requests.keys()) stopTask(key);
+      locallyChangedTasks.clear();
     };
   }, [enabled, startPolling, stopTask, updateTask]);
 

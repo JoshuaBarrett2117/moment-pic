@@ -19,12 +19,13 @@ export const formatAlbumDate = (value: string | null | undefined): string => {
   return `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 };
 
-export function AlbumCard({ album, onNavigateToAlbum, onFavoriteToggle, onShare }: AlbumCardProps) {
+export function AlbumCard({ album, index, onNavigateToAlbum, onFavoriteToggle, onShare }: AlbumCardProps) {
   const { isAdmin } = useCurrentUser();
   const date = formatAlbumDate(album.updatedAt);
 
   return (
     <CoverCard
+      index={index}
       title={album.name}
       meta={`${album.assetCount} 张${date ? ` · ${date}` : ''}`}
       coverUrl={album.coverUrl}

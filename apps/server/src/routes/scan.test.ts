@@ -9,7 +9,6 @@ import test from "node:test";
 import sharp from "sharp";
 import { WebSocket } from "ws";
 import { buildApp } from "../app.js";
-import { env } from "../config/env.js";
 import { testSessionCookie } from "../test-support/session.js";
 import { deleteLibraryRootDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
 import { updateAlbumScanStatusDb } from "../repositories/album-repository.js";

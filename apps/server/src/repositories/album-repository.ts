@@ -1,5 +1,5 @@
 import { reconcileAlbumProgressDb } from "./album-progress-repository.js";
-import { getDb } from "../db/sqlite.js";
+import { getDb, stmt } from "../db/sqlite.js";
 import type { AlbumRecord, AlbumShareRecord, AssetRecord, ThumbnailRecord } from "../types/store.js";
 import { rowToAlbum, rowToAlbumShare, rowToAsset, rowToThumbnail } from "./sqlite-mappers.js";
 import {
@@ -152,7 +152,8 @@ const ALBUM_SORT_COLUMNS: Record<AlbumSortBy, "name" | "updated_at" | "asset_cou
   assetCount: "asset_count"
 };
 
-export const listAlbumsDb = (query: AlbumListQuery, input?: AlbumListFilters) => {
+/** includeTotal=false 时跳过 COUNT（游标翻页由服务层复用首页总数），total 返回 null。 */
+export const listAlbumsDb = (query: AlbumListQuery, input?: AlbumListFilters, options: { includeTotal?: boolean } = {}) => {
   const db = getDb();
   const conditions: string[] = [];
   const pageSize = Math.max(1, Math.trunc(query.pageSize));
@@ -218,8 +219,9 @@ export const listAlbumsDb = (query: AlbumListQuery, input?: AlbumListFilters) =>
     ? encodeAlbumCursor({ sortBy, order: sortOrder, value: last[sortBy], id: last.id })
     : null;
   const countParams = Object.fromEntries(Object.entries(params).filter(([key]) => key !== "cursorValue" && key !== "cursorId" && key !== "limit" && key !== "offset"));
+  if (options.includeTotal === false) return { items, total: null, nextCursor };
   const totalRow = db.prepare(`SELECT COUNT(*) AS total FROM albums ${filterWhere}`).get(countParams) as { total: number };
-  return { items, total: totalRow.total, nextCursor };
+  return { items, total: totalRow.total as number | null, nextCursor };
 };
 
 export const listAlbumsByLibraryRootIdDb = (libraryRootId: string): AlbumRecord[] => {
@@ -231,8 +233,7 @@ export const listAlbumsByLibraryRootIdDb = (libraryRootId: string): AlbumRecord[
 };
 
 export const findAlbumByIdDb = (albumId: string): AlbumRecord | null => {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM albums WHERE id = ? LIMIT 1").get(albumId) as Record<string, unknown> | undefined;
+  const row = stmt("SELECT * FROM albums WHERE id = ? LIMIT 1").get(albumId) as Record<string, unknown> | undefined;
   return row ? rowToAlbum(row) : null;
 };
 
@@ -256,19 +257,51 @@ export const listAssetsPageByAlbumIdDb = (
   albumId: string,
   query: { page?: number; cursor?: string; pageSize: number }
 ): { items: AssetRecord[]; nextCursor: string | null } => {
-  const db = getDb();
   const pageSize = Math.max(1, Math.trunc(query.pageSize));
   const cursor = query.cursor ? decodeAssetCursor(query.cursor) : null;
   const rows = (cursor
-    ? db.prepare("SELECT * FROM assets WHERE album_id = ? AND (sort_index, id) > (?, ?) ORDER BY sort_index ASC, id ASC LIMIT ?")
+    ? stmt("SELECT * FROM assets WHERE album_id = ? AND (sort_index, id) > (?, ?) ORDER BY sort_index ASC, id ASC LIMIT ?")
       .all(albumId, cursor.sortIndex, cursor.id, pageSize + 1)
-    : db.prepare("SELECT * FROM assets WHERE album_id = ? ORDER BY sort_index ASC, id ASC LIMIT ? OFFSET ?")
+    : stmt("SELECT * FROM assets WHERE album_id = ? ORDER BY sort_index ASC, id ASC LIMIT ? OFFSET ?")
       .all(albumId, pageSize + 1, (Math.max(1, Math.trunc(query.page ?? 1)) - 1) * pageSize)
   ).map((row: unknown) => rowToAsset(row as Record<string, unknown>));
   const hasMore = rows.length > pageSize;
   const items = hasMore ? rows.slice(0, pageSize) : rows;
   const last = items.at(-1);
   return { items, nextCursor: hasMore && last ? encodeAssetCursor({ sortIndex: last.sortIndex, id: last.id }) : null };
+};
+
+/** 扫描比对所需的最小列。 */
+export type ComparableAssetRecord = Pick<AssetRecord, "name" | "extension" | "sourcePath" | "relativePath" | "zipEntryPath" | "sortIndex" | "sizeBytes" | "sourceMtime" | "width" | "height">;
+
+/** 一次性按 album_id 分组加载某图库根下目录图集的资产（只取比对列），供扫描复用，避免每个图集各查两次。 */
+export const listComparableFolderAssetsByLibraryRootDb = (libraryRootId: string): Map<string, ComparableAssetRecord[]> => {
+  const grouped = new Map<string, ComparableAssetRecord[]>();
+  const rows = getDb().prepare(`
+    SELECT assets.album_id, assets.name, assets.extension, assets.source_path, assets.relative_path, assets.zip_entry_path,
+      assets.sort_index, assets.size_bytes, assets.source_mtime, assets.width, assets.height
+    FROM assets JOIN albums ON albums.id = assets.album_id
+    WHERE albums.library_root_id = ? AND albums.source_type = 'folder'
+    ORDER BY assets.album_id, assets.sort_index ASC, assets.id ASC
+  `).iterate(libraryRootId) as IterableIterator<Record<string, unknown>>;
+  for (const row of rows) {
+    const albumId = String(row.album_id);
+    let list = grouped.get(albumId);
+    if (!list) { list = []; grouped.set(albumId, list); }
+    list.push({
+      name: String(row.name),
+      extension: String(row.extension),
+      sourcePath: String(row.source_path),
+      relativePath: row.relative_path ? String(row.relative_path) : null,
+      zipEntryPath: row.zip_entry_path ? String(row.zip_entry_path) : null,
+      sortIndex: Number(row.sort_index),
+      sizeBytes: row.size_bytes ? String(row.size_bytes) : null,
+      sourceMtime: row.source_mtime ? String(row.source_mtime) : null,
+      width: row.width === null || row.width === undefined ? null : Number(row.width),
+      height: row.height === null || row.height === undefined ? null : Number(row.height)
+    });
+  }
+  return grouped;
 };
 
 export const countAssetsByAlbumIdDb = (albumId: string): number => {
@@ -297,8 +330,7 @@ export const listAlbumCoverAssetIdsDb = (libraryRootId?: string, limit = 2000): 
 };
 
 export const findAssetByIdDb = (assetId: string): AssetRecord | null => {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM assets WHERE id = ? LIMIT 1").get(assetId) as Record<string, unknown> | undefined;
+  const row = stmt("SELECT * FROM assets WHERE id = ? LIMIT 1").get(assetId) as Record<string, unknown> | undefined;
   return row ? rowToAsset(row) : null;
 };
 
@@ -308,8 +340,7 @@ export const updateAssetMetadataDb = (assetId: string, input: { width: number | 
 };
 
 export const findThumbnailByAssetIdDb = (assetId: string): ThumbnailRecord | null => {
-  const db = getDb();
-  const row = db.prepare("SELECT * FROM thumbnails WHERE asset_id = ? LIMIT 1").get(assetId) as Record<string, unknown> | undefined;
+  const row = stmt("SELECT * FROM thumbnails WHERE asset_id = ? LIMIT 1").get(assetId) as Record<string, unknown> | undefined;
   return row ? rowToThumbnail(row) : null;
 };
 
@@ -413,8 +444,7 @@ export const listActiveAlbumSharesDb = (nowIso: string): Array<AlbumShareRecord 
 };
 
 export const isAssetInAlbumDb = (albumId: string, assetId: string): boolean => {
-  const db = getDb();
-  const row = db.prepare("SELECT 1 AS matched FROM assets WHERE album_id = ? AND id = ? LIMIT 1").get(albumId, assetId) as { matched: number } | undefined;
+  const row = stmt("SELECT 1 AS matched FROM assets WHERE album_id = ? AND id = ? LIMIT 1").get(albumId, assetId) as { matched: number } | undefined;
   return row?.matched === 1;
 };
 

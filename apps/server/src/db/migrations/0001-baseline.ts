@@ -185,7 +185,7 @@ const BASELINE_SCHEMA = `
       allow_alias_merge INTEGER NOT NULL DEFAULT 1,
       allow_cross_root_grouping INTEGER NOT NULL DEFAULT 1,
       excluded_tokens_json TEXT NOT NULL DEFAULT '[]',
-      preferred_scopes_json TEXT NOT NULL DEFAULT '[\"albumName\",\"sourcePath\"]',
+      preferred_scopes_json TEXT NOT NULL DEFAULT '["albumName","sourcePath"]',
       review_required_below_confidence REAL NOT NULL DEFAULT 0.9,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL

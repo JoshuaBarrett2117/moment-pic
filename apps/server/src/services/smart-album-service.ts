@@ -12,7 +12,6 @@ import type {
   SmartAlbumRuleTestResultDTO
 } from "../types/dto.js";
 import type {
-  SmartAlbumAiConfigRecord,
   SmartAlbumMatchRecord,
   SmartAlbumMemberRecord,
   SmartAlbumRecord,
@@ -52,7 +51,6 @@ import { makeId } from "../repositories/ids.js";
 
 export { areAiRulePatternsAligned, buildRulePatternsFromAlbums, buildSmartAlbumRuleRecords } from "./smart-album-ai-rule-builder.js";
 
-type SmartAlbumRuleInput = Omit<SmartAlbumRuleDTO, "id" | "createdAt" | "updatedAt">;
 type SmartAlbumAiConfigInput = {
   enabled: boolean;
   mode: SmartAlbumAiConfigDTO["mode"];

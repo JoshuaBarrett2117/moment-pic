@@ -10,11 +10,16 @@
     "build:server": "npm run build --workspace @moment-pic/server",
     "build:web": "npm run build --workspace @moment-pic/web",
     "lint:web": "npm run lint --workspace @moment-pic/web",
+    "lint:server": "eslint apps/server/src scripts eslint.config.mjs --max-warnings 0",
+    "lint": "npm run lint:web && npm run lint:server",
     "start:server": "npm run start --workspace @moment-pic/server",
     "test:discovery": "node --test scripts/discover-tests.test.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test:server": "npm run test --workspace @moment-pic/server",
     "test:web": "npm run test --workspace @moment-pic/web",
-    "test": "npm run test:server && npm run test:web && npm run lint:web && npm run build:server && npm run build:web"
+    "test": "npm run test:server && npm run test:web && npm run lint && npm run build:server && npm run build:web"
+  },
+  "overrides": {
+    "minimatch": "^11.0.5"
   }
 }

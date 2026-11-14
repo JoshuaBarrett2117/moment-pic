@@ -153,7 +153,7 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     return sendSharedAsset(request, token, assetId, getShareAccessToken(request), reply, "preview", parseEnumValue(query.preset, ["low", "balanced", "high"] as const));
   });
 
-  app.get("/api/v1/albums/recent", async (request, reply) => {
+  app.get("/api/v1/albums/recent", async (request) => {
     const query = request.query as { limit?: string };
     const limit = parseBoundedInteger(query.limit, { defaultValue: 50, min: 1, max: 100 });
     const userId = sessionUserId(request);
@@ -189,7 +189,7 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post("/api/v1/albums/:albumId/view", async (request, reply) => {
+  app.post("/api/v1/albums/:albumId/view", async (request) => {
     const { albumId } = request.params as { albumId: string };
     {
       const userId = sessionUserId(request);

@@ -24,6 +24,16 @@ export type SmartAlbumRebuildTaskDto = {
 };
 
 const smartAlbumRebuildTasks = new Map<string, SmartAlbumRebuildTaskRecord>();
+/** 只保留最近若干个已结束任务供查询；进行中的任务永不淘汰。 */
+export const MAX_FINISHED_REBUILD_TASKS = 20;
+
+const pruneFinishedTasks = () => {
+  const finished = [...smartAlbumRebuildTasks.values()].filter((task) => task.status === "completed" || task.status === "failed");
+  // Map 按插入顺序迭代，先插入的即较早的任务
+  for (const task of finished.slice(0, Math.max(0, finished.length - MAX_FINISHED_REBUILD_TASKS))) smartAlbumRebuildTasks.delete(task.id);
+};
+
+export const getSmartAlbumRebuildTaskCount = () => smartAlbumRebuildTasks.size;
 
 const toRebuildTaskDto = (task: SmartAlbumRebuildTaskRecord): SmartAlbumRebuildTaskDto => ({
   taskId: task.id,
@@ -82,6 +92,7 @@ export const startSmartAlbumRebuildTask = (options?: {
     error: null,
     result: null
   };
+  pruneFinishedTasks();
   smartAlbumRebuildTasks.set(taskId, task);
   void runRebuildTask(taskId, options?.onTaskFailed);
 

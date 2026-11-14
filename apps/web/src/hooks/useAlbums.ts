@@ -56,7 +56,7 @@ export function useAlbums(): UseAlbumsReturn {
     } finally {
       if (request.isCurrent()) setIsLoading(false);
     }
-  }, []);
+  }, [requests]);
 
   return { cancelRequests: requests.cancel, albums, isLoading, error, fetchAlbums };
 }
@@ -104,7 +104,7 @@ export function useAlbumAssets(): UseAlbumAssetsReturn {
     } finally {
       if (request.isCurrent()) setIsLoading(false);
     }
-  }, []);
+  }, [requests]);
 
   return { cancelRequests: requests.cancel, assets, isLoading, error, fetchAssets };
 }
@@ -257,7 +257,7 @@ export function useRecentAlbums(): UseRecentAlbumsReturn {
     } finally {
       if (request.isCurrent()) setIsLoading(false);
     }
-  }, []);
+  }, [requests]);
 
   return { cancelRequests: requests.cancel, recentAlbums, isLoading, error, fetchRecentAlbums };
 }

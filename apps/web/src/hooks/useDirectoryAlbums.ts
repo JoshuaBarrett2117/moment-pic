@@ -33,7 +33,7 @@ export function useDirectoryAlbums() {
     } finally {
       if (request.isCurrent()) setIsLoading(false);
     }
-  }, []);
+  }, [requests]);
 
   return {
     cancelRequests: requests.cancel,

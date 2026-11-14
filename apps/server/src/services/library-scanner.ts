@@ -7,7 +7,6 @@ import {
   applyLibraryRootScanDiffDb,
   findAlbumByIdDb,
   listAlbumsDb,
-  listAssetsByAlbumIdDb,
   updateAlbumScanMetadataDb,
   updateAlbumScanStatusBatchDb,
   listAlbumsByLibraryRootIdDb
@@ -15,7 +14,7 @@ import {
 import { findLibraryRootByIdDb, listLibraryRootsDb, upsertLibraryRootDb } from "../repositories/library-root-repository.js";
 import { makeId } from "../repositories/ids.js";
 import { runPostLibraryScanTasks } from "./library-scanner/post-scan-tasks.js";
-import { iterateAlbumsForRoot, scanFolderAlbum, scanZipAlbum, type ScannedAlbum } from "./library-scanner/album-discovery.js";
+import { ExistingAssetIndex, iterateAlbumsForRoot, scanFolderAlbum, scanZipAlbum, type ScannedAlbum } from "./library-scanner/album-discovery.js";
 import { buildAssetsFingerprint, buildStableAssetId } from "./library-scanner-utils.js";
 import { scanCoordinator } from "./scan-coordinator.js";
 
@@ -88,7 +87,8 @@ const toAssetRecord = (albumId: string, timestamp: string, asset: ScannedAlbum["
 const shouldReplaceAlbum = (
   existingAlbum: AlbumRecord,
   discoveredAlbum: ScannedAlbum,
-  nextAssets: AssetRecord[]
+  nextAssets: AssetRecord[],
+  existingAssetIndex: ExistingAssetIndex
 ): boolean => {
   if (discoveredAlbum.reuseExisting) {
     return false;
@@ -102,7 +102,7 @@ const shouldReplaceAlbum = (
     return true;
   }
 
-  const existingAssets = listAssetsByAlbumIdDb(existingAlbum.id);
+  const existingAssets = existingAssetIndex.get(existingAlbum.id);
   if (existingAssets.length !== nextAssets.length) {
     return true;
   }
@@ -151,6 +151,7 @@ const scanLibraryUnlocked = async (input?: ScanLibraryInput) => {
     const libraryRoot = libraryRoots[rootIndex];
     const existingAlbums = listAlbumsByLibraryRootIdDb(libraryRoot.id);
     const existingBySourcePath = new Map(existingAlbums.map((album) => [album.sourcePath, album]));
+    const existingAssetIndex = ExistingAssetIndex.forLibraryRoot(libraryRoot.id, existingAlbums.filter((album) => album.sourceType === "folder").map((album) => album.id));
     const discoveredSourcePaths = new Set<string>();
     const failedScopes = new Set<string>();
     const replacedBatch: Array<{
@@ -160,6 +161,7 @@ const scanLibraryUnlocked = async (input?: ScanLibraryInput) => {
     }> = [];
     let scannedAlbumsInRoot = 0;
     let lastProgressAt = Date.now();
+    let previousAlbumId: string | null = null;
 
     if (input?.onProgress) {
       input.onProgress({
@@ -182,13 +184,16 @@ const scanLibraryUnlocked = async (input?: ScanLibraryInput) => {
       });
     };
 
-    for await (const discoveredAlbum of iterateAlbumsForRoot(libraryRoot.path, existingBySourcePath, failedScopes)) {
+    for await (const discoveredAlbum of iterateAlbumsForRoot(libraryRoot.path, existingBySourcePath, failedScopes, existingAssetIndex)) {
       scannedAlbumsInRoot += 1;
       discoveredSourcePaths.add(discoveredAlbum.sourcePath);
       albumsDiscovered += 1;
       assetsDiscovered += discoveredAlbum.reuseExisting ? discoveredAlbum.reuseAssetCount : discoveredAlbum.assets.length;
 
       const existingAlbum = existingBySourcePath.get(discoveredAlbum.sourcePath);
+      // 上一个图集已处理完，释放其预加载资产
+      if (previousAlbumId) existingAssetIndex.release(previousAlbumId);
+      previousAlbumId = existingAlbum?.id ?? null;
       if (discoveredAlbum.reuseExisting && existingAlbum) {
         continue;
       }
@@ -207,7 +212,7 @@ const scanLibraryUnlocked = async (input?: ScanLibraryInput) => {
         continue;
       }
 
-      if (existingAlbum && !shouldReplaceAlbum(existingAlbum, discoveredAlbum, assets)) {
+      if (existingAlbum && !shouldReplaceAlbum(existingAlbum, discoveredAlbum, assets, existingAssetIndex)) {
         // 内容未变：只同步扫描元数据（且仅在确有差异时写库），不刷新 updated_at。
         syncUnchangedAlbumScanMetadata(existingAlbum, discoveredAlbum.sourceMtime, assetsFingerprint);
         continue;
@@ -304,13 +309,14 @@ const prepareAlbumRescan = async (existingAlbum: AlbumRecord) => {
   if (!libraryRoot) throw new ScanLibraryRootNotFoundError(existingAlbum.libraryRootId);
   const timestamp = nowIso();
   const existingBySourcePath = new Map([[existingAlbum.sourcePath, existingAlbum]]);
+  const existingAssetIndex = new ExistingAssetIndex();
   const discovered = existingAlbum.sourceType === "zip"
     ? await scanZipAlbum(libraryRoot.path, existingAlbum.sourcePath, existingBySourcePath)
-    : await scanFolderAlbum(libraryRoot.path, existingAlbum.sourcePath, existingBySourcePath);
+    : await scanFolderAlbum(libraryRoot.path, existingAlbum.sourcePath, existingBySourcePath, existingAssetIndex);
   if (!discovered) return null;
   if (discovered.reuseExisting) return { album: existingAlbum, assets: [], reused: true };
   const assets = discovered.assets.map((asset) => toAssetRecord(existingAlbum.id, timestamp, asset));
-  if (!shouldReplaceAlbum(existingAlbum, discovered, assets)) {
+  if (!shouldReplaceAlbum(existingAlbum, discovered, assets, existingAssetIndex)) {
     syncUnchangedAlbumScanMetadata(existingAlbum, discovered.sourceMtime, buildAssetsFingerprint(discovered.assets));
     return { album: existingAlbum, assets: [], reused: true };
   }
@@ -401,7 +407,7 @@ export const ensureScannedLibrary = async (): Promise<boolean> => {
   }
 
   const existing = listAlbumsDb({ page: 1, pageSize: 1 });
-  if (existing.total > 0) {
+  if ((existing.total ?? 0) > 0) {
     return false;
   }
 

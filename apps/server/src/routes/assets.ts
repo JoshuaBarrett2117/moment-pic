@@ -53,7 +53,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/api/v1/assets/:assetId", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
-    const signal = mediaRequestSignal(request, reply);
+    mediaRequestSignal(request, reply);
     const asset = await getAssetDetail(assetId);
 
     if (!asset) {
@@ -123,7 +123,7 @@ export const assetRoutes: FastifyPluginAsync = async (app) => {
 
   app.delete("/api/v1/assets/:assetId", async (request, reply) => {
     const { assetId } = request.params as { assetId: string };
-    const signal = mediaRequestSignal(request, reply);
+    mediaRequestSignal(request, reply);
     const success = await deleteAsset(assetId);
 
     if (!success) {

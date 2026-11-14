@@ -1,5 +1,3 @@
-import path from "node:path";
-
 import { makeId } from "../repositories/ids.js";
 import type { SmartAlbumRuleScopeDTO } from "../types/dto.js";
 import type { SmartAlbumAiConfigRecord, SmartAlbumRuleNormalizeOptions, SmartAlbumRuleRecord } from "../types/store.js";

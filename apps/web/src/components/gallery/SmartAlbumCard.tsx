@@ -9,9 +9,10 @@ type SmartAlbumCardProps = {
   onNavigateToAlbum: (albumId: string) => void;
 };
 
-export function SmartAlbumCard({ album, onNavigateToAlbum }: SmartAlbumCardProps) {
+export function SmartAlbumCard({ album, index, onNavigateToAlbum }: SmartAlbumCardProps) {
   return (
     <CoverCard
+      index={index}
       title={album.name}
       meta={`${album.assetCount} 张`}
       coverUrl={album.coverUrl}

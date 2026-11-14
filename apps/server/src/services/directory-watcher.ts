@@ -63,7 +63,7 @@ class DirectoryWatcherService {
         usePolling,
         interval: pollingInterval,
         binaryInterval: pollingInterval,
-        ignored: /(^|[\/\\])\../,
+        ignored: /(^|[/\\])\../,
         persistent: true,
         ignoreInitial: true,
         depth: 99,
@@ -185,26 +185,27 @@ class DirectoryWatcherService {
       });
     } catch (error) {
       logger.error(`增量扫描失败：libraryRootId=${libraryRootId}`, error);
-    } finally {
-      const state = this.incrementalScanStates.get(libraryRootId);
-      if (!state) {
-        return;
-      }
+    }
 
-      if (state.pending) {
-        this.incrementalScanStates.set(libraryRootId, {
-          running: true,
-          pending: false
-        });
-        this.launchIncrementalScan(libraryRootId);
-        return;
-      }
+    // catch 吞掉了所有错误，这里总会执行（原 finally 中的 return 改为普通流程，避免覆盖异常）
+    const state = this.incrementalScanStates.get(libraryRootId);
+    if (!state) {
+      return;
+    }
 
+    if (state.pending) {
       this.incrementalScanStates.set(libraryRootId, {
-        running: false,
+        running: true,
         pending: false
       });
+      this.launchIncrementalScan(libraryRootId);
+      return;
     }
+
+    this.incrementalScanStates.set(libraryRootId, {
+      running: false,
+      pending: false
+    });
   }
 
   async stopWatching(libraryRootId?: string): Promise<void> {
@@ -226,7 +227,7 @@ class DirectoryWatcherService {
       return;
     }
 
-    for (const [id, watcher] of this.watchers) {
+    for (const watcher of this.watchers.values()) {
       closing.push(watcher.close());
     }
     this.watchers.clear();

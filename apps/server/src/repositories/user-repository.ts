@@ -1,4 +1,4 @@
-import { getDb } from "../db/sqlite.js";
+import { getDb, stmt } from "../db/sqlite.js";
 
 export type UserRole = "admin" | "viewer";
 
@@ -47,7 +47,7 @@ export const listUsersDb = (): UserRecord[] =>
   getDb().prepare("SELECT * FROM users ORDER BY created_at ASC, username ASC").all().map((row) => rowToUser(row as Record<string, unknown>));
 
 export const findUserByIdDb = (id: string): UserRecord | null => {
-  const row = getDb().prepare("SELECT * FROM users WHERE id = ? LIMIT 1").get(id) as Record<string, unknown> | undefined;
+  const row = stmt("SELECT * FROM users WHERE id = ? LIMIT 1").get(id) as Record<string, unknown> | undefined;
   return row ? rowToUser(row) : null;
 };
 
@@ -93,7 +93,7 @@ export const insertSessionDb = (session: SessionRecord): void => {
 };
 
 export const findSessionDb = (tokenHash: string): SessionRecord | null => {
-  const row = getDb().prepare("SELECT * FROM user_sessions WHERE token_hash = ? LIMIT 1").get(tokenHash) as Record<string, unknown> | undefined;
+  const row = stmt("SELECT * FROM user_sessions WHERE token_hash = ? LIMIT 1").get(tokenHash) as Record<string, unknown> | undefined;
   return row ? rowToSession(row) : null;
 };
 

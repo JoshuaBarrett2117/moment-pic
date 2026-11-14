@@ -18,12 +18,14 @@ type CoverCardProps = {
   notice?: ReactNode;
   onOpen: () => void;
   ariaLabel?: string;
+  /** 在所属网格中的序号：决定级联入场延迟（只有前 12 张做级联） */
+  index?: number;
 };
 
 /** 封面铺满的相册卡片：信息叠在底部渐变上，纸感主题自动加相框（--mp-photo-frame）。 */
-export function CoverCard({ title, meta, coverUrl, placeholderIcon, tag, badge, actions, notice, onOpen, ariaLabel }: CoverCardProps) {
+export function CoverCard({ title, meta, coverUrl, placeholderIcon, tag, badge, actions, notice, onOpen, ariaLabel, index = 0 }: CoverCardProps) {
   return (
-    <m.div variants={galleryCardItemVariants} className="group">
+    <m.div variants={galleryCardItemVariants} custom={index} className="group">
       {notice}
       <div className="mp-cover-card mp-cv">
         <button

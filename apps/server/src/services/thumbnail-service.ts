@@ -10,10 +10,8 @@ import {
 import {
   AssetNotFoundError,
   openOriginalAssetSource,
-  OriginalAssetSourceMissingError,
   readOriginalBuffer,
-  type ByteRangeResolver,
-  type OriginalImageBody
+  type ByteRangeResolver
 } from "./thumbnail/original-image-source.js";
 import {
   ensurePreviewVariant,

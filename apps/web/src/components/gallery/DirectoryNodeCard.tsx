@@ -12,12 +12,13 @@ type DirectoryNodeCardProps = {
 };
 
 /** 目录里的图集节点：与相册卡片同样式。 */
-export function DirectoryNodeCard({ album, onDirectoryNodeClick }: DirectoryNodeCardProps) {
+export function DirectoryNodeCard({ album, index, onDirectoryNodeClick }: DirectoryNodeCardProps) {
   if (album.kind !== 'album') {
     return <DirectoryFolderRow node={album} onClick={onDirectoryNodeClick} />;
   }
   return (
     <CoverCard
+      index={index}
       title={album.name}
       meta={`${album.assetCount} 张`}
       coverUrl={album.coverUrl}

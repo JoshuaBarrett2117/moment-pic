@@ -9,7 +9,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import type { Worker } from "node:worker_threads";
 import { buildApp } from "../app.js";
-import { env } from "../config/env.js";
 import { testSessionCookie } from "../test-support/session.js";
 import { insertAlbumWithAssetsDb, deleteAlbumDb } from "../repositories/album-repository.js";
 import { upsertLibraryRootDb, deleteLibraryRootDb } from "../repositories/library-root-repository.js";

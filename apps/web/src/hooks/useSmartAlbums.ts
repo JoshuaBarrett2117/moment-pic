@@ -146,7 +146,7 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
     } finally {
       if (request.isCurrent()) setIsListLoading(false);
     }
-  }, []);
+  }, [requests]);
 
   const fetchSmartAlbumDetail = useCallback(async (smartAlbumId: string) => {
     const request = detailRequests.begin();
@@ -167,7 +167,7 @@ export function useSmartAlbums(options: UseSmartAlbumsOptions = {}) {
     } finally {
       if (request.isCurrent()) setIsDetailLoading(false);
     }
-  }, []);
+  }, [detailRequests]);
 
   const rebuildSmartAlbums = useCallback(async () => {
     setError(null);

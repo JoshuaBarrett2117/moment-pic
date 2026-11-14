@@ -46,7 +46,9 @@ export const useAlbumReader = (albumId: string, enabled = true) => {
       setProgress(value);
       if (value) void open(value.assetId, value.assetIndex);
     }).catch(() => undefined);
-    return () => { generation.current++; controller.current?.abort(); void saver.flush(); };
+    // generation 是计数器而非 DOM 节点：清理时让在途回调全部失效
+    const generationCounter = generation;
+    return () => { generationCounter.current++; controller.current?.abort(); void saver.flush(); };
   }, [albumId, enabled, open, saver]);
 
   const loadPage = useCallback(async (direction: 'previous' | 'next'): Promise<boolean> => {

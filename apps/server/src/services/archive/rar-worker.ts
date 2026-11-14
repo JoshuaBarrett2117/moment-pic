@@ -48,7 +48,7 @@ class StreamingRarExtractor extends Extractor {
 
   selectHeader(header: FileHeader, solidArchive: boolean): boolean {
     this.accountHeader(header);
-    this.selected = normalizeArchiveEntryPath(header.name) === request.entryPath;
+    this.selected = request.extractAll ? !header.flags.directory : normalizeArchiveEntryPath(header.name) === request.entryPath;
     const required = !header.flags.directory && (this.selected || solidArchive);
     if (required && header.flags.encrypted) throw new Error("不支持加密 RAR 条目");
     return required;
@@ -113,7 +113,7 @@ const main = async (): Promise<void> => {
     const module = (factory as unknown as { unrar: RarModule }).unrar;
     const extractor = new StreamingRarExtractor(module, input, fs.fstatSync(input).size);
     module.extractor = extractor;
-    if (request.entryPath === undefined) {
+    if (request.entryPath === undefined && !request.extractAll) {
       const listing = extractor.getFileList();
       extractor.accountListing(JSON.stringify(listing.arcHeader));
       for (const header of listing.fileHeaders) {
@@ -126,12 +126,13 @@ const main = async (): Promise<void> => {
         extractor.selectHeader(header, extraction.arcHeader.flags.solid) });
       extractor.accountListing(JSON.stringify(extraction.arcHeader));
       for (const file of extraction.files) {
+        if (request.extractAll) { found = true; continue; }
         if (normalizeArchiveEntryPath(file.fileHeader.name) === request.entryPath && !file.fileHeader.flags.directory) {
           found = true;
           break;
         }
       }
-      if (!found) throw new Error("RAR entry not found");
+      if (!found && !request.extractAll) throw new Error("RAR entry not found");
     }
     send({ type: "done" });
   } catch (error) {

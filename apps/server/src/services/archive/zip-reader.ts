@@ -198,3 +198,90 @@ export const readZipHead = async (zipPath: string, entryPath: string, options: A
     close();
   }
 };
+
+/**
+ * 批量读取多个条目的前缀：整个归档只打开一次、中央目录只顺序读一遍，
+ * 命中的条目依次解压前 maxBytes 字节后立即关闭流，结果逐条回调（超时/取消时已回调的结果保留）。
+ * 未在归档中找到的条目以 null 回调。
+ */
+export const readZipHeads = async (
+  zipPath: string,
+  entryPaths: Iterable<string>,
+  onHead: (entryPath: string, head: Buffer | null) => void,
+  options: ArchiveOptions = {}
+): Promise<void> => {
+  const wanted = new Set(entryPaths);
+  if (wanted.size === 0) return;
+  const maxBytes = Math.min(128 * 1024, Math.max(1, options.maxBytes ?? 128 * 1024));
+  const { zip, signal, close } = await managedZip(zipPath, options);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      let source: Readable | undefined;
+      let count = 0;
+      let pathBytes = 0;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener("abort", abort);
+        source?.destroy();
+        if (error) reject(error); else resolve();
+      };
+      const abort = () => finish(signal.reason);
+      signal.addEventListener("abort", abort, { once: true });
+      const next = () => {
+        if (settled) return;
+        if (wanted.size === 0) { finish(); return; }
+        zip.readEntry();
+      };
+      zip.once("error", finish);
+      zip.once("end", () => {
+        for (const missing of wanted) onHead(missing, null);
+        wanted.clear();
+        finish();
+      });
+      zip.on("entry", (entry: yauzl.Entry) => {
+        if (settled) return;
+        const name = toDecodedZipEntryPath(entry);
+        count++;
+        pathBytes += Buffer.byteLength(name);
+        if (count > (options.maxEntries ?? MAX_ARCHIVE_ENTRIES) || pathBytes > MAX_LISTING_BYTES) {
+          finish(new ArchiveSafetyError("ARCHIVE_ENTRY_LIMIT", "ZIP 头部查找超过条目上限")); return;
+        }
+        if (!wanted.has(name)) { next(); return; }
+        wanted.delete(name);
+        if (entry.uncompressedSize > MAX_ENTRY_BYTES) { onHead(name, null); next(); return; }
+        zip.openReadStream(entry, (error, stream) => {
+          if (settled) { stream?.destroy(); return; }
+          if (error || !stream) { onHead(name, null); next(); return; }
+          source = stream;
+          const chunks: Buffer[] = [];
+          let total = 0;
+          let done = false;
+          const complete = (ok: boolean) => {
+            if (done) return;
+            done = true;
+            stream.removeAllListeners("data");
+            stream.on("error", () => {});
+            stream.destroy();
+            source = undefined;
+            if (settled) return;
+            onHead(name, ok || total > 0 ? Buffer.concat(chunks, total) : null);
+            next();
+          };
+          stream.once("error", () => complete(false));
+          stream.once("end", () => complete(true));
+          stream.on("data", (chunk: Buffer) => {
+            const head = chunk.subarray(0, maxBytes - total);
+            chunks.push(head);
+            total += head.length;
+            if (total >= maxBytes) complete(true);
+          });
+        });
+      });
+      if (signal.aborted) abort(); else zip.readEntry();
+    });
+  } finally {
+    close();
+  }
+};

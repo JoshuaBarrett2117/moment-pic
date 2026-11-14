@@ -28,9 +28,9 @@ test("两工作区使用递归发现，所有镜像发布 job 依赖独立质量
   const workflow = await readFile(new URL("../.github/workflows/docker.yml", import.meta.url), "utf8");
   const runner = await readFile(new URL("./test-workspace.mjs", import.meta.url), "utf8");
   assert.match(runner, /TSX_TSCONFIG_PATH/);
-  assert.match(workflow, /  quality:\n/);
+  assert.match(workflow, / {2}quality:\n/);
   assert.match(workflow, /apt-get install[^\n]*7zip 7zip-rar/);
-  for (const block of workflow.split(/(?=^  [\w-]+:\n)/m)) {
+  for (const block of workflow.split(/(?=^ {2}[\w-]+:\n)/m)) {
     if (/docker\/build-push-action/.test(block)) assert.match(block, /needs:.*quality/);
   }
   for (const command of ["test:discovery", "typecheck", "npm test", "build:server", "build:web"]) {

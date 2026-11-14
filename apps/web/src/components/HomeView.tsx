@@ -8,7 +8,7 @@ import type { AlbumListItemDTO, AlbumsListDTO, SmartAlbumListItemDTO, SmartAlbum
 import { ContinueReading } from './ContinueReading';
 import { AlbumCard } from './gallery/AlbumCard';
 import { SmartAlbumCard } from './gallery/SmartAlbumCard';
-import { galleryGridContainerVariants } from './gallery/gallery-card-motion';
+import { galleryGridContainerVariants, useGalleryEntrance } from './gallery/gallery-card-motion';
 
 type HomeData = {
   recent: AlbumListItemDTO[];
@@ -56,7 +56,10 @@ export const useHomeData = (refreshKey: number) => {
   return data;
 };
 
-const Row = ({ title, actionLabel, onAction, children }: { title: string; actionLabel: string; onAction: () => void; children: React.ReactNode }) => (
+const Row = ({ title, actionLabel, onAction, children }: { title: string; actionLabel: string; onAction: () => void; children: React.ReactNode }) => {
+  // 返回首页时不重放卡片入场动画
+  const initial = useGalleryEntrance(`home:${title}`);
+  return (
   <section className="mb-9" aria-label={title}>
     <div className="mb-3.5 flex items-baseline justify-between">
       <h2 className="mp-title text-[17px]">{title}</h2>
@@ -67,7 +70,7 @@ const Row = ({ title, actionLabel, onAction, children }: { title: string; action
     </div>
     <m.div
       variants={galleryGridContainerVariants}
-      initial="hidden"
+      initial={initial}
       animate="show"
       className="grid gap-4"
       style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 168px), 1fr))' }}
@@ -75,7 +78,8 @@ const Row = ({ title, actionLabel, onAction, children }: { title: string; action
       {children}
     </m.div>
   </section>
-);
+  );
+};
 
 type HomeViewProps = {
   isMobile: boolean;

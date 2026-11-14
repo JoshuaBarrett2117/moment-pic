@@ -34,7 +34,7 @@ export function useLibraryRoots(): UseLibraryRootsReturn {
     } finally {
       if (request.isCurrent()) setIsLoading(false);
     }
-  }, []);
+  }, [requests]);
 
   const addLibraryRoot = useCallback(async (path: string, name?: string): Promise<LibraryRootDTO | null> => {
     try {

@@ -3,7 +3,6 @@ import type { AssetRecord } from "../../types/store.js";
 import { normalizeMetadataDimensions } from "../thumbnail-options.js";
 import { createSharp, releaseSharpResources, type SharpInput } from "./sharp-runtime.js";
 
-const dimensionSyncedAssetIds = new Set<string>();
 const hasPersistedDimensions = (asset: AssetRecord) =>
   typeof asset.width === "number" && asset.width > 0 && typeof asset.height === "number" && asset.height > 0;
 
@@ -12,10 +11,9 @@ export const syncAssetDimensions = async (input: {
   sharpInput?: SharpInput;
 }): Promise<{ width: number; height: number } | null> => {
   const { asset } = input;
-  const version = `${asset.id}:${asset.sourceMtime}:${asset.sizeBytes}`;
-  if (dimensionSyncedAssetIds.has(version) || hasPersistedDimensions(asset)) {
-    dimensionSyncedAssetIds.add(version);
-    return hasPersistedDimensions(asset) ? { width: asset.width as number, height: asset.height as number } : null;
+  // 已持久化宽高直接返回；不再在内存里为每个资产留一条“已同步”记录（百万资产时约 100 MB）。
+  if (hasPersistedDimensions(asset)) {
+    return { width: asset.width as number, height: asset.height as number };
   }
 
   if (!input.sharpInput) {
@@ -38,7 +36,6 @@ export const syncAssetDimensions = async (input: {
       });
     }
 
-    dimensionSyncedAssetIds.add(version);
     return {
       width: normalized.width,
       height: normalized.height

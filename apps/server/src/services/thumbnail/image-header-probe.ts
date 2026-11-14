@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { readArchiveEntryHead, detectArchiveType } from "../archive.js";
+import { readArchiveEntryHead, readArchiveEntryHeads, detectArchiveType } from "../archive.js";
 import { normalizeMetadataDimensions } from "../thumbnail-options.js";
 
 export const IMAGE_HEADER_MAX_BYTES = 128 * 1024;
@@ -99,4 +99,17 @@ export const probeImageHeader = async (source: HeaderSource, signal?: AbortSigna
     signal?.throwIfAborted();
     return parseImageHeader(header.subarray(0, bytesRead));
   } finally { await file.close(); }
+};
+
+/** 同一 ZIP 的多个条目一次探测：归档只打开一次，逐条回调尺寸（解析失败或条目缺失为 null）。 */
+export const probeZipImageHeaders = async (
+  zipPath: string,
+  entryPaths: string[],
+  onResult: (entryPath: string, dimensions: ImageDimensions | null) => void,
+  signal?: AbortSignal,
+  timeoutMs = 3000
+): Promise<void> => {
+  signal?.throwIfAborted();
+  await readArchiveEntryHeads(zipPath, entryPaths, (entryPath, head) => onResult(entryPath, head ? parseImageHeader(head) : null),
+    { maxBytes: IMAGE_HEADER_MAX_BYTES, signal, timeoutMs });
 };

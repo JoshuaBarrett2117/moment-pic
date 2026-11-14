@@ -45,7 +45,7 @@ export function useSystemConfig(): UseSystemConfigReturn {
     } finally {
       if (request.isCurrent()) setIsLoading(false);
     }
-  }, []);
+  }, [requests]);
 
   const updateSystemConfig = useCallback(async (updates: SystemConfigUpdates): Promise<SystemConfigDTO | null> => {
     setError(null);

@@ -33,7 +33,7 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - run: npm run test:discovery
       - run: npm run typecheck
-      # npm test 已包含 test:server、test:web、lint:web、build:server、build:web
+      # npm test 已包含 test:server、test:web、lint（lint:web + lint:server）、build:server、build:web
       - run: npm test
 
   # PR 只验证 amd64 镜像能构建，不推送、不跑 arm64

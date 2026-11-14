@@ -248,6 +248,7 @@ Lucky、Caddy、群晖自带反代同理：开启 WebSocket 支持，并把反�
 | `AI_API_TOKEN` | 空 | 智能归纳的 AI Token，优先于页面中保存的值 |
 | `LOG_LEVEL` | `info` | `trace` / `debug` / `info` / `warn` / `error` / `fatal` |
 | `THUMBNAIL_CONCURRENCY` | `min(2, CPU 核数)` | 缩略图/预览同时生成的数量（1–16）；每个任务内 sharp 仍单线程 |
+| `ARCHIVE_EXTRACT_CACHE_MAX_BYTES` | `2147483648` | 7z / RAR（含 cbr）整包解压缓存的总上限（2 GiB），位于 `CACHE_DIR/archive-extract`，按最久未用淘汰；单个压缩包解压后不超过此值的 1/4 才缓存，否则仍逐条读取；设为 `0` 关闭。不计入 `CACHE_MAX_BYTES` |
 | `LIBRARY_ROOTS` | `/data/library` | 容器内的图库目录，多个用逗号、分号或换行分隔。启动时自动登记其中存在的目录（只新增，不改动已登记或已禁用的目录）；也可以在「设置」里手动添加 |
 
 旧变量 `LIBRARY_ROOT_PATH` 已废弃，启动时会提示改用新变量。

@@ -58,7 +58,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
 }) => {
   const isMobile = useMobile();
   const useTouchInteractions = isMobile;
-  const safeItems = items ?? [];
+  const safeItems = useMemo(() => items ?? [], [items]);
   const images = useMemo(() => {
     if (!Array.isArray(safeItems)) {
       return [];

@@ -13,7 +13,7 @@ import {
   resolveViewerInitialIndex,
 } from './viewer-gallery-utils';
 import { ViewerGalleryStyles } from './ViewerGalleryStyles';
-import { ViewerEndPrompt } from './viewer/ViewerEndPrompt';
+import { ViewerEndPrompt, type ViewerNextAlbumStatus } from './viewer/ViewerEndPrompt';
 import { ViewerImageStage } from './viewer/ViewerImageStage';
 import { ViewerToolbar } from './viewer/ViewerToolbar';
 import { readViewerQualityPreset, saveViewerQualityPreset } from './viewer/viewer-quality-session';
@@ -26,6 +26,8 @@ interface ViewerGalleryProps {
   isOpen: boolean;
   onClose: () => void;
   onRequestNextAlbum?: () => void;
+  /** 未传时按 onRequestNextAlbum 是否存在推断（分享页等没有下一个图集） */
+  nextAlbumStatus?: ViewerNextAlbumStatus;
   onRequestMoreItems?: () => Promise<boolean>;
   onRequestPreviousItems?: () => Promise<boolean>;
   hasPreviousItems?: boolean;
@@ -44,6 +46,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   isOpen,
   onClose,
   onRequestNextAlbum,
+  nextAlbumStatus,
   onRequestMoreItems,
   onRequestPreviousItems,
   hasPreviousItems = false,
@@ -398,7 +401,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
 
       {showEndPrompt && (
         <ViewerEndPrompt
-          canRequestNextAlbum={Boolean(onRequestNextAlbum)}
+          nextAlbumStatus={onRequestNextAlbum ? 'ready' : nextAlbumStatus === 'loading' ? 'loading' : 'none'}
           onDismiss={handleDismissPrompt}
           onEnterNextAlbum={handleEnterNextAlbum}
         />

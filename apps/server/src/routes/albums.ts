@@ -16,6 +16,7 @@ import {
   deleteAlbum,
   getAlbumAssets,
   getAlbumDetail,
+  getNextAlbum,
   getRecentAlbums,
   getSharedAlbumAssets,
   getSharedAlbumSession,
@@ -328,6 +329,35 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return ok(payload);
+  });
+
+  // 看完当前图集后的“下一个图集”：按与 GET /albums 相同的排序/筛选键集定位，
+  // 前端无限滚动只加载了部分页、刷新/直达网址丢失列表上下文时都能拿到正确的后继。
+  app.get("/api/v1/albums/:albumId/next", async (request, reply) => {
+    const { albumId } = request.params as { albumId: string };
+    const query = request.query as {
+      libraryRootId?: string;
+      sourceType?: "folder" | "zip";
+      keyword?: string;
+      sortBy?: "name" | "updatedAt" | "assetCount";
+      sortOrder?: "asc" | "desc";
+      favoriteOnly?: string;
+    };
+    const next = await getNextAlbum(albumId, {
+      libraryRootId: parseOptionalString(query.libraryRootId),
+      sourceType: parseEnumValue(query.sourceType, ["folder", "zip"] as const),
+      keyword: parseOptionalString(query.keyword),
+      sortBy: parseEnumValue(query.sortBy, ["name", "updatedAt", "assetCount"] as const),
+      sortOrder: parseEnumValue(query.sortOrder, ["asc", "desc"] as const),
+      favoriteOnly: query.favoriteOnly === "true"
+    });
+    if (next === undefined) {
+      return reply.status(404).send({
+        code: 4001,
+        message: "album not found"
+      });
+    }
+    return ok({ album: next });
   });
 
   app.get("/api/v1/albums/:albumId", async (request, reply) => {

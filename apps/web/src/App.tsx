@@ -8,7 +8,8 @@ import { api } from './lib/api';
 import type { AlbumListItemDTO, DirectoryAlbumBreadcrumbDTO, DirectoryAlbumNodeDTO } from './types/api';
 import { clearAuthSession, markAuthSession } from './app/auth-session';
 import { useGalleryAppState } from './app/gallery-navigation';
-import { buildDirectoryNavigationAlbums, buildGalleryScreenModel, resolveNextAlbumId } from './app/gallery-screen-model';
+import { buildDirectoryNavigationAlbums, buildGalleryScreenModel } from './app/gallery-screen-model';
+import { buildNextAlbumContext, useNextAlbum } from './app/next-album';
 import { buildSmartAlbumMemberAlbums, resolveSmartAlbumMemberSortBy } from './app/smart-album-member-albums';
 import { useGalleryDataController } from './app/use-gallery-data-controller';
 import { useAppAuthBootstrap } from './app/useAppAuthBootstrap';
@@ -39,7 +40,6 @@ function AuthenticatedMomentPicApp() {
     isAuthenticated,
     isRecentActive,
     navigate,
-    nextAlbumId,
     scrollPosition,
     selectedAlbum,
     selectedSmartAlbum,
@@ -49,7 +49,6 @@ function AuthenticatedMomentPicApp() {
     setGalleryViewMode,
     setIsAuthenticated,
     setIsRecentActive,
-    setNextAlbumId,
     setScrollPosition,
     setSelectedAlbum,
     setSelectedSmartAlbum,
@@ -99,7 +98,6 @@ function AuthenticatedMomentPicApp() {
     setGalleryViewMode,
     setIsAuthenticated,
     setIsRecentActive,
-    setNextAlbumId,
     setSelectedAlbum,
     setSelectedSmartAlbum,
   });
@@ -125,25 +123,32 @@ function AuthenticatedMomentPicApp() {
     return buildSmartAlbumMemberAlbums(smartAlbumMembers, filters);
   }, [filters, smartAlbumMembers]);
   const directoryNavigationAlbums = useMemo(() => buildDirectoryNavigationAlbums(directoryAlbums?.items), [directoryAlbums?.items]);
-  const albumNavigationSource = useMemo(() => {
-    if (galleryViewMode === 'smartAlbums' && selectedSmartAlbum) {
-      return smartAlbumMemberAlbums;
-    }
-
-    if (galleryViewMode === 'directoryAlbums') {
-      return directoryNavigationAlbums;
-    }
-
-    return isRecentActive ? (recentAlbums || []) : (albums?.items || []);
-  }, [
-    albums?.items,
+  const nextAlbumContext = useMemo(() => buildNextAlbumContext({
+    galleryViewMode,
+    isRecentActive,
+    selectedSmartAlbum,
+    smartAlbumMemberAlbums,
     directoryNavigationAlbums,
+    recentAlbums,
+    albums,
+    filters,
+    debouncedKeyword,
+  }), [
+    albums,
+    debouncedKeyword,
+    directoryNavigationAlbums,
+    filters,
     galleryViewMode,
     isRecentActive,
     recentAlbums,
     selectedSmartAlbum,
     smartAlbumMemberAlbums,
   ]);
+  const nextAlbum = useNextAlbum({
+    albumId: selectedAlbum,
+    context: nextAlbumContext,
+    enabled: isAuthenticated && currentScreen === Screen.ALBUM_DETAIL,
+  });
 
   const handleLogin = useCallback(() => {
     const nextFilters = resetToAlbumFilters();
@@ -155,21 +160,10 @@ function AuthenticatedMomentPicApp() {
   }, [navigate, resetToAlbumFilters, setGalleryViewMode, setIsAuthenticated]);
 
   const handleNavigateToAlbum = useCallback((albumId: string) => {
-    const nextId = resolveNextAlbumId(albumNavigationSource, albumId);
-
     setSelectedAlbum(albumId);
-    setNextAlbumId(nextId);
     void recordAlbumView(albumId);
     navigate(Screen.ALBUM_DETAIL, 1, { selectedAlbumId: albumId, isRecentActive, galleryViewMode });
-  }, [albumNavigationSource, galleryViewMode, isRecentActive, navigate, setNextAlbumId, setSelectedAlbum]);
-
-  useEffect(() => {
-    if (currentScreen !== Screen.ALBUM_DETAIL || !selectedAlbum) {
-      return;
-    }
-
-    setNextAlbumId(resolveNextAlbumId(albumNavigationSource, selectedAlbum));
-  }, [albumNavigationSource, currentScreen, selectedAlbum, setNextAlbumId]);
+  }, [galleryViewMode, isRecentActive, navigate, setSelectedAlbum]);
 
   const handleNavigateToSmartAlbum = useCallback((smartAlbumId: string) => {
     setSelectedSmartAlbum(smartAlbumId);
@@ -179,9 +173,8 @@ function AuthenticatedMomentPicApp() {
   const handleProfileClick = useCallback(() => {
     clearAuthSession();
     setIsAuthenticated(false);
-    setNextAlbumId(null);
     navigate(Screen.LOGIN, -1);
-  }, [navigate, setIsAuthenticated, setNextAlbumId]);
+  }, [navigate, setIsAuthenticated]);
 
   const handleBackToGallery = useCallback(() => {
     if (window.history.length > 1) {
@@ -191,14 +184,13 @@ function AuthenticatedMomentPicApp() {
 
     setActiveTab('gallery');
     setIsRecentActive(false);
-    setNextAlbumId(null);
     setSelectedAlbum(null);
     if (currentScreen === Screen.SMART_ALBUM_DETAIL) {
       navigate(Screen.GALLERY, -1, { replace: true, isRecentActive: false, galleryViewMode: 'smartAlbums' });
       return;
     }
     navigate(Screen.GALLERY, -1, { replace: true, isRecentActive: false, galleryViewMode });
-  }, [currentScreen, galleryViewMode, navigate, setActiveTab, setIsRecentActive, setNextAlbumId, setSelectedAlbum]);
+  }, [currentScreen, galleryViewMode, navigate, setActiveTab, setIsRecentActive, setSelectedAlbum]);
 
   const handleSidebarNavigate = useCallback((tab: 'gallery' | 'settings') => {
     setActiveTab(tab);
@@ -476,7 +468,8 @@ function AuthenticatedMomentPicApp() {
                 mode="album"
                 albumId={selectedAlbum || ''}
                 onBack={handleBackToGallery}
-                onRequestNextAlbum={nextAlbumId ? () => handleNavigateToAlbum(nextAlbumId) : undefined}
+                nextAlbumStatus={nextAlbum.status}
+                onRequestNextAlbum={nextAlbum.nextAlbumId ? () => handleNavigateToAlbum(nextAlbum.nextAlbumId as string) : undefined}
               />
             </Suspense>
           )}

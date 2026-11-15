@@ -30,7 +30,6 @@ export function AlbumCard({ album, index, onNavigateToAlbum, onFavoriteToggle, o
       meta={`${album.assetCount} 张${date ? ` · ${date}` : ''}`}
       coverUrl={album.coverUrl}
       placeholderIcon={<Images className="h-12 w-12" />}
-      tag={album.sourceType === 'zip' ? '压缩包' : '文件夹'}
       onOpen={() => onNavigateToAlbum(album.id)}
       notice={album.scanStatus === 'error'
         ? <p role="status" className="mb-2 text-xs text-error">扫描部分失败，已保留原图片，请检查媒体目录后重试</p>

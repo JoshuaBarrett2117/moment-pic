@@ -20,6 +20,7 @@ import type { AlbumRecord, AssetRecord, LibraryRootRecord } from "../types/store
 import { assetVersion, withVersion } from "../lib/media-cache.js";
 import {
   type AlbumListFilters,
+  findNextAlbumDb,
   type AlbumListQuery,
   deleteAlbumDb,
   deleteAssetDb,
@@ -160,6 +161,12 @@ export const listAlbums = async (query: AlbumListQuery, input?: AlbumListFilters
   };
   setBoundedCacheEntry(albumListCache, cacheKey, { expiresAt: now + ALBUM_LIST_CACHE_TTL_MS, value: payload }, now);
   return payload;
+};
+
+/** 列表顺序里的下一个图集（看完一个图集后的“进入下一个图集”）。图集不存在返回 undefined，已是最后一个返回 null。 */
+export const getNextAlbum = async (albumId: string, input?: AlbumListFilters): Promise<AlbumListItemDTO | null | undefined> => {
+  const next = findNextAlbumDb(albumId, input);
+  return next ? toAlbumListItem(next) : next;
 };
 
 export const getAlbumDetail = async (albumId: string): Promise<AlbumDetailDTO | null> => {

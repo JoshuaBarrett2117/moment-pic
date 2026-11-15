@@ -224,6 +224,21 @@ export const listAlbumsDb = (query: AlbumListQuery, input?: AlbumListFilters, op
   return { items, total: totalRow.total as number | null, nextCursor };
 };
 
+/**
+ * 按与列表完全一致的排序与筛选，返回某个图集之后的下一个图集（键集定位，不依赖前端已加载到第几页）。
+ * 当前图集本身不必满足筛选条件（例如从首页/最近浏览进入），按它的排序值在筛选结果中定位后继。
+ * 当前图集不存在时返回 undefined；已是最后一个时返回 null。
+ */
+export const findNextAlbumDb = (albumId: string, input?: AlbumListFilters): AlbumRecord | null | undefined => {
+  const current = findAlbumByIdDb(albumId);
+  if (!current) return undefined;
+  const sortBy = input?.sortBy ?? "updatedAt";
+  const sortOrder = input?.sortOrder ?? "desc";
+  const cursor = encodeAlbumCursor({ sortBy, order: sortOrder, value: current[sortBy], id: current.id });
+  const { items } = listAlbumsDb({ cursor, pageSize: 1 }, input, { includeTotal: false });
+  return items[0] ?? null;
+};
+
 export const listAlbumsByLibraryRootIdDb = (libraryRootId: string): AlbumRecord[] => {
   const db = getDb();
   return db

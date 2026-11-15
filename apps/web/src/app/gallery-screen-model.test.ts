@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildDirectoryNavigationAlbums, buildGalleryScreenModel, resolveNextAlbumId } from './gallery-screen-model';
+import { buildDirectoryNavigationAlbums, buildGalleryScreenModel } from './gallery-screen-model';
 import type { AlbumListItemDTO, DirectoryAlbumNodeDTO, SmartAlbumListItemDTO } from '../types/api';
 
 const album = (id: string): AlbumListItemDTO => ({
@@ -79,14 +79,6 @@ test('buildGalleryScreenModel uses recent albums without pagination', () => {
   assert.equal(model.pagination, null);
   assert.equal(model.isRecentActive, true);
   assert.equal(model.currentLibraryRootId, 'root_1');
-});
-
-test('resolveNextAlbumId returns the next album or null at boundaries', () => {
-  const albums = [album('alb_1'), album('alb_2')];
-
-  assert.equal(resolveNextAlbumId(albums, 'alb_1'), 'alb_2');
-  assert.equal(resolveNextAlbumId(albums, 'alb_2'), null);
-  assert.equal(resolveNextAlbumId(albums, 'missing'), null);
 });
 
 test('buildDirectoryNavigationAlbums keeps album nodes as next-album candidates', () => {

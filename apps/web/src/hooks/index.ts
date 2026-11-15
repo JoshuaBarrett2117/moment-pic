@@ -19,6 +19,7 @@ export { useLibraryRoots } from './useLibraryRoots';
 export { useLibraryScan } from './useLibraryScan';
 export { useWebSocket } from './useWebSocket';
 export { useSystemConfig } from './useSystemConfig';
+export { useNetworkInfo, fetchNetworkInfo } from './useNetworkInfo';
 export { useSettingsConfigForm } from './useSettingsConfigForm';
 export { useMobile, useWideMobile, useTablet, useDesktop, useBetween } from './useResponsive';
 export { useSmartAlbums } from './useSmartAlbums';

@@ -7,6 +7,7 @@ import { perUserProgressMigration } from "./0004-per-user-progress.js";
 import { albumKeysetIndexesMigration } from "./0005-album-keyset-indexes.js";
 import { resetAnimatedDimensionsMigration } from "./0006-reset-animated-dimensions.js";
 import { perUserAlbumViewsMigration } from "./0007-per-user-album-views.js";
+import { lanImageQualityMigration } from "./0008-lan-image-quality.js";
 
 export type Migration = {
   version: number;
@@ -27,7 +28,8 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 4, name: "per-user-progress", up: perUserProgressMigration },
   { version: 5, name: "album-keyset-indexes", up: albumKeysetIndexesMigration },
   { version: 6, name: "reset-animated-dimensions", up: resetAnimatedDimensionsMigration },
-  { version: 7, name: "per-user-album-views", up: perUserAlbumViewsMigration }
+  { version: 7, name: "per-user-album-views", up: perUserAlbumViewsMigration },
+  { version: 8, name: "lan-image-quality", up: lanImageQualityMigration }
 ];
 
 export const getSchemaVersion = (db: Database.Database): number => Number(db.pragma("user_version", { simple: true }));

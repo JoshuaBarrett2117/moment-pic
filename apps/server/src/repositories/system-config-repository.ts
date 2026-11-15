@@ -1,12 +1,20 @@
 import { getDb } from "../db/sqlite.js";
 
+export const IMAGE_QUALITY_PRESETS = ["low", "balanced", "high", "original"] as const;
+export type ImageQualityPreset = (typeof IMAGE_QUALITY_PRESETS)[number];
+export const isImageQualityPreset = (value: unknown): value is ImageQualityPreset =>
+  typeof value === "string" && (IMAGE_QUALITY_PRESETS as readonly string[]).includes(value);
+
 export type SystemConfigRecord = {
   id: string;
   enablePolling: boolean;
   pollingInterval: number;
   preloadBefore: number;
   preloadAfter: number;
-  defaultImageQualityPreset: "low" | "balanced" | "high" | "original";
+  /** 外网默认画质（历史字段名保留） */
+  defaultImageQualityPreset: ImageQualityPreset;
+  /** 内网默认画质 */
+  lanImageQualityPreset: ImageQualityPreset;
   pageTransitionMode: "page" | "normal";
   albumListItemMinWidthMobile: number;
   albumListItemMinWidthDesktop: number;
@@ -25,6 +33,7 @@ export const getSystemConfigDb = (): SystemConfigRecord => {
     preload_before: number;
     preload_after: number;
     default_image_quality_preset: string;
+    lan_image_quality_preset: string | undefined;
     page_transition_mode: string;
     album_list_item_min_width_mobile: number;
     album_list_item_min_width_desktop: number;
@@ -39,13 +48,8 @@ export const getSystemConfigDb = (): SystemConfigRecord => {
     pollingInterval: row.polling_interval,
     preloadBefore: row.preload_before,
     preloadAfter: row.preload_after,
-    defaultImageQualityPreset:
-      row.default_image_quality_preset === "low" ||
-      row.default_image_quality_preset === "balanced" ||
-      row.default_image_quality_preset === "high" ||
-      row.default_image_quality_preset === "original"
-        ? row.default_image_quality_preset
-        : "original",
+    defaultImageQualityPreset: isImageQualityPreset(row.default_image_quality_preset) ? row.default_image_quality_preset : "original",
+    lanImageQualityPreset: isImageQualityPreset(row.lan_image_quality_preset) ? row.lan_image_quality_preset : "original",
     pageTransitionMode: row.page_transition_mode === "normal" ? "normal" : "page",
     albumListItemMinWidthMobile: row.album_list_item_min_width_mobile,
     albumListItemMinWidthDesktop: row.album_list_item_min_width_desktop,
@@ -56,7 +60,7 @@ export const getSystemConfigDb = (): SystemConfigRecord => {
   };
 };
 
-export const updateSystemConfigDb = (updates: { enablePolling?: boolean; pollingInterval?: number; preloadBefore?: number; preloadAfter?: number; defaultImageQualityPreset?: "low" | "balanced" | "high" | "original"; pageTransitionMode?: "page" | "normal"; albumListItemMinWidthMobile?: number; albumListItemMinWidthDesktop?: number; albumDetailItemMinWidthMobile?: number; albumDetailItemMinWidthDesktop?: number }): SystemConfigRecord => {
+export const updateSystemConfigDb = (updates: { enablePolling?: boolean; pollingInterval?: number; preloadBefore?: number; preloadAfter?: number; defaultImageQualityPreset?: ImageQualityPreset; lanImageQualityPreset?: ImageQualityPreset; pageTransitionMode?: "page" | "normal"; albumListItemMinWidthMobile?: number; albumListItemMinWidthDesktop?: number; albumDetailItemMinWidthMobile?: number; albumDetailItemMinWidthDesktop?: number }): SystemConfigRecord => {
   const db = getDb();
   const existing = getSystemConfigDb();
 
@@ -65,6 +69,7 @@ export const updateSystemConfigDb = (updates: { enablePolling?: boolean; polling
   const preloadBefore = updates.preloadBefore ?? existing.preloadBefore;
   const preloadAfter = updates.preloadAfter ?? existing.preloadAfter;
   const defaultImageQualityPreset = updates.defaultImageQualityPreset ?? existing.defaultImageQualityPreset;
+  const lanImageQualityPreset = updates.lanImageQualityPreset ?? existing.lanImageQualityPreset;
   const pageTransitionMode = updates.pageTransitionMode === "normal"
     ? "normal"
     : updates.pageTransitionMode === "page"
@@ -77,7 +82,7 @@ export const updateSystemConfigDb = (updates: { enablePolling?: boolean; polling
 
   db.prepare(`
     UPDATE system_config
-    SET enable_polling = ?, polling_interval = ?, preload_before = ?, preload_after = ?, default_image_quality_preset = ?, page_transition_mode = ?, album_list_item_min_width_mobile = ?, album_list_item_min_width_desktop = ?, album_detail_item_min_width_mobile = ?, album_detail_item_min_width_desktop = ?, updated_at = datetime('now')
+    SET enable_polling = ?, polling_interval = ?, preload_before = ?, preload_after = ?, default_image_quality_preset = ?, lan_image_quality_preset = ?, page_transition_mode = ?, album_list_item_min_width_mobile = ?, album_list_item_min_width_desktop = ?, album_detail_item_min_width_mobile = ?, album_detail_item_min_width_desktop = ?, updated_at = datetime('now')
     WHERE id = 'system_config'
   `).run(
     enablePolling ? 1 : 0,
@@ -85,6 +90,7 @@ export const updateSystemConfigDb = (updates: { enablePolling?: boolean; polling
     preloadBefore,
     preloadAfter,
     defaultImageQualityPreset,
+    lanImageQualityPreset,
     pageTransitionMode,
     albumListItemMinWidthMobile,
     albumListItemMinWidthDesktop,

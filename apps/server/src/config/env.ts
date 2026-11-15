@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { resolveLogLevel } from "./log-level.js";
 import path from "node:path";
+import { createLanClassifier, LanCidrError } from "../lib/lan-network.js";
 
 /** 生产 / Docker 默认端口；开发模式下服务端用 3211，由 Vite（3210）代理。 */
 export const DEFAULT_PORT = 3210;
@@ -9,7 +10,7 @@ export class EnvConfigError extends Error {}
 
 /** 已知环境变量。启动时对未知的 MOMENT_PIC 相关变量与已废弃变量给出提示。 */
 export const KNOWN_ENV_KEYS = [
-  "HOST", "PORT", "ADMIN_PASSWORD", "SESSION_SECRET", "TRUSTED_PROXIES", "WS_ALLOWED_ORIGINS",
+  "HOST", "PORT", "ADMIN_PASSWORD", "SESSION_SECRET", "TRUSTED_PROXIES", "LAN_CIDRS", "LAN_EXCLUDE_IPS", "WS_ALLOWED_ORIGINS",
   "LIBRARY_ROOTS", "CACHE_DIR", "CACHE_MAX_BYTES", "CACHE_GC_MIN_AGE_HOURS", "CACHE_GC_INTERVAL_HOURS",
   "SQLITE_PATH", "PUBLIC_DIR", "LOG_LEVEL", "AI_API_TOKEN", "ARCHIVE_EXTRACT_CACHE_MAX_BYTES"
 ] as const;
@@ -41,6 +42,16 @@ const libraryRootPaths = (() => {
   return [process.env.LIBRARY_ROOT_PATH?.trim() || "./samples/library"];
 })();
 
+/** LAN_CIDRS / LAN_EXCLUDE_IPS：非法时拒绝启动，避免静默把外网误判为内网。 */
+export const buildLanClassifier = (cidrsRaw: string | undefined, excludeRaw: string | undefined) => {
+  try {
+    return createLanClassifier({ cidrs: splitList(cidrsRaw, /[\s,;]+/), excludeIps: splitList(excludeRaw, /[\s,;]+/) });
+  } catch (error) {
+    if (error instanceof LanCidrError) throw new EnvConfigError(`环境变量 LAN_CIDRS / LAN_EXCLUDE_IPS 非法：${error.message}`);
+    throw error;
+  }
+};
+
 const resolvePublicDir = (): string => {
   if (process.env.PUBLIC_DIR?.trim()) {
     return process.env.PUBLIC_DIR;
@@ -62,6 +73,8 @@ export const env = {
   sessionSecret: process.env.SESSION_SECRET ?? "",
   aiApiToken: process.env.AI_API_TOKEN ?? "",
   trustedProxies: splitList(process.env.TRUSTED_PROXIES, /,/),
+  /** 内网判定（按 request.ip），见 lib/lan-network.ts */
+  lanClassifier: buildLanClassifier(process.env.LAN_CIDRS, process.env.LAN_EXCLUDE_IPS),
   wsAllowedOrigins: splitList(process.env.WS_ALLOWED_ORIGINS, /,/),
   libraryRootPath: libraryRootPaths[0],
   libraryRootPaths,

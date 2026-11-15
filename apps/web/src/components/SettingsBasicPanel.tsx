@@ -5,6 +5,7 @@ import type { LibraryRootDTO, PageTransitionModeDTO, SystemConfigDTO } from '../
 import type { SystemConfigUpdates } from '../hooks/useSystemConfig';
 import { WobblyButton } from './WobblyButton';
 import { formatLibraryRootScanTime } from './settings-screen-utils';
+import { NetworkStatusLine } from './NetworkStatusLine';
 
 type ImageQualityPreset = 'low' | 'balanced' | 'high' | 'original';
 
@@ -19,6 +20,7 @@ type SettingsBasicPanelProps = {
   isAnyScanning: boolean;
   isLoading: boolean;
   isSavingConfig: boolean;
+  lanImageQualityPreset: ImageQualityPreset;
   isScanning: (libraryRootId: string) => boolean;
   libraryRoots: LibraryRootDTO[];
   newName: string;
@@ -29,6 +31,7 @@ type SettingsBasicPanelProps = {
   preloadBefore: number;
   saveConfig: (updates: SystemConfigUpdates) => Promise<boolean>;
   saveDefaultImageQualityPreset: (preset: ImageQualityPreset) => Promise<boolean>;
+  saveLanImageQualityPreset: (preset: ImageQualityPreset) => Promise<boolean>;
   savePageTransitionMode: (mode: PageTransitionModeDTO) => Promise<boolean>;
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
   scanLibraryRoot: (libraryRootId?: string) => void | Promise<void>;
@@ -44,6 +47,21 @@ type SettingsBasicPanelProps = {
   startEdit: (root: Pick<LibraryRootDTO, 'id' | 'name' | 'path'>) => void;
 };
 
+const QualitySelect: FC<{ label: string; value: ImageQualityPreset; disabled: boolean; onChange: (preset: ImageQualityPreset) => unknown }> = ({ label, value, disabled, onChange }) => (
+  <select
+    aria-label={label}
+    value={value}
+    onChange={(event) => { void onChange(event.target.value as ImageQualityPreset); }}
+    disabled={disabled}
+    className="rounded-xl border border-outline/20 bg-surface px-4 py-2 font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
+  >
+    <option value="low">省流</option>
+    <option value="balanced">均衡</option>
+    <option value="high">高清</option>
+    <option value="original">原图</option>
+  </select>
+);
+
 export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
   addLibraryRoot,
   defaultImageQualityPreset,
@@ -55,6 +73,7 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
   isAnyScanning,
   isLoading,
   isSavingConfig,
+  lanImageQualityPreset,
   isScanning,
   libraryRoots,
   newName,
@@ -65,6 +84,7 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
   preloadBefore,
   saveConfig,
   saveDefaultImageQualityPreset,
+  saveLanImageQualityPreset,
   savePageTransitionMode,
   saveStatus,
   scanLibraryRoot,
@@ -136,23 +156,29 @@ export const SettingsBasicPanel: FC<SettingsBasicPanelProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
-                <p className="font-bold text-on-surface">大图默认画质</p>
-                <p className="mt-1 text-sm text-outline">大图查看器默认使用的画质档位，用户仍可在查看器内随时切换</p>
+                <p className="font-bold text-on-surface">外网默认画质</p>
+                <p className="mt-1 text-sm text-outline">从外网访问时大图查看器默认使用的画质档位，用户仍可在查看器内随时切换</p>
               </div>
-              <select
+              <QualitySelect
+                label="外网默认画质"
                 value={defaultImageQualityPreset}
-                onChange={async (event) => {
-                  await saveDefaultImageQualityPreset(event.target.value as ImageQualityPreset);
-                }}
                 disabled={isSavingConfig}
-                className="rounded-xl border border-outline/20 bg-surface px-4 py-2 font-semibold text-on-surface outline-none focus:border-primary disabled:opacity-50"
-              >
-                <option value="low">省流</option>
-                <option value="balanced">均衡</option>
-                <option value="high">高清</option>
-                <option value="original">原图</option>
-              </select>
+                onChange={(preset) => saveDefaultImageQualityPreset(preset)}
+              />
             </div>
+            <div className="mt-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-outline/10 pt-4">
+              <div>
+                <p className="font-bold text-on-surface">内网默认画质</p>
+                <p className="mt-1 text-sm text-outline">按访问者 IP 判定为局域网时使用，默认原图</p>
+              </div>
+              <QualitySelect
+                label="内网默认画质"
+                value={lanImageQualityPreset}
+                disabled={isSavingConfig}
+                onChange={(preset) => saveLanImageQualityPreset(preset)}
+              />
+            </div>
+            <NetworkStatusLine className="mt-3" />
           </div>
         </div>
 

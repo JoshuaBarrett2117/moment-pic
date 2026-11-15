@@ -50,7 +50,7 @@
 - 目录：按图库目录逐层进入，子文件夹和图集分开显示
 - 相册详情：封面横幅，网格或等高拼图两种排列
 - 大图查看器：缩放、旋转、全屏、键盘 ← → 切换、滚轮缩放，手机上左右滑动翻页
-- 四档画质（省流 / 均衡 / 高清 / 原图），可设默认档位，查看时随时切换；可设置前后预加载张数
+- 四档画质（省流 / 均衡 / 高清 / 原图），内网 / 外网分别设默认档位（按客户端 IP 判断，内网默认原图），查看时随时切换；可设置前后预加载张数
 
 **外观**
 
@@ -166,6 +166,8 @@ services:
     environment:
       ADMIN_PASSWORD: "换成你的强密码"
       TRUSTED_PROXIES: 192.168.1.10     # 反向代理所在 IP，没有就删掉
+      LAN_CIDRS: 192.168.1.0/24         # 内网网段：命中时大图默认原图（可选）
+      LAN_EXCLUDE_IPS: 192.168.1.10     # 反代 / NAS 自身不算内网（可选）
       WS_ALLOWED_ORIGINS: https://photos.example.com
       LIBRARY_ROOTS: /volume1/photos,/volume2/comics
     volumes:
@@ -221,6 +223,24 @@ server {
 
 Lucky、Caddy、群晖自带反代同理：开启 WebSocket 支持，并把反代的 IP 填进 `TRUSTED_PROXIES`。
 
+### 内网默认原图
+
+内外网用同一个域名时（内网靠 hosts / 路由器 DNS 把域名指向 NAS 局域网 IP），前端分不出来，所以由服务端按**客户端 IP**判断：
+
+- 客户端 IP 落在 `LAN_CIDRS` 内、且不在 `LAN_EXCLUDE_IPS` 里 → 内网，大图默认用「设置 → 基础设置 → 内网默认画质」（默认原图）；否则按「外网默认画质」。
+- 经过反向代理时，必须把反代的 IP 填进 `TRUSTED_PROXIES`，服务端才会采信 `X-Forwarded-For` 拿到真实客户端 IP；否则看到的都是反代自己的地址。
+- 外网流量经 frp / 内网穿透 / 同机容器转发进来时，服务端看到的可能是 `127.0.0.1`、docker 网关（如 `172.17.0.1`）或 NAS 自己的局域网 IP。回环地址固定算外网，其余请填进 `LAN_EXCLUDE_IPS`，或把 `LAN_CIDRS` 收窄到自家局域网网段。
+- 「设置」里会显示「当前网络：内网/外网（IP）」，部署后分别用局域网和手机流量打开核对一次。
+- 每台设备可以在「设置 → 外观 → 本设备画质」选「始终原图」；查看器里手动切换的画质只对当前标签页有效，优先级最高。
+- 分享页同样按访问者 IP 判断：内网默认原图，外网默认均衡（分享接口只返回内网/外网，不返回 IP）。
+
+```yaml
+    environment:
+      TRUSTED_PROXIES: 192.168.31.12          # 反代（如 Lucky）所在 IP
+      LAN_CIDRS: 192.168.31.0/24              # 自家局域网
+      LAN_EXCLUDE_IPS: 192.168.31.12          # 反代 / NAS 自身发起的请求不算内网
+```
+
 ### 首次使用
 
 1. 用 `admin` 和 `ADMIN_PASSWORD` 登录。
@@ -243,7 +263,9 @@ Lucky、Caddy、群晖自带反代同理：开启 WebSocket 支持，并把反�
 | `CACHE_MAX_BYTES` | `5368709120` | 缓存容量上限（5 GiB），超出后按最旧优先回收 |
 | `CACHE_GC_MIN_AGE_HOURS` | `24` | 缓存文件的最短保留时间 |
 | `CACHE_GC_INTERVAL_HOURS` | `6` | 定时清理间隔，设为 `0` 关闭定时清理 |
-| `TRUSTED_PROXIES` | 空 | 反向代理 IP / CIDR，逗号分隔 |
+| `TRUSTED_PROXIES` | 空 | 反向代理 IP / CIDR，逗号分隔。也决定「内网默认原图」能否拿到真实客户端 IP |
+| `LAN_CIDRS` | RFC1918 + ULA + 链路本地 | 判定为「内网」的客户端网段（CIDR，逗号分隔），命中时大图默认用「内网默认画质」（默认原图）。不设置时为 `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,fc00::/7,fe80::/10`；回环地址（`127.0.0.1`、`::1`）永远算外网。建议填成自家局域网网段，如 `192.168.31.0/24` |
+| `LAN_EXCLUDE_IPS` | 空 | 即使落在 `LAN_CIDRS` 内也按外网处理的地址（IP 或 CIDR，逗号分隔），例如 NAS 自身 / 反代本机、docker 网关、frp 等内网穿透转发来源 |
 | `WS_ALLOWED_ORIGINS` | 空 | 跨源访问时允许的网页 origin，逗号分隔 |
 | `AI_API_TOKEN` | 空 | 智能归纳的 AI Token，优先于页面中保存的值 |
 | `LOG_LEVEL` | `info` | `trace` / `debug` / `info` / `warn` / `error` / `fatal` |

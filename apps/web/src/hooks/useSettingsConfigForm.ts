@@ -28,6 +28,7 @@ export const useSettingsConfigForm = () => {
   const [preloadBefore, setPreloadBefore] = useState(DEFAULT_PRELOAD_BEFORE);
   const [preloadAfter, setPreloadAfter] = useState(DEFAULT_PRELOAD_AFTER);
   const [defaultImageQualityPreset, setDefaultImageQualityPreset] = useState<'low' | 'balanced' | 'high' | 'original'>(DEFAULT_IMAGE_QUALITY_PRESET);
+  const [lanImageQualityPreset, setLanImageQualityPreset] = useState<'low' | 'balanced' | 'high' | 'original'>(DEFAULT_IMAGE_QUALITY_PRESET);
   const [pageTransitionMode, setPageTransitionMode] = useState<PageTransitionModeDTO>(DEFAULT_PAGE_TRANSITION_MODE);
   const [albumListItemMinWidthMobile, setAlbumListItemMinWidthMobile] = useState(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE);
   const [albumListItemMinWidthDesktop, setAlbumListItemMinWidthDesktop] = useState(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
@@ -45,6 +46,7 @@ export const useSettingsConfigForm = () => {
       setPreloadBefore(clampPreloadRadius(systemConfig.preloadBefore));
       setPreloadAfter(clampPreloadRadius(systemConfig.preloadAfter));
       setDefaultImageQualityPreset(systemConfig.defaultImageQualityPreset);
+      setLanImageQualityPreset(systemConfig.lanImageQualityPreset ?? DEFAULT_IMAGE_QUALITY_PRESET);
       setPageTransitionMode(systemConfig.pageTransitionMode);
       setAlbumListItemMinWidthMobile(clampGridWidth(systemConfig.albumListItemMinWidthMobile));
       setAlbumListItemMinWidthDesktop(clampGridWidth(systemConfig.albumListItemMinWidthDesktop));
@@ -58,6 +60,7 @@ export const useSettingsConfigForm = () => {
     setPreloadBefore(clampPreloadRadius(Number(savedBefore ?? DEFAULT_PRELOAD_BEFORE)));
     setPreloadAfter(clampPreloadRadius(Number(savedAfter ?? DEFAULT_PRELOAD_AFTER)));
     setDefaultImageQualityPreset(DEFAULT_IMAGE_QUALITY_PRESET);
+    setLanImageQualityPreset(DEFAULT_IMAGE_QUALITY_PRESET);
     setPageTransitionMode(DEFAULT_PAGE_TRANSITION_MODE);
     setAlbumListItemMinWidthMobile(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_MOBILE);
     setAlbumListItemMinWidthDesktop(DEFAULT_ALBUM_LIST_ITEM_MIN_WIDTH_DESKTOP);
@@ -108,6 +111,20 @@ export const useSettingsConfigForm = () => {
     return didSave;
   };
 
+  const saveLanImageQualityPreset = async (nextPreset: 'low' | 'balanced' | 'high' | 'original') => {
+    setLanImageQualityPreset(nextPreset);
+    if (!systemConfig) {
+      return false;
+    }
+
+    const didSave = await saveConfig({ lanImageQualityPreset: nextPreset });
+    if (didSave && typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(VIEWER_QUALITY_SESSION_KEY);
+    }
+
+    return didSave;
+  };
+
   const savePageTransitionMode = async (nextMode: PageTransitionModeDTO) => {
     setPageTransitionMode(nextMode);
     if (!systemConfig) {
@@ -138,11 +155,13 @@ export const useSettingsConfigForm = () => {
     defaultImageQualityPreset,
     handleViewerPreloadRadiusChange,
     isSavingConfig,
+    lanImageQualityPreset,
     pageTransitionMode,
     preloadAfter,
     preloadBefore,
     saveConfig,
     saveDefaultImageQualityPreset,
+    saveLanImageQualityPreset,
     savePageTransitionMode,
     saveStatus,
     setAlbumDetailItemMinWidthDesktop,

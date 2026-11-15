@@ -15,7 +15,12 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_PASSWORD_RESET: ${ADMIN_PASSWORD_RESET:-}
       AI_API_TOKEN: ${AI_API_TOKEN:-}
+      # 反代 IP；在反代后面时必须设置，否则拿不到真实客户端 IP（也影响内网判定）
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # 内网网段（CIDR，逗号分隔），命中时大图默认用「内网默认画质」（默认原图）；空 = RFC1918 + ULA，回环永远算外网
+      LAN_CIDRS: ${LAN_CIDRS:-}
+      # 落在内网段但应按外网处理的地址：NAS 自身 / 反代本机、docker 网关、frp 来源等
+      LAN_EXCLUDE_IPS: ${LAN_EXCLUDE_IPS:-}
       WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS:-}
       LIBRARY_ROOTS: "${LIBRARY_ROOTS:-/data/library}"
       CACHE_MAX_BYTES: "${CACHE_MAX_BYTES:-5368709120}"

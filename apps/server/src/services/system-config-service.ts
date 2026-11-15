@@ -1,4 +1,4 @@
-import type { SystemConfigRecord } from "../repositories/system-config-repository.js";
+import type { ImageQualityPreset, SystemConfigRecord } from "../repositories/system-config-repository.js";
 import { getSystemConfigDb, updateSystemConfigDb } from "../repositories/system-config-repository.js";
 import { directoryWatcher } from "./directory-watcher.js";
 
@@ -7,7 +7,8 @@ export type SystemConfigUpdateInput = {
   pollingInterval?: number;
   preloadBefore?: number;
   preloadAfter?: number;
-  defaultImageQualityPreset?: "low" | "balanced" | "high" | "original";
+  defaultImageQualityPreset?: ImageQualityPreset;
+  lanImageQualityPreset?: ImageQualityPreset;
   pageTransitionMode?: "page" | "normal";
   albumListItemMinWidthMobile?: number;
   albumListItemMinWidthDesktop?: number;

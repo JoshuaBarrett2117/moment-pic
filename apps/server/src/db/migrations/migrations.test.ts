@@ -109,7 +109,7 @@ test("0007 最近浏览按用户去重：每个图集只留最后一次，归属
   insert.run("v1", "a1", "2026-10-01");
   insert.run("v2", "a1", "2026-10-03");
   insert.run("v3", "a2", "2026-10-02");
-  assert.deepEqual(runMigrations(db), [7]);
+  assert.deepEqual(runMigrations(db), [7, 8]);
   const rows = db.prepare("SELECT user_id, album_id, viewed_at FROM album_views ORDER BY album_id").all();
   assert.deepEqual(rows, [
     { user_id: "u-admin", album_id: "a1", viewed_at: "2026-10-03" },
@@ -120,4 +120,20 @@ test("0007 最近浏览按用户去重：每个图集只留最后一次，归属
   const plan = db.prepare("EXPLAIN QUERY PLAN SELECT album_id FROM album_views WHERE user_id = 'u-admin' ORDER BY viewed_at DESC LIMIT 10").all() as Array<{ detail: string }>;
   assert.ok(plan.some((row) => row.detail.includes("idx_album_views_user_viewed_at")), JSON.stringify(plan));
   assert.ok(!plan.some((row) => row.detail.includes("TEMP B-TREE")), JSON.stringify(plan));
+});
+
+test("0008 内网默认画质：旧库补列默认原图、保留外网默认画质；列已存在（版本号未记上）时重跑安全", () => {
+  const db = new Database(":memory:");
+  runMigrations(db, MIGRATIONS.slice(0, 7));
+  db.prepare("UPDATE system_config SET default_image_quality_preset = 'balanced' WHERE id = 'system_config'").run();
+  assert.ok(!hasColumn(db, "system_config", "lan_image_quality_preset"));
+  assert.deepEqual(runMigrations(db), [8]);
+  assert.equal(getSchemaVersion(db), 8);
+  const row = db.prepare("SELECT default_image_quality_preset AS wan, lan_image_quality_preset AS lan FROM system_config").get();
+  assert.deepEqual(row, { wan: "balanced", lan: "original" });
+
+  db.prepare("UPDATE system_config SET lan_image_quality_preset = 'high'").run();
+  db.pragma("user_version = 7");
+  assert.deepEqual(runMigrations(db), [8]);
+  assert.equal((db.prepare("SELECT lan_image_quality_preset AS lan FROM system_config").get() as { lan: string }).lan, "high");
 });

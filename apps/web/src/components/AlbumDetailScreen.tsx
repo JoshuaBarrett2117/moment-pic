@@ -9,7 +9,7 @@ import { useToast } from './Toast';
 import { useAlbumReader } from '../hooks/use-album-reader';
 import { ViewerGallery } from './ViewerGallery';
 import { VirtualGrid } from './VirtualGrid';
-import { useAlbumAssets, rescanAlbum, setAlbumFavorite, useMobile, useSystemConfig, useWideMobile } from '../hooks';
+import { useAlbumAssets, rescanAlbum, setAlbumFavorite, useMobile, useNetworkInfo, useSystemConfig, useWideMobile } from '../hooks';
 import type { AssetListItemDTO } from '../types/api';
 
 interface AlbumDetailScreenProps {
@@ -35,6 +35,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
   const isWideMobile = useWideMobile();
   const { assets, isLoading, error, fetchAssets } = useAlbumAssets();
   const { systemConfig, fetchSystemConfig } = useSystemConfig();
+  const { info: networkInfo } = useNetworkInfo();
   const { toast } = useToast();
   const reader = useAlbumReader(albumId, mode === "album");
   const [loadedItems, setLoadedItems] = useState<AssetListItemDTO[]>([]);
@@ -410,6 +411,8 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           hasMoreItems={reader.hasNext}
           isLoadingMoreItems={reader.loading}
           defaultQualityPreset={systemConfig?.defaultImageQualityPreset ?? 'original'}
+          lanQualityPreset={systemConfig?.lanImageQualityPreset ?? 'original'}
+          network={networkInfo?.network ?? null}
           preloadBefore={preloadBefore}
           preloadAfter={preloadAfter}
         />

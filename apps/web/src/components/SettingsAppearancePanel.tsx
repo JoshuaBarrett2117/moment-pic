@@ -4,6 +4,7 @@ import { useTheme } from '../theme/useTheme';
 import { useBackground, type BackgroundMode } from '../theme/background';
 import { userBackgroundApi, validateBackgroundFile, type UserBackgroundDTO } from '../lib/user-background';
 import { useToast } from './Toast';
+import { DeviceQualitySection } from './DeviceQualitySection';
 
 const DEFAULT_PREVIEW = '/backgrounds/photo-wall-960.webp';
 
@@ -199,6 +200,7 @@ export const SettingsAppearancePanel: FC = () => {
         </div>
         {error && <p role="alert" className="mt-3 text-sm text-error">{error}</p>}
       </section>
+      <DeviceQualitySection />
     </div>
   );
 };

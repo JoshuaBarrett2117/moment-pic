@@ -37,11 +37,13 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onScanComplete, onSyst
     defaultImageQualityPreset,
     handleViewerPreloadRadiusChange,
     isSavingConfig,
+    lanImageQualityPreset,
     pageTransitionMode,
     preloadAfter,
     preloadBefore,
     saveConfig,
     saveDefaultImageQualityPreset,
+    saveLanImageQualityPreset,
     savePageTransitionMode,
     saveStatus,
     setAlbumDetailItemMinWidthDesktop,
@@ -136,6 +138,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onScanComplete, onSyst
             isAnyScanning={isAnyScanning}
             isLoading={isLoading}
             isSavingConfig={isSavingConfig}
+            lanImageQualityPreset={lanImageQualityPreset}
             isScanning={isScanning}
             libraryRoots={libraryRoots}
             newName={newName}
@@ -146,6 +149,7 @@ export const SettingsScreen: FC<SettingsScreenProps> = ({ onScanComplete, onSyst
             preloadBefore={preloadBefore}
             saveConfig={saveConfig}
             saveDefaultImageQualityPreset={saveDefaultImageQualityPreset}
+            saveLanImageQualityPreset={saveLanImageQualityPreset}
             savePageTransitionMode={savePageTransitionMode}
             saveStatus={saveStatus}
             scanLibraryRoot={handleScan}

@@ -165,7 +165,10 @@ export type SystemConfigDTO = {
   pollingInterval: number;
   preloadBefore: number;
   preloadAfter: number;
+  /** 外网默认画质 */
   defaultImageQualityPreset: "low" | "balanced" | "high" | "original";
+  /** 内网默认画质 */
+  lanImageQualityPreset: "low" | "balanced" | "high" | "original";
   pageTransitionMode: PageTransitionModeDTO;
   albumListItemMinWidthMobile: number;
   albumListItemMinWidthDesktop: number;
@@ -340,6 +343,8 @@ export type SharedAlbumAuthDTO = {
   albumId: string;
   name: string;
   expiresAt: string;
+  /** 服务端按访问者 IP 判定的内网 / 外网（不含 IP） */
+  network?: "lan" | "wan";
 };
 
 export type AlbumProgressDTO = {

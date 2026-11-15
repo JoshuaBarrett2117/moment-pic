@@ -179,6 +179,8 @@ export const SharedAlbumScreen: FC<SharedAlbumScreenProps> = ({ token }) => {
           hasMoreItems={hasMore}
           isLoadingMoreItems={isLoadingMore}
           defaultQualityPreset="balanced"
+          lanQualityPreset="original"
+          network={auth.network ?? null}
           preloadBefore={1}
           preloadAfter={2}
         />

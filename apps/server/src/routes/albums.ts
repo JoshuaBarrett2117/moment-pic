@@ -97,7 +97,8 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
       const { accessToken, ...session } = await authenticateAlbumShare(token, String(body.password ?? ""), request.ip, mediaRequestSignal(request, reply));
       const maxAgeSeconds = (Date.parse(session.expiresAt) - Date.now()) / 1000;
       reply.header("set-cookie", buildShareCookie(token, accessToken, maxAgeSeconds, request.protocol === "https"));
-      return ok(session);
+      // 只告诉分享页内网 / 外网，不暴露 IP
+      return ok({ ...session, network: app.config.lanClassifier.classify(request.ip) });
     } catch (error) {
       if (error instanceof AlbumShareNotFoundError) {
         return sendShareNotFound(reply);
@@ -121,7 +122,7 @@ export const albumRoutes: FastifyPluginAsync = async (app) => {
     if (!session) {
       return sendShareNotFound(reply);
     }
-    return ok(session);
+    return ok({ ...session, network: app.config.lanClassifier.classify(request.ip) });
   });
 
   app.get("/api/v1/shares/:token/assets", async (request, reply) => {

@@ -2,7 +2,7 @@ import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'reac
 import { getAssetThumbnailPresentation } from '../lib/asset-thumbnail';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useMobile } from '../hooks';
-import type { ImageQualityPreset } from '../lib/viewer-quality';
+import { type ImageQualityPreset, type NetworkKind, type QualitySource, readDeviceQualityMode, resolveViewerDefaultQuality } from '../lib/viewer-quality';
 import type { AssetListItemDTO } from '../types/api';
 import {
   getPreloadHint,
@@ -36,7 +36,12 @@ interface ViewerGalleryProps {
   hasMoreItems?: boolean;
   isLoadingMoreItems?: boolean;
   initialIndex?: number;
+  /** 外网默认画质 */
   defaultQualityPreset?: ImageQualityPreset;
+  /** 内网默认画质（network 为 lan 时使用） */
+  lanQualityPreset?: ImageQualityPreset;
+  /** 服务端判定的当前网络；未知按外网 */
+  network?: NetworkKind | null;
   preloadBefore?: number;
   preloadAfter?: number;
 }
@@ -56,6 +61,8 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   isLoadingMoreItems = false,
   initialIndex = 0,
   defaultQualityPreset = 'original',
+  lanQualityPreset = 'original',
+  network = null,
   preloadBefore = 0,
   preloadAfter = 0,
 }) => {
@@ -82,6 +89,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const [isImageLoading, setIsImageLoading] = useState(true);
   const [showEndPrompt, setShowEndPrompt] = useState(false);
   const [qualityPreset, setQualityPreset] = useState<ImageQualityPreset>(defaultQualityPreset);
+  const [qualitySource, setQualitySource] = useState<QualitySource>('wan');
   const [showQualityPanel, setShowQualityPanel] = useState(false);
   const [isRequestingMoreItems, setIsRequestingMoreItems] = useState(false);
   const [pendingAdvanceAfterLoad, setPendingAdvanceAfterLoad] = useState(false);
@@ -183,15 +191,22 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
       return;
     }
 
-    const sessionPreset = readViewerQualityPreset();
+    const resolved = resolveViewerDefaultQuality({
+      sessionPreset: readViewerQualityPreset(),
+      deviceMode: readDeviceQualityMode(),
+      network,
+      lanPreset: lanQualityPreset,
+      wanPreset: defaultQualityPreset,
+    });
     setActiveIndex(validIndex);
-    setQualityPreset(sessionPreset ?? defaultQualityPreset);
+    setQualityPreset(resolved.preset);
+    setQualitySource(resolved.source);
     resetView();
     setShowControls(true);
     setShowQualityPanel(false);
     setShowEndPrompt(false);
     hasInitializedOpenSessionRef.current = true;
-  }, [defaultQualityPreset, images.length, initialIndex, isOpen, resetView]);
+  }, [defaultQualityPreset, images.length, initialIndex, isOpen, lanQualityPreset, network, resetView]);
 
   useEffect(() => {
     const previous = previousImagesRef.current;
@@ -212,9 +227,25 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
     if (isOpen && asset && hasInitializedOpenSessionRef.current) onAssetChange?.(asset.id, asset.sortIndex - 1);
   }, [activeIndex, images, isOpen, items, onAssetChange]);
 
+  // 打开后才拿到网络判定 / 配置（首次请求较慢）时，未手动切换过就按新结果更新默认画质
   useEffect(() => {
-    saveViewerQualityPreset(qualityPreset);
-  }, [qualityPreset]);
+    if (!isOpen || !hasInitializedOpenSessionRef.current || qualitySource === 'session') return;
+    const resolved = resolveViewerDefaultQuality({
+      sessionPreset: null,
+      deviceMode: readDeviceQualityMode(),
+      network,
+      lanPreset: lanQualityPreset,
+      wanPreset: defaultQualityPreset,
+    });
+    setQualityPreset(resolved.preset);
+    setQualitySource(resolved.source);
+  }, [defaultQualityPreset, isOpen, lanQualityPreset, network, qualitySource]);
+
+  const handleSelectQuality = useCallback((preset: ImageQualityPreset) => {
+    setQualityPreset(preset);
+    setQualitySource('session');
+    saveViewerQualityPreset(preset);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -307,7 +338,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
   const closeBtnSize = isMobile ? 56 : 48;
   const navBtnSize = isMobile ? 64 : 56;
   const currentImageSrc = resolveImageSrc(currentImage, qualityPreset);
-  const qualityLabel = getQualityLabel(qualityPreset);
+  const qualityLabel = `${getQualityLabel(qualityPreset)}${qualitySource === 'lan' ? ' · 内网' : ''}`;
   const preloadHint = getPreloadHint(qualityPreset);
   return (
     <div
@@ -374,7 +405,7 @@ export const ViewerGallery: FC<ViewerGalleryProps> = ({
             key={option.value}
             className="viewer-quality-option"
             data-active={option.value === qualityPreset}
-            onClick={() => setQualityPreset(option.value)}
+            onClick={() => handleSelectQuality(option.value)}
             title={option.label}
           >
             <span>{option.label}</span>

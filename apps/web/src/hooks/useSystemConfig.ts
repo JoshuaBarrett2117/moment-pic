@@ -9,6 +9,7 @@ export type SystemConfigUpdates = {
   preloadBefore?: number;
   preloadAfter?: number;
   defaultImageQualityPreset?: "low" | "balanced" | "high" | "original";
+  lanImageQualityPreset?: "low" | "balanced" | "high" | "original";
   pageTransitionMode?: PageTransitionModeDTO;
   albumListItemMinWidthMobile?: number;
   albumListItemMinWidthDesktop?: number;

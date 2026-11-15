@@ -95,15 +95,6 @@ export const buildGalleryScreenModel = (input: {
   };
 };
 
-export const resolveNextAlbumId = (
-  sourceAlbums: AlbumListItemDTO[] | null | undefined,
-  currentAlbumId: string
-): string | null => {
-  const albums = sourceAlbums || [];
-  const currentIndex = albums.findIndex((album) => album.id === currentAlbumId);
-  return currentIndex >= 0 ? albums[currentIndex + 1]?.id ?? null : null;
-};
-
 export const buildDirectoryNavigationAlbums = (
   nodes: DirectoryAlbumNodeDTO[] | null | undefined
 ): AlbumListItemDTO[] => {

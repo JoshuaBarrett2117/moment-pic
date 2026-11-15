@@ -14,7 +14,6 @@ type UseAppAuthBootstrapInput = {
   setGalleryViewMode: (mode: GalleryViewMode) => void;
   setIsAuthenticated: (isAuthenticated: boolean) => void;
   setIsRecentActive: (isRecentActive: boolean) => void;
-  setNextAlbumId: (albumId: string | null) => void;
   setSelectedAlbum: (albumId: string | null) => void;
   setSelectedSmartAlbum: (smartAlbumId: string | null) => void;
 };
@@ -26,7 +25,6 @@ const resetToLoginScreen = (input: Pick<
   | 'setGalleryViewMode'
   | 'setIsAuthenticated'
   | 'setIsRecentActive'
-  | 'setNextAlbumId'
   | 'setSelectedAlbum'
   | 'setSelectedSmartAlbum'
 >) => {
@@ -38,7 +36,6 @@ const resetToLoginScreen = (input: Pick<
   input.setGalleryViewMode('albums');
   input.setSelectedAlbum(null);
   input.setSelectedSmartAlbum(null);
-  input.setNextAlbumId(null);
   window.history.replaceState(null, '', window.location.pathname);
 };
 
@@ -78,7 +75,6 @@ export function useAppAuthBootstrap({
   setGalleryViewMode,
   setIsAuthenticated,
   setIsRecentActive,
-  setNextAlbumId,
   setSelectedAlbum,
   setSelectedSmartAlbum,
 }: UseAppAuthBootstrapInput) {
@@ -94,7 +90,6 @@ export function useAppAuthBootstrap({
       setGalleryViewMode,
       setIsAuthenticated,
       setIsRecentActive,
-      setNextAlbumId,
       setSelectedAlbum,
       setSelectedSmartAlbum,
     };
@@ -134,7 +129,6 @@ export function useAppAuthBootstrap({
     setGalleryViewMode,
     setIsAuthenticated,
     setIsRecentActive,
-    setNextAlbumId,
     setSelectedAlbum,
     setSelectedSmartAlbum,
   ]);

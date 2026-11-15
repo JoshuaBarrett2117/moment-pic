@@ -17,6 +17,8 @@ interface AlbumDetailScreenProps {
   albumId: string;
   onBack: () => void;
   onRequestNextAlbum?: () => void;
+  /** 下一个图集的判定状态：loading 时结束弹窗显示“正在查找”，none 才表示确实是最后一个 */
+  nextAlbumStatus?: 'ready' | 'loading' | 'none';
   /** 侧栏目录里点了同级图集：直接跳到对应图集 */
 }
 
@@ -27,7 +29,7 @@ const DEFAULT_PRELOAD_AFTER = 3;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_MOBILE = 160;
 const DEFAULT_ALBUM_DETAIL_ITEM_MIN_WIDTH_DESKTOP = 300;
 
-export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onRequestNextAlbum, mode = "album" }) => {
+export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack, onRequestNextAlbum, nextAlbumStatus, mode = "album" }) => {
   const { isAdmin } = useCurrentUser();
   const isMobile = useMobile();
   const isWideMobile = useWideMobile();
@@ -399,6 +401,7 @@ export const AlbumDetailScreen: FC<AlbumDetailScreenProps> = ({ albumId, onBack,
           initialIndex={reader.session.initialIndex}
           onClose={reader.close}
           onRequestNextAlbum={onRequestNextAlbum}
+          nextAlbumStatus={nextAlbumStatus}
           onRequestMoreItems={reader.loadNext}
           onRequestPreviousItems={reader.loadPrevious}
           hasPreviousItems={reader.hasPrevious}

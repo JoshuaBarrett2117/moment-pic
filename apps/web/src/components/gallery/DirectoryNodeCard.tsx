@@ -23,7 +23,6 @@ export function DirectoryNodeCard({ album, index, onDirectoryNodeClick }: Direct
       meta={`${album.assetCount} 张`}
       coverUrl={album.coverUrl}
       placeholderIcon={<Images className="h-12 w-12" />}
-      tag={album.sourceType === 'zip' ? '压缩包' : '图集'}
       onOpen={() => onDirectoryNodeClick?.(album)}
     />
   );

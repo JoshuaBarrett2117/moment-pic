@@ -8,7 +8,7 @@ type CoverCardProps = {
   meta: ReactNode;
   coverUrl: string | null;
   placeholderIcon: ReactNode;
-  /** 左上角小标签（来源、套数等） */
+  /** 左上角小标签（智能相册的套数等） */
   tag?: ReactNode;
   /** 右上角常驻标记（收藏星标） */
   badge?: ReactNode;

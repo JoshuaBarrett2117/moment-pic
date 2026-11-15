@@ -253,7 +253,6 @@ export const useGalleryAppState = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
   const [selectedAlbum, setSelectedAlbum] = useState<string | null>(initialNavigation.selectedAlbumId);
   const [selectedSmartAlbum, setSelectedSmartAlbum] = useState<string | null>(initialNavigation.selectedSmartAlbumId);
-  const [nextAlbumId, setNextAlbumId] = useState<string | null>(null);
   const [direction, setDirection] = useState(1);
   const [activeTab, setActiveTab] = useState<'gallery' | 'settings'>(
     initialNavigation.screen === Screen.SETTINGS ? 'settings' : 'gallery'
@@ -311,7 +310,6 @@ export const useGalleryAppState = () => {
     setGalleryViewMode('albums');
     setSelectedAlbum(null);
     setSelectedSmartAlbum(null);
-    setNextAlbumId(null);
     syncHistory(Screen.LOGIN, { replace: true, isRecentActive: false, galleryViewMode: 'albums' });
   }, [syncHistory]);
 
@@ -389,7 +387,6 @@ export const useGalleryAppState = () => {
       setCurrentScreen(nextScreen);
       setSelectedAlbum(state.selectedAlbum ?? null);
       setSelectedSmartAlbum(state.selectedSmartAlbum ?? null);
-      setNextAlbumId(null);
       setActiveTab(state.activeTab || 'gallery');
       setIsRecentActive(Boolean(state.isRecentActive));
       setGalleryViewMode(state.galleryViewMode ?? 'albums');
@@ -443,7 +440,6 @@ export const useGalleryAppState = () => {
     isAuthenticated,
     isRecentActive,
     navigate,
-    nextAlbumId,
     resetToLogin,
     scrollPosition,
     selectedAlbum,
@@ -456,7 +452,6 @@ export const useGalleryAppState = () => {
     setGalleryViewMode,
     setIsAuthenticated,
     setIsRecentActive,
-    setNextAlbumId,
     setScrollPosition,
     setSelectedAlbum,
     setSelectedSmartAlbum,
